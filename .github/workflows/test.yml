@@ -98,21 +98,39 @@ jobs:
       FIREBASE_PRIVATE_KEY: "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA00000000000000000000000000000000000000000000000=\n-----END RSA PRIVATE KEY-----"
 
     steps:
+      # Gate the whole job on the test-DB secret being present. Until a test
+      # Supabase project is provisioned and BLISQ_TEST_* secrets are set
+      # (Sprint 1), this job no-ops and PASSES rather than failing red on an
+      # unconfigured DB. Once the secret exists, the steps below run for real.
+      - name: Check test DB configured
+        id: gate
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice::BLISQ_TEST_* secrets not configured — skipping integration tests."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v6
+        if: steps.gate.outputs.configured == 'true'
 
       - name: Setup Node
+        if: steps.gate.outputs.configured == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: "npm"
 
       - name: Install dependencies
+        if: steps.gate.outputs.configured == 'true'
         # --legacy-peer-deps until `npx expo install --fix` pins the exact Expo
         # SDK 54 RN peer set in Sprint 1 (e.g. react-native-screens vs RN). The
         # conflicts are version-range mismatches, not real incompatibilities.
         run: npm ci --legacy-peer-deps
 
       - name: Create .env.test
+        if: steps.gate.outputs.configured == 'true'
         run: |
           cat > .env.test << ENVEOF
           DATABASE_URL=${DATABASE_URL}
@@ -130,7 +148,9 @@ jobs:
           ENVEOF
 
       - name: Push schema to test DB
+        if: steps.gate.outputs.configured == 'true'
         run: npm run db:push
 
       - name: Run integration tests
+        if: steps.gate.outputs.configured == 'true'
         run: npm run test:integration

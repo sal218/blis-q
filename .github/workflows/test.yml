@@ -40,7 +40,10 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        # --legacy-peer-deps until `npx expo install --fix` pins the exact Expo
+        # SDK 54 RN peer set in Sprint 1 (e.g. react-native-screens vs RN). The
+        # conflicts are version-range mismatches, not real incompatibilities.
+        run: npm ci --legacy-peer-deps
 
       - name: Create .env.test
         run: |
@@ -104,7 +107,10 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        # --legacy-peer-deps until `npx expo install --fix` pins the exact Expo
+        # SDK 54 RN peer set in Sprint 1 (e.g. react-native-screens vs RN). The
+        # conflicts are version-range mismatches, not real incompatibilities.
+        run: npm ci --legacy-peer-deps
 
       - name: Create .env.test
         run: |

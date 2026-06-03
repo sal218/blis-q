@@ -221,7 +221,7 @@ No exceptions.
 
 **Blisko** is a community platform for Poland's LGBT+ community. It is built by Pretty Good Company (Sal + Adly) for the client of the same name.
 
-**Launch target: August 20, 2026** (21-week engagement, started March 20, 2026).
+**Launch target: ~December 2026** (≈6-month build from the June 2026 scaffold; ~12 two-week sprints — see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 **Four feature pillars:**
 1. **Community & Networking** — community groups, group chat, profiles

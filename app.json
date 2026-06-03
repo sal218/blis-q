@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Blis-Q",
+    "slug": "blis-q",
+    "scheme": "blisq",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.prettygoodcompany.blisq",
+      "infoPlist": {
+        "aps-environment": "production"
+      }
+    },
+    "android": {
+      "package": "com.prettygoodcompany.blisq"
+    },
+    "plugins": ["expo-secure-store", "expo-notifications"],
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}

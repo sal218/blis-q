@@ -1,0 +1,170 @@
+import { eq, and, inArray } from "drizzle-orm";
+import { db } from "./db";
+import {
+  users,
+  notificationPreferences,
+  devicePushTokens,
+  communityMemberships,
+  type User,
+  type NewUser,
+} from "@shared/schema";
+import { invalidateProfileCache } from "./auth";
+
+// The exact projection the auth middleware needs (server/auth.ts). Kept narrow
+// so auth callers never receive columns they shouldn't — least data exposure.
+export type AuthUserProfile = {
+  id: string;
+  email: string;
+  displayName: string;
+  isPremium: boolean;
+  isAdmin: boolean;
+  deletedAt: Date | null;
+};
+
+// The boolean flags read by server/notifications.ts preferenceKey(). Returned
+// even when a user has no notification_preferences row yet (defaults all-on).
+export type NotificationPreferenceFlags = {
+  communityPosts: boolean;
+  events: boolean;
+  eventReminders: boolean;
+  communityInvites: boolean;
+  memberJoins: boolean;
+};
+
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferenceFlags = {
+  communityPosts: true,
+  events: true,
+  eventReminders: true,
+  communityInvites: true,
+  memberJoins: true,
+};
+
+/**
+ * Repository for all database access. Route handlers call these methods — they
+ * never touch the Drizzle client directly (ENGINEERING_STANDARDS §7). Domain
+ * methods (communities, events, posts, messages, reports, safe places, ad
+ * campaigns) are added here per feature; this scaffold contains only what the
+ * adapted infrastructure files already depend on, plus core user lookups.
+ *
+ * NOTE: every method that writes to the `users` table MUST call
+ * invalidateProfileCache(userId) before returning (CLAUDE.md §8).
+ */
+export class DatabaseStorage {
+  // ── Users ───────────────────────────────────────────────────────────────────
+
+  // Returns only the auth-profile projection (not the full row), so auth
+  // callers can't accidentally read columns they shouldn't.
+  async getUser(userId: string): Promise<AuthUserProfile | null> {
+    const [row] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        displayName: users.displayName,
+        isPremium: users.isPremium,
+        isAdmin: users.isAdmin,
+        deletedAt: users.deletedAt,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    const [row] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase()))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async createUser(data: NewUser): Promise<User> {
+    const [row] = await db.insert(users).values(data).returning();
+    // Rule: invalidate after EVERY write to users (CLAUDE.md §8). A fresh
+    // insert has no cache entry yet, so this is a no-op del today, but the
+    // rule is unconditional and future code may pre-warm the cache.
+    await invalidateProfileCache(row.id);
+    return row;
+  }
+
+  async updateUser(
+    userId: string,
+    data: Partial<NewUser>,
+  ): Promise<User | null> {
+    const [row] = await db
+      .update(users)
+      .set(data)
+      .where(eq(users.id, userId))
+      .returning();
+    await invalidateProfileCache(userId);
+    return row ?? null;
+  }
+
+  // NOTE: there is intentionally NO generic soft-delete/erasure method here.
+  // GDPR erasure is a transactional anonymisation cascade (clear PII, content
+  // → "[deleted]", drop memberships/RSVPs/tokens/consents, write an audit
+  // entry, invalidate the profile cache) and lives in the DELETE /api/account
+  // handler (COMPLIANCE §5.2, tracker P-2). A partial "just stamp deletedAt"
+  // method would be easy to misuse, so it is not exposed until that flow ships.
+
+  // ── Notification preferences ──────────────────────────────────────────────────
+
+  async getNotificationPreferences(
+    userId: string,
+  ): Promise<NotificationPreferenceFlags> {
+    const [row] = await db
+      .select()
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId))
+      .limit(1);
+
+    if (!row) return DEFAULT_NOTIFICATION_PREFERENCES;
+
+    return {
+      communityPosts: row.communityPosts,
+      events: row.events,
+      eventReminders: row.eventReminders,
+      communityInvites: row.communityInvites,
+      memberJoins: row.memberJoins,
+    };
+  }
+
+  // ── Push tokens ───────────────────────────────────────────────────────────────
+
+  async getActiveTokensForUser(
+    userId: string,
+  ): Promise<{ token: string }[]> {
+    return db
+      .select({ token: devicePushTokens.token })
+      .from(devicePushTokens)
+      .where(
+        and(
+          eq(devicePushTokens.userId, userId),
+          eq(devicePushTokens.isActive, true),
+        ),
+      );
+  }
+
+  async deactivatePushTokensByList(tokens: string[]): Promise<void> {
+    if (tokens.length === 0) return;
+    await db
+      .update(devicePushTokens)
+      .set({ isActive: false })
+      .where(inArray(devicePushTokens.token, tokens));
+  }
+
+  // ── Community membership ────────────────────────────────────────────────────
+
+  async getCommunityMembers(
+    communityId: string,
+  ): Promise<{ userId: string }[]> {
+    return db
+      .select({ userId: communityMemberships.userId })
+      .from(communityMemberships)
+      .where(eq(communityMemberships.communityId, communityId));
+  }
+}
+
+// Single shared instance — imported as `storage` everywhere (repository pattern).
+export const storage = new DatabaseStorage();

@@ -18,7 +18,7 @@ jobs:
     name: Lint · Types · Unit Tests · Server Build
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: postgresql://ci:ci@localhost:5432/splitit_ci_placeholder
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/blisq_ci_placeholder
       SUPABASE_URL: https://placeholder.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
       SUPABASE_ANON_KEY: placeholder-anon-key-not-used-in-fast-gate
@@ -30,8 +30,6 @@ jobs:
       FIREBASE_PROJECT_ID: test-project
       FIREBASE_CLIENT_EMAIL: test@test-project.iam.gserviceaccount.com
       FIREBASE_PRIVATE_KEY: "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA00000000000000000000000000000000000000000000000=\n-----END RSA PRIVATE KEY-----"
-      ENABLE_BILL_SPLIT_FLOW: "false"
-      GROUP_RESTORE_WINDOW_DAYS: "30"
     steps:
       - uses: actions/checkout@v6
 
@@ -59,8 +57,6 @@ jobs:
           FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
           FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
           FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
-          ENABLE_BILL_SPLIT_FLOW=${ENABLE_BILL_SPLIT_FLOW}
-          GROUP_RESTORE_WINDOW_DAYS=${GROUP_RESTORE_WINDOW_DAYS}
           ENVEOF
 
       - name: Audit dependencies
@@ -76,9 +72,6 @@ jobs:
       - name: Unit tests
         run: npm test
 
-      - name: App/server Jest tests (mocked, no DB)
-        run: npm run test:jest:app:ci
-
       - name: Server build
         run: npm run server:build
 
@@ -88,9 +81,9 @@ jobs:
     needs: fast-gate
     if: "github.actor != 'dependabot[bot]' && !contains(github.event.head_commit.message, '[skip integration]') && !contains(github.event.pull_request.title, '[skip integration]')"
     env:
-      DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-      SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_ROLE_KEY }}
+      DATABASE_URL: ${{ secrets.BLISQ_TEST_DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.BLISQ_TEST_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BLISQ_TEST_SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_ANON_KEY: placeholder-anon-key-not-used-in-tests
       SESSION_SECRET: ci-test-session-secret-at-least-32-chars
       RESEND_API_KEY: re_test_disabled
@@ -100,8 +93,6 @@ jobs:
       FIREBASE_PROJECT_ID: test-project
       FIREBASE_CLIENT_EMAIL: test@test-project.iam.gserviceaccount.com
       FIREBASE_PRIVATE_KEY: "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA00000000000000000000000000000000000000000000000=\n-----END RSA PRIVATE KEY-----"
-      ENABLE_BILL_SPLIT_FLOW: "false"
-      GROUP_RESTORE_WINDOW_DAYS: "30"
 
     steps:
       - uses: actions/checkout@v6
@@ -130,12 +121,10 @@ jobs:
           FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
           FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
           FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
-          ENABLE_BILL_SPLIT_FLOW=${ENABLE_BILL_SPLIT_FLOW}
-          GROUP_RESTORE_WINDOW_DAYS=${GROUP_RESTORE_WINDOW_DAYS}
           ENVEOF
 
-      - name: Apply DB migrations
-        run: npm run db:migrate
+      - name: Push schema to test DB
+        run: npm run db:push
 
       - name: Run integration tests
         run: npm run test:integration

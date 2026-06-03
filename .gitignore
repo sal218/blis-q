@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+admin/node_modules/
+
+# Build output
+dist/
+static-build/
+web-build/
+admin/dist/
+drizzle/
+
+# Expo
+.expo/
+*.orig.*
+
+# Environment — never commit real secrets; .env.example files ARE tracked
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Logs / misc
+*.log
+npm-debug.log*
+coverage/
+.DS_Store

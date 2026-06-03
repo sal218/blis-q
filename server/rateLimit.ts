@@ -30,30 +30,33 @@ function makeLimiter(
   return new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(maxRequests, window),
-    prefix: "splitit",
+    prefix: "blis-q",
   });
 }
 
 // One limiter instance per endpoint type + per identifier type.
 // Created once at module load — reused across all requests.
+// Auth flows use dual buckets (IP + email) — both must pass. Authenticated
+// endpoints are keyed by user ID so each account has its own quota and test
+// users never share a bucket. See CLAUDE.md §6 and TRANSFER §3.2 Rule 4.
 const limiters = {
+  // Auth — dual IP + email buckets
   loginIp: makeLimiter(10, "15 m"),
   loginEmail: makeLimiter(5, "15 m"),
   signupIp: makeLimiter(5, "1 h"),
-  googleAuthIp: makeLimiter(10, "15 m"), // mirrors email login limits
-  appleAuthIp: makeLimiter(10, "15 m"),
-  resetIp: makeLimiter(5, "15 m"),
-  resetEmail: makeLimiter(3, "15 m"),
-  resetSubmitIp: makeLimiter(5, "15 m"),
-  friendRequestIp: makeLimiter(10, "15 m"),
-  convertIp: makeLimiter(30, "5 m"),
-  personalExpenseIp: makeLimiter(60, "1 m"), // authenticated; generous but blocks scripted floods
-  personalGoalIp: makeLimiter(20, "1 h"),
-  pushTokenIp: makeLimiter(20, "1 h"), // called on launch/logout; 20/hr per user is plenty
-  groupRecurringIp: makeLimiter(30, "1 h"), // template mutations; generous for normal use
-  exportUser: makeLimiter(5, "10 m"), // export generation is expensive; 5 per 10 min per user
-  analyticsUser: makeLimiter(30, "1 h"), // analytics aggregation; 30/hr per user
-  trajectoryUser: makeLimiter(60, "1 h"), // lightweight read; 60/hr per user
+  googleAuthIp: makeLimiter(10, "15 m"), // mirrors login IP limit
+  passwordResetIp: makeLimiter(5, "15 m"),
+  passwordResetEmail: makeLimiter(3, "15 m"),
+
+  // Content & community — keyed by user ID
+  contentCreateUser: makeLimiter(60, "1 m"), // community posts + chat messages
+  reportUser: makeLimiter(10, "1 h"),
+  communityJoinUser: makeLimiter(20, "1 h"),
+  pushTokenUser: makeLimiter(20, "1 h"), // register/deregister on launch + logout
+  exportUser: makeLimiter(5, "10 m"), // GDPR data export — expensive to generate
+
+  // Webhooks — keyed by IP (no authenticated user on a webhook request)
+  revenuecatWebhookIp: makeLimiter(20, "1 m"),
 };
 
 type RateLimitResult =
@@ -83,12 +86,14 @@ function getIp(req: { ip?: string }): string {
 
 // ── Public rate limit functions ───────────────────────────────────────────────
 
+// Auth: BOTH the IP bucket AND the email bucket must pass. Cycling IPs can't
+// outrun the per-email limit, and one-account-per-IP can't outrun the per-IP
+// limit. See TRANSFER §3.2 Rule 4.
 export async function checkLoginRateLimit(
   req: { ip?: string },
   email?: string,
 ): Promise<RateLimitResult> {
-  const ip = getIp(req);
-  const ipResult = await check(limiters.loginIp, `login:ip:${ip}`);
+  const ipResult = await check(limiters.loginIp, `login:ip:${getIp(req)}`);
   if (!ipResult.allowed) return ipResult;
 
   if (email) {
@@ -108,18 +113,28 @@ export async function checkSignupRateLimit(req: {
   return check(limiters.signupIp, `signup:ip:${getIp(req)}`);
 }
 
+// Google Sign-In is an auth mutation — rate limited per CLAUDE.md §6. Keyed by
+// IP only: the user identity isn't known until the Firebase token is verified.
+export async function checkGoogleAuthRateLimit(req: {
+  ip?: string;
+}): Promise<RateLimitResult> {
+  return check(limiters.googleAuthIp, `google-auth:ip:${getIp(req)}`);
+}
+
 export async function checkPasswordResetRateLimit(
   req: { ip?: string },
   email?: string,
 ): Promise<RateLimitResult> {
-  const ip = getIp(req);
-  const ipResult = await check(limiters.resetIp, `reset:ip:${ip}`);
+  const ipResult = await check(
+    limiters.passwordResetIp,
+    `password-reset:ip:${getIp(req)}`,
+  );
   if (!ipResult.allowed) return ipResult;
 
   if (email) {
     const emailResult = await check(
-      limiters.resetEmail,
-      `reset:email:${email.toLowerCase()}`,
+      limiters.passwordResetEmail,
+      `password-reset:email:${email.toLowerCase()}`,
     );
     if (!emailResult.allowed) return emailResult;
   }
@@ -127,60 +142,31 @@ export async function checkPasswordResetRateLimit(
   return { allowed: true };
 }
 
-export async function checkResetSubmitRateLimit(req: {
-  ip?: string;
-}): Promise<RateLimitResult> {
-  return check(limiters.resetSubmitIp, `reset-submit:ip:${getIp(req)}`);
-}
+// Authenticated endpoints — keyed by user ID, not IP.
 
-export async function checkFriendRequestRateLimit(req: {
-  ip?: string;
-}): Promise<RateLimitResult> {
-  return check(limiters.friendRequestIp, `friend-request:ip:${getIp(req)}`);
-}
-
-export async function checkConvertRateLimit(req: {
-  ip?: string;
-}): Promise<RateLimitResult> {
-  return check(limiters.convertIp, `convert:ip:${getIp(req)}`);
-}
-
-export async function checkGoogleAuthRateLimit(req: {
-  ip?: string;
-}): Promise<RateLimitResult> {
-  return check(limiters.googleAuthIp, `google-auth:ip:${getIp(req)}`);
-}
-
-export async function checkAppleAuthRateLimit(req: {
-  ip?: string;
-}): Promise<RateLimitResult> {
-  return check(limiters.appleAuthIp, `apple-auth:ip:${getIp(req)}`);
-}
-
-// Authenticated endpoints are keyed by user ID so each account has its own
-// quota and test users (each with a unique ID) never share a rate limit bucket.
-export async function checkPersonalExpenseRateLimit(
+// Covers community posts and chat messages (the high-frequency content paths).
+export async function checkContentCreateRateLimit(
   userId: string,
 ): Promise<RateLimitResult> {
-  return check(limiters.personalExpenseIp, `personal-expense:user:${userId}`);
+  return check(limiters.contentCreateUser, `content-create:user:${userId}`);
 }
 
-export async function checkPersonalGoalRateLimit(
+export async function checkReportRateLimit(
   userId: string,
 ): Promise<RateLimitResult> {
-  return check(limiters.personalGoalIp, `personal-goal:user:${userId}`);
+  return check(limiters.reportUser, `report:user:${userId}`);
+}
+
+export async function checkCommunityJoinRateLimit(
+  userId: string,
+): Promise<RateLimitResult> {
+  return check(limiters.communityJoinUser, `community-join:user:${userId}`);
 }
 
 export async function checkPushTokenRateLimit(
   userId: string,
 ): Promise<RateLimitResult> {
-  return check(limiters.pushTokenIp, `push-token:user:${userId}`);
-}
-
-export async function checkGroupRecurringRateLimit(
-  userId: string,
-): Promise<RateLimitResult> {
-  return check(limiters.groupRecurringIp, `group-recurring:user:${userId}`);
+  return check(limiters.pushTokenUser, `push-token:user:${userId}`);
 }
 
 export async function checkExportRateLimit(
@@ -189,14 +175,12 @@ export async function checkExportRateLimit(
   return check(limiters.exportUser, `export:user:${userId}`);
 }
 
-export async function checkAnalyticsRateLimit(
-  userId: string,
-): Promise<RateLimitResult> {
-  return check(limiters.analyticsUser, `analytics:user:${userId}`);
-}
-
-export async function checkTrajectoryRateLimit(
-  userId: string,
-): Promise<RateLimitResult> {
-  return check(limiters.trajectoryUser, `trajectory:user:${userId}`);
+// Webhooks — keyed by IP (no authenticated user on a webhook request).
+export async function checkRevenueCatWebhookRateLimit(req: {
+  ip?: string;
+}): Promise<RateLimitResult> {
+  return check(
+    limiters.revenuecatWebhookIp,
+    `revenuecat-webhook:ip:${getIp(req)}`,
+  );
 }

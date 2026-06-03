@@ -1,14 +1,12 @@
 import { storage } from "./storage";
 
 export type NotificationType =
-  | "friend_request"
-  | "friend_request_accepted"
-  | "new_expense"
-  | "settlement_recorded"
-  | "recurring_expense_inserted"
-  | "group_recurring_template_created"
-  | "group_recurring_expense_inserted"
-  | "group_recurring_template_paused";
+  | "new_community_post"
+  | "new_event"
+  | "event_reminder"
+  | "community_invite"
+  | "new_member_joined"
+  | "moderation_action";
 
 interface NotificationMessage {
   title: string;
@@ -16,109 +14,104 @@ interface NotificationMessage {
   data?: Record<string, string>;
 }
 
+// User-facing copy is in Polish (Blis-Q's primary market). Gendered verbs use
+// the "(a)" suffix convention since the actor's gender is unknown. Names in
+// payloads are public display-name aliases — never real names (anonymity model).
 function buildMessage(
   type: NotificationType,
   payload: Record<string, string>,
 ): NotificationMessage {
   switch (type) {
-    case "friend_request":
+    case "new_community_post":
       return {
-        title: "New Friend Request",
-        body: `${payload.senderName ?? "Someone"} sent you a friend request`,
-        data: { type, senderId: payload.senderId ?? "" },
-      };
-    case "friend_request_accepted":
-      return {
-        title: "Friend Request Accepted",
-        body: `${payload.receiverName ?? "Someone"} accepted your friend request`,
-        data: { type, receiverId: payload.receiverId ?? "" },
-      };
-    case "new_expense":
-      return {
-        title: `New expense in ${payload.groupName ?? "your group"}`,
-        body: `${payload.payerName ?? "Someone"} added "${payload.description ?? "an expense"}" (${payload.currency ?? ""} ${payload.amount ?? ""})`,
+        title: `Nowy post w ${payload.communityName ?? "społeczności"}`,
+        body: `${payload.authorName ?? "Ktoś"} opublikował(a) nowy post`,
         data: {
           type,
-          expenseId: payload.expenseId ?? "",
-          groupId: payload.groupId ?? "",
+          communityId: payload.communityId ?? "",
+          postId: payload.postId ?? "",
         },
       };
-    case "settlement_recorded":
+    case "new_event":
       return {
-        title: "Payment Recorded",
-        body: `${payload.fromName ?? "Someone"} recorded a payment of ${payload.currency ?? ""} ${payload.amount ?? ""} to ${payload.toName ?? "you"}`,
+        title: `Nowe wydarzenie w ${payload.communityName ?? "społeczności"}`,
+        body: `${payload.eventTitle ?? "Nowe wydarzenie"}${payload.eventDate ? ` — ${payload.eventDate}` : ""}`,
         data: {
           type,
-          settlementId: payload.settlementId ?? "",
-          groupId: payload.groupId ?? "",
+          communityId: payload.communityId ?? "",
+          eventId: payload.eventId ?? "",
         },
       };
-    case "recurring_expense_inserted":
+    case "event_reminder":
       return {
-        title: "Recurring Expense Added",
-        body: `${payload.note ?? "A recurring expense"} (${payload.currency ?? ""} ${payload.amount ?? ""}) has been automatically added`,
-        data: { type, expenseId: payload.expenseId ?? "" },
+        title: "Przypomnienie o wydarzeniu",
+        body: `${payload.eventTitle ?? "Twoje wydarzenie"} wkrótce się rozpocznie`,
+        data: { type, eventId: payload.eventId ?? "" },
       };
-    case "group_recurring_template_created":
+    case "community_invite":
       return {
-        title: `New recurring expense in ${payload.groupName ?? "your group"}`,
-        body: `${payload.creatorName ?? "Someone"} set up "${payload.description ?? "a recurring expense"}" — ${payload.currency ?? ""} ${payload.amount ?? ""} on the ${payload.billingLabel ?? "billing day"} each month`,
+        title: "Zaproszenie do społeczności",
+        body: `${payload.inviterName ?? "Ktoś"} zaprosił(a) Cię do ${payload.communityName ?? "społeczności"}`,
         data: {
           type,
-          templateId: payload.templateId ?? "",
-          groupId: payload.groupId ?? "",
+          communityId: payload.communityId ?? "",
         },
       };
-    case "group_recurring_expense_inserted":
+    case "new_member_joined":
       return {
-        title: `Recurring expense added in ${payload.groupName ?? "your group"}`,
-        body: `"${payload.description ?? "An expense"}" (${payload.currency ?? ""} ${payload.amount ?? ""}) was automatically added`,
+        title: `Nowy członek w ${payload.communityName ?? "społeczności"}`,
+        body: `${payload.memberName ?? "Ktoś"} dołączył(a) do społeczności`,
         data: {
           type,
-          expenseId: payload.expenseId ?? "",
-          groupId: payload.groupId ?? "",
+          communityId: payload.communityId ?? "",
+          memberId: payload.memberId ?? "",
         },
       };
-    case "group_recurring_template_paused":
+    case "moderation_action":
       return {
-        title: "Recurring expense paused",
-        body: `"${payload.description ?? "A recurring expense"}" in ${payload.groupName ?? "your group"} was paused${payload.reason ? ` — ${payload.reason}` : ""}. Tap to review.`,
+        title: "Działanie moderacyjne",
+        body:
+          payload.message ??
+          "Podjęto działanie moderacyjne dotyczące Twojej treści.",
         data: {
           type,
-          templateId: payload.templateId ?? "",
-          groupId: payload.groupId ?? "",
+          resourceType: payload.resourceType ?? "",
+          resourceId: payload.resourceId ?? "",
         },
       };
     default:
-      return { title: "Even Tab", body: "You have a new notification" };
+      return { title: "Blis-Q", body: "Masz nowe powiadomienie" };
   }
 }
 
-/** Maps a notification type to its preference key. Returns null for types with no preference gate. */
+/**
+ * Maps a notification type to its preference key (a boolean column on
+ * notification_preferences). Returns null for always-on types that the user
+ * cannot opt out of — currently moderation_action, since a user must always
+ * be told when a moderation decision affects them.
+ */
 function preferenceKey(
   type: NotificationType,
 ):
-  | "newExpense"
-  | "settlementRecorded"
-  | "friendRequest"
-  | "recurringExpenseInserted"
-  | "groupRecurringExpenseInserted"
+  | "communityPosts"
+  | "events"
+  | "eventReminders"
+  | "communityInvites"
+  | "memberJoins"
   | null {
   switch (type) {
-    case "friend_request":
-    case "friend_request_accepted":
-      return "friendRequest";
-    case "new_expense":
-      return "newExpense";
-    case "settlement_recorded":
-      return "settlementRecorded";
-    case "recurring_expense_inserted":
-      return "recurringExpenseInserted";
-    case "group_recurring_expense_inserted":
-      return "groupRecurringExpenseInserted";
-    // Always-on types — no preference gate
-    case "group_recurring_template_created":
-    case "group_recurring_template_paused":
+    case "new_community_post":
+      return "communityPosts";
+    case "new_event":
+      return "events";
+    case "event_reminder":
+      return "eventReminders";
+    case "community_invite":
+      return "communityInvites";
+    case "new_member_joined":
+      return "memberJoins";
+    // Always-on — no preference gate.
+    case "moderation_action":
       return null;
     default:
       return null;
@@ -212,23 +205,24 @@ export async function notifyUser(
 }
 
 /**
- * Send a push notification to all active members of a group, except one user.
- * Useful for broadcasting expense/settlement events to the whole group.
+ * Send a push notification to all active members of a community, except one
+ * user (typically the actor who triggered the event — they don't need to be
+ * notified of their own action). Used for new posts, events, and member joins.
  */
-export async function notifyGroupMembers(
-  groupId: string,
+export async function notifyCommunityMembers(
+  communityId: string,
   exceptUserId: string,
   type: NotificationType,
   payload: Record<string, string>,
 ): Promise<void> {
   try {
-    const members = await storage.getGroupMembers(groupId);
+    const members = await storage.getCommunityMembers(communityId);
     const targets = members.filter((m) => m.userId !== exceptUserId);
     await Promise.all(targets.map((m) => notifyUser(m.userId, type, payload)));
   } catch (err) {
     console.error(
-      "[Notifications] Error notifying group members for group",
-      groupId,
+      "[Notifications] Error notifying community members for community",
+      communityId,
       err,
     );
   }

@@ -488,9 +488,22 @@ Severity:   🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ### Pending
 
+Surfaced in the 2026-06-02 scaffold review. **P-1 and P-2 are hard blockers before this branch onboards any real user; P-3 is a hard blocker before it processes any payment.** Deferral is valid only because the scaffold currently has no registration route and no webhook route — it physically cannot onboard users or take payments yet. P-4/P-5 are genuine low-priority cleanups.
+
 | # | Item | Cat | Pri | Notes |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| P-1 | GDPR routes not implemented: consent-backed registration, `DELETE /api/account` (erasure), `GET /api/account/export` | 🔒 | 🔴 | **BLOCKER — no real users until done.** Scaffold mounts `/api/health` + admin only. COMPLIANCE §5.1 / §5.2 / §5.5 |
+| P-2 | Erasure/anonymisation cascade not implemented (no generic soft-delete method is exposed; see `storage.ts` note) | 🔒 | 🔴 | **BLOCKER — no real users until done.** Transactional: clear PII, content→`[deleted]`, drop memberships/RSVPs/tokens/consents, audit entry, call `invalidateProfileCache`. Lives in the `DELETE /api/account` handler. COMPLIANCE §5.2 |
+| P-3 | RevenueCat webhook route not implemented (env var + `revenuecatWebhookIp` limiter already scaffolded) | 🔒 | 🟠 | **BLOCKER — no payments until done.** Verify `Authorization` against `req.rawBody`, 400 on failure, then process. CLAUDE.md §4 |
+| P-4 | Functions exceeding ~40 lines: `setupCors`, `setupHelmet` (index.ts), `buildMessage` (notifications.ts) | 🔧 | 🟢 | Extract helpers/constants. ENGINEERING_STANDARDS §2 |
+| P-5 | `routes.ts` doc comment lists domain route modules not yet mounted | 📬 | 🟢 | Keep accurate as modules land |
+
+### Accepted Risks
+
+| # | Item | Cat | Notes |
+|---|---|---|---|
+| AR-1 | Admin dashboard stores the session token in `localStorage` | 🔒 Security | Accepted for the internal, owner-operated admin web app (`admin/`). `localStorage` is XSS-exposed; mitigated by the app being owner-only and the Helmet CSP. Revisit if the dashboard is opened to multiple staff or should move to an httpOnly-cookie session. Decided 2026-06-02. |
+| AR-2 | Integration tests access the DB directly (`db`/`pool`) outside `storage.ts` | 🔧 Stability | Test-harness exception to the "all DB access via storage" rule (ENGINEERING_STANDARDS §7). `health.integration.test.ts` runs a raw `SELECT 1` to verify connectivity. Accepted for test code only; feature tests should prefer storage methods. Decided 2026-06-02. |
 
 ---
 

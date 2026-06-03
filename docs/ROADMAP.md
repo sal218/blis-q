@@ -7,9 +7,9 @@
 
 ---
 
-## ⚠️ Timeline note — reconcile before kickoff
+## Timeline
 
-`CLAUDE.md` records a launch target of **August 20, 2026**. This roadmap follows the current directive of **6 months from now** (start ~2026-06-09, launch ~early December 2026). These conflict. **Decision needed (🏢 client + 👨‍💻 PGC):** confirm the real launch date and update `CLAUDE.md` to match. The sprint dates below assume the 6-month plan; if Aug 20 is firm, this scope is not deliverable by two developers and must be cut by ~40% — see [Scope risk](#scope-risk--what-to-cut-if-behind).
+**Confirmed: ~6-month build.** Kickoff ~2026-06-09, **launch ~early December 2026** (12 two-week sprints + a Week-0 setup track + store-review buffer). `CLAUDE.md` has been updated to match (the earlier August date is retired). This is **aggressive for two developers** even with AI — protect the critical path and use the [scope-cut plan](#scope-risk--what-to-cut-if-behind) if a sprint slips.
 
 ---
 
@@ -222,7 +222,7 @@ This is **aggressive for two developers** even with AI. If a sprint slips, prote
 1. **Never cut / never slip:** consent at signup, erasure/export, audit log, moderation/report, block/mute, quick-exit. These are legal/safety gates.
 2. **Core v1:** auth, profiles, communities, chat, posts, events, safe places, push, admin CRUD.
 3. **Cut/slip first if needed:** curated **ads** (revenue, but not launch-critical) → fast-follow; **resources/education** depth → ship minimal; **premium** could fast-follow if IAP/store agreements stall (but it's a revenue pillar — prefer to keep).
-4. If the **Aug 20** date is real instead of 6 months: this plan does **not** fit — cut ads + premium to fast-follow, trim events/safe-places scope, and treat chat as the single biggest schedule risk.
+4. If the date ever compresses (e.g. a hard external deadline): cut ads + premium to fast-follow, trim events/safe-places scope, and treat chat as the single biggest schedule risk.
 
 ---
 

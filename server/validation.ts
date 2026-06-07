@@ -79,8 +79,136 @@ export const registerPushTokenSchema = z.object({
   platform: z.enum(["ios", "android", "web"]),
 });
 
+export const deactivatePushTokenSchema = z.object({
+  token: z.string().min(1),
+});
+
+// ── Pagination query schemas (docs/API.md §Conventions) ───────────────────────
+
+const MAX_CURSOR_PAGE_SIZE = 50;
+const DEFAULT_CURSOR_PAGE_SIZE = 20;
+const MAX_OFFSET_PAGE_SIZE = 100;
+const DEFAULT_OFFSET_PAGE_SIZE = 25;
+
+// Query params arrive as strings — coerce to numbers.
+export const cursorPageQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_CURSOR_PAGE_SIZE)
+    .default(DEFAULT_CURSOR_PAGE_SIZE),
+  cursor: z.string().optional(),
+});
+
+export const offsetPageQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_OFFSET_PAGE_SIZE)
+    .default(DEFAULT_OFFSET_PAGE_SIZE),
+  sort: z.string().optional(),
+  order: z.enum(["asc", "desc"]).default("desc"),
+});
+
+// ── Auth / account ────────────────────────────────────────────────────────────
+
+export const googleSignInSchema = z.object({
+  idToken: z.string().min(1),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z.string().min(MIN_PASSWORD_LENGTH).max(128),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(MIN_PASSWORD_LENGTH).max(128),
+});
+
+export const withdrawConsentSchema = z.object({
+  consentType: consentTypeSchema,
+});
+
+// ── Profile / uploads ─────────────────────────────────────────────────────────
+
+// 🚧 preferredCity is city-level only — no GPS coordinates (COMPLIANCE §5.8).
+export const updateProfileSchema = z
+  .object({
+    displayName: z.string().min(1).max(MAX_DISPLAY_NAME_LENGTH).optional(),
+    preferredCity: z.string().max(100).optional(),
+    avatarKey: z.string().uuid().optional(),
+  })
+  .strict();
+
+export const assetTypeSchema = z.enum([
+  "avatar",
+  "community",
+  "event",
+  "post",
+]);
+
+export const uploadRequestSchema = z.object({
+  contentType: z.string().min(1).max(100),
+});
+
+// ── Communities / membership ──────────────────────────────────────────────────
+
+export const updateCommunitySchema = z
+  .object({
+    name: z.string().min(1).max(MAX_COMMUNITY_NAME_LENGTH).optional(),
+    description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+    imageKey: z.string().uuid().optional(),
+  })
+  .strict();
+
+export const membershipRoleSchema = z.object({
+  role: z.enum(["member", "moderator", "admin"]),
+});
+
+// ── Events / RSVP ─────────────────────────────────────────────────────────────
+
+export const updateEventSchema = z
+  .object({
+    title: z.string().min(1).max(MAX_EVENT_TITLE_LENGTH).optional(),
+    description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+    location: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+    startsAt: z.string().datetime().optional(),
+    endsAt: z.string().datetime().optional(),
+  })
+  .strict();
+
+export const rsvpSchema = z.object({
+  status: z.enum(["going", "interested", "not_going"]),
+});
+
+// ── Blocks / notifications ────────────────────────────────────────────────────
+
+export const blockSchema = z.object({
+  blockedUserId: z.string().uuid(),
+});
+
+// All keys optional — partial update of notification_preferences booleans.
+export const notificationPreferencesUpdateSchema = z
+  .object({
+    communityPosts: z.boolean().optional(),
+    events: z.boolean().optional(),
+    eventReminders: z.boolean().optional(),
+    communityInvites: z.boolean().optional(),
+    memberJoins: z.boolean().optional(),
+  })
+  .strict();
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type CreateCommunityInput = z.infer<typeof createCommunitySchema>;
+export type UpdateCommunityInput = z.infer<typeof updateCommunitySchema>;
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 export type CreateEventInput = z.infer<typeof createEventSchema>;
+export type UpdateEventInput = z.infer<typeof updateEventSchema>;
 export type CreateReportInput = z.infer<typeof createReportSchema>;
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type CursorPageQuery = z.infer<typeof cursorPageQuerySchema>;
+export type OffsetPageQuery = z.infer<typeof offsetPageQuerySchema>;

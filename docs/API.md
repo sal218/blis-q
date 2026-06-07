@@ -21,7 +21,8 @@
 - **Auth header:** `Authorization: Bearer <supabase-access-jwt>`. The server verifies the JWT locally via JWKS (no Supabase round-trip) and resolves `req.user`.
 - **Timestamps:** ISO-8601 UTC strings, e.g. `"2026-06-06T12:00:00.000Z"`.
 - **IDs:** UUID v4 strings.
-- **All request bodies are validated with Zod** at the boundary before anything else (CLAUDE.md §6). Unknown/extra fields are rejected.
+- **All request bodies are validated with Zod** at the boundary before anything else (CLAUDE.md §6). Body schemas are **`.strict()`** — unknown/extra keys are **rejected** (`400`), not silently stripped. **Query strings are parsed leniently** — unrecognised query params are ignored, not rejected.
+- **Path notation:** within each section, paths in the table are relative to the section's base path (shown in the heading); a row showing a full `/api/v1/...` path means its base differs from the section.
 
 ### Auth matrix (every endpoint is exactly one of these)
 | Class | Marker | Mechanism |
@@ -106,13 +107,15 @@ Logout is client-side (discard tokens); an optional `POST /auth/logout` to revok
 
 These are part of the **locked contract** (COMPLIANCE §5.2/§5.5) — not optional, and gates for onboarding real users.
 
+(Paths absolute here, since the collection root itself is an endpoint.)
+
 | Method | Path | Rate | Body | Success | Notes |
 |---|---|---|---|---|---|
-| GET | `/export` | `exportUser` | — | `200 AccountExport` | Art. 20 portability. JSON of profile, communities joined (+ when), posts, messages, events attended, consent records, createdAt. |
+| GET | `/api/v1/account/export` | `exportUser` | — | `200 AccountExport` | Art. 20 portability. JSON of profile, communities joined (+ when), posts, messages, events attended, consent records, createdAt. |
 | DELETE | `/api/v1/account` | — | — | `200 { ok: true }` | Art. 17 erasure. **Generic response — leaks no internal detail.** |
-| POST | `/change-password` | — | `{ currentPassword, newPassword }` | `200 { ok: true }` | |
-| GET | `/consents` | — | — | `200 ConsentRecord[]` | Active + withdrawn consents. |
-| POST | `/consents/withdraw` | — | `{ consentType }` | `200 { ok: true }` | Withdrawing `account_creation` triggers the deletion flow. |
+| POST | `/api/v1/account/change-password` | — | `{ currentPassword, newPassword }` | `200 { ok: true }` | |
+| GET | `/api/v1/account/consents` | — | — | `200 ConsentRecord[]` | Active + withdrawn consents. |
+| POST | `/api/v1/account/consents/withdraw` | — | `{ consentType }` | `200 { ok: true }` | Withdrawing `account_creation` triggers the deletion flow. |
 
 **`DELETE /account` behaviour (server, COMPLIANCE §5.2):** verify `req.user.id` (never a body `userId`) → revoke Supabase sessions → deactivate push tokens → run the **anonymisation cascade in one transaction** (clear PII; content → `[deleted]`; drop memberships/RSVPs/tokens/consents) → **`invalidateProfileCache(userId)`** → write `audit_log: user.deleted` (actor anonymised) → return `200`. The response body reveals none of these steps.
 

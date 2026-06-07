@@ -2,8 +2,13 @@ import { z } from "zod";
 
 // Zod schemas for the backend request boundary. Every mutation route validates
 // its body against one of these before doing anything else (CLAUDE.md §6,
-// ENGINEERING_STANDARDS). Schemas are added here per feature; this scaffold
-// covers registration/consent and the core content-creation paths.
+// ENGINEERING_STANDARDS). See docs/API.md for the locked contract.
+//
+// Convention: request BODY schemas are `.strict()` — unknown/extra keys are
+// rejected (not silently stripped), matching docs/API.md. Query schemas are
+// intentionally lenient (extra query params like filters are ignored, not
+// rejected). Path-scoped IDs (e.g. communityId in /communities/:id/...) come
+// from req.params and are NOT duplicated in body schemas.
 
 // Field limits — kept local to this file (ENGINEERING_STANDARDS §8). Promote to
 // shared/constants.ts only if the client needs the same values.
@@ -16,8 +21,7 @@ const MAX_EVENT_TITLE_LENGTH = 150;
 const MAX_REPORT_REASON_LENGTH = 1000;
 const MIN_PASSWORD_LENGTH = 8;
 
-// Consent purposes recorded in consent_records (COMPLIANCE §5.1). Registration
-// requires at least account_creation — enforced by the route, not here.
+// Consent purposes recorded in consent_records (COMPLIANCE §5.1).
 export const consentTypeSchema = z.enum([
   "account_creation",
   "marketing_emails",
@@ -25,65 +29,171 @@ export const consentTypeSchema = z.enum([
   "location_data",
 ]);
 
-// Registration requires explicit consent — the policy version the user agreed
-// to is captured so a later privacy-policy bump can force re-consent (§5.1).
-export const registerSchema = z.object({
-  email: z.string().email().max(254),
-  password: z.string().min(MIN_PASSWORD_LENGTH).max(128),
-  displayName: z.string().min(1).max(MAX_DISPLAY_NAME_LENGTH),
-  consentedTypes: z.array(consentTypeSchema).min(1),
-  policyVersion: z.string().min(1),
-});
+// Registration requires explicit consent. The consented set MUST include
+// `account_creation` — that's the lawful basis for the account itself (Article
+// 9(2)(a) explicit consent, COMPLIANCE §5.1). Enforced in the schema, not only
+// in route logic, so `["analytics"]` alone can never create an account.
+export const registerSchema = z
+  .object({
+    email: z.string().email().max(254),
+    password: z.string().min(MIN_PASSWORD_LENGTH).max(128),
+    displayName: z.string().min(1).max(MAX_DISPLAY_NAME_LENGTH),
+    consentedTypes: z
+      .array(consentTypeSchema)
+      .min(1)
+      .refine((types) => types.includes("account_creation"), {
+        message: "account_creation consent is required",
+      }),
+    policyVersion: z.string().min(1),
+  })
+  .strict();
 
-export const loginSchema = z.object({
-  email: z.string().email().max(254),
-  password: z.string().min(1).max(128),
-});
+export const loginSchema = z
+  .object({
+    email: z.string().email().max(254),
+    password: z.string().min(1).max(128),
+  })
+  .strict();
 
-export const passwordResetRequestSchema = z.object({
-  email: z.string().email().max(254),
-});
+export const googleSignInSchema = z.object({ idToken: z.string().min(1) }).strict();
 
-export const createCommunitySchema = z.object({
-  name: z.string().min(1).max(MAX_COMMUNITY_NAME_LENGTH),
-  description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
-});
+export const passwordResetRequestSchema = z
+  .object({ email: z.string().email().max(254) })
+  .strict();
 
-export const createPostSchema = z.object({
-  communityId: z.string().uuid(),
-  content: z.string().min(1).max(MAX_POST_LENGTH),
-  imageKey: z.string().uuid().optional(),
-});
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1),
+    newPassword: z.string().min(MIN_PASSWORD_LENGTH).max(128),
+  })
+  .strict();
 
-export const createMessageSchema = z.object({
-  content: z.string().min(1).max(MAX_MESSAGE_LENGTH),
-});
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: z.string().min(MIN_PASSWORD_LENGTH).max(128),
+  })
+  .strict();
 
-export const createEventSchema = z.object({
-  communityId: z.string().uuid(),
-  title: z.string().min(1).max(MAX_EVENT_TITLE_LENGTH),
-  description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
-  location: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
-  startsAt: z.string().datetime(),
-  endsAt: z.string().datetime().optional(),
-});
+export const withdrawConsentSchema = z
+  .object({ consentType: consentTypeSchema })
+  .strict();
 
-export const createReportSchema = z.object({
-  resourceType: z.enum(["post", "message", "user", "event", "community"]),
-  resourceId: z.string().uuid(),
-  reason: z.string().min(1).max(MAX_REPORT_REASON_LENGTH),
-});
+// ── Profile / uploads ─────────────────────────────────────────────────────────
 
-export const registerPushTokenSchema = z.object({
-  token: z.string().min(1),
-  platform: z.enum(["ios", "android", "web"]),
-});
+// 🚧 preferredCity is city-level only — no GPS coordinates (COMPLIANCE §5.8).
+export const updateProfileSchema = z
+  .object({
+    displayName: z.string().min(1).max(MAX_DISPLAY_NAME_LENGTH).optional(),
+    preferredCity: z.string().max(100).optional(),
+    avatarKey: z.string().uuid().optional(),
+  })
+  .strict();
 
-export const deactivatePushTokenSchema = z.object({
-  token: z.string().min(1),
-});
+export const assetTypeSchema = z.enum(["avatar", "community", "event", "post"]);
 
-// ── Pagination query schemas (docs/API.md §Conventions) ───────────────────────
+export const uploadRequestSchema = z
+  .object({ contentType: z.string().min(1).max(100) })
+  .strict();
+
+// ── Communities / membership ──────────────────────────────────────────────────
+
+export const createCommunitySchema = z
+  .object({
+    name: z.string().min(1).max(MAX_COMMUNITY_NAME_LENGTH),
+    description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+  })
+  .strict();
+
+export const updateCommunitySchema = z
+  .object({
+    name: z.string().min(1).max(MAX_COMMUNITY_NAME_LENGTH).optional(),
+    description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+    imageKey: z.string().uuid().optional(),
+  })
+  .strict();
+
+export const membershipRoleSchema = z
+  .object({ role: z.enum(["member", "moderator", "admin"]) })
+  .strict();
+
+// ── Posts (communityId comes from /communities/:id/posts, not the body) ───────
+
+export const createPostSchema = z
+  .object({
+    content: z.string().min(1).max(MAX_POST_LENGTH),
+    imageKey: z.string().uuid().optional(),
+  })
+  .strict();
+
+// ── Chat (communityId comes from the path) ────────────────────────────────────
+
+export const createMessageSchema = z
+  .object({ content: z.string().min(1).max(MAX_MESSAGE_LENGTH) })
+  .strict();
+
+// ── Events / RSVP (communityId comes from /communities/:id/events) ────────────
+
+export const createEventSchema = z
+  .object({
+    title: z.string().min(1).max(MAX_EVENT_TITLE_LENGTH),
+    description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+    location: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+    startsAt: z.string().datetime(),
+    endsAt: z.string().datetime().optional(),
+  })
+  .strict();
+
+export const updateEventSchema = z
+  .object({
+    title: z.string().min(1).max(MAX_EVENT_TITLE_LENGTH).optional(),
+    description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+    location: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+    startsAt: z.string().datetime().optional(),
+    endsAt: z.string().datetime().optional(),
+  })
+  .strict();
+
+export const rsvpSchema = z
+  .object({ status: z.enum(["going", "interested", "not_going"]) })
+  .strict();
+
+// ── Reports / blocks / notifications ──────────────────────────────────────────
+
+export const createReportSchema = z
+  .object({
+    resourceType: z.enum(["post", "message", "user", "event", "community"]),
+    resourceId: z.string().uuid(),
+    reason: z.string().min(1).max(MAX_REPORT_REASON_LENGTH),
+  })
+  .strict();
+
+export const blockSchema = z
+  .object({ blockedUserId: z.string().uuid() })
+  .strict();
+
+export const notificationPreferencesUpdateSchema = z
+  .object({
+    communityPosts: z.boolean().optional(),
+    events: z.boolean().optional(),
+    eventReminders: z.boolean().optional(),
+    communityInvites: z.boolean().optional(),
+    memberJoins: z.boolean().optional(),
+  })
+  .strict();
+
+export const registerPushTokenSchema = z
+  .object({
+    token: z.string().min(1),
+    platform: z.enum(["ios", "android", "web"]),
+  })
+  .strict();
+
+export const deactivatePushTokenSchema = z
+  .object({ token: z.string().min(1) })
+  .strict();
+
+// ── Pagination query schemas (lenient — extra query params are ignored) ───────
 
 const MAX_CURSOR_PAGE_SIZE = 50;
 const DEFAULT_CURSOR_PAGE_SIZE = 20;
@@ -112,95 +222,6 @@ export const offsetPageQuerySchema = z.object({
   sort: z.string().optional(),
   order: z.enum(["asc", "desc"]).default("desc"),
 });
-
-// ── Auth / account ────────────────────────────────────────────────────────────
-
-export const googleSignInSchema = z.object({
-  idToken: z.string().min(1),
-});
-
-export const resetPasswordSchema = z.object({
-  token: z.string().min(1),
-  newPassword: z.string().min(MIN_PASSWORD_LENGTH).max(128),
-});
-
-export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1).max(128),
-  newPassword: z.string().min(MIN_PASSWORD_LENGTH).max(128),
-});
-
-export const withdrawConsentSchema = z.object({
-  consentType: consentTypeSchema,
-});
-
-// ── Profile / uploads ─────────────────────────────────────────────────────────
-
-// 🚧 preferredCity is city-level only — no GPS coordinates (COMPLIANCE §5.8).
-export const updateProfileSchema = z
-  .object({
-    displayName: z.string().min(1).max(MAX_DISPLAY_NAME_LENGTH).optional(),
-    preferredCity: z.string().max(100).optional(),
-    avatarKey: z.string().uuid().optional(),
-  })
-  .strict();
-
-export const assetTypeSchema = z.enum([
-  "avatar",
-  "community",
-  "event",
-  "post",
-]);
-
-export const uploadRequestSchema = z.object({
-  contentType: z.string().min(1).max(100),
-});
-
-// ── Communities / membership ──────────────────────────────────────────────────
-
-export const updateCommunitySchema = z
-  .object({
-    name: z.string().min(1).max(MAX_COMMUNITY_NAME_LENGTH).optional(),
-    description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
-    imageKey: z.string().uuid().optional(),
-  })
-  .strict();
-
-export const membershipRoleSchema = z.object({
-  role: z.enum(["member", "moderator", "admin"]),
-});
-
-// ── Events / RSVP ─────────────────────────────────────────────────────────────
-
-export const updateEventSchema = z
-  .object({
-    title: z.string().min(1).max(MAX_EVENT_TITLE_LENGTH).optional(),
-    description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
-    location: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
-    startsAt: z.string().datetime().optional(),
-    endsAt: z.string().datetime().optional(),
-  })
-  .strict();
-
-export const rsvpSchema = z.object({
-  status: z.enum(["going", "interested", "not_going"]),
-});
-
-// ── Blocks / notifications ────────────────────────────────────────────────────
-
-export const blockSchema = z.object({
-  blockedUserId: z.string().uuid(),
-});
-
-// All keys optional — partial update of notification_preferences booleans.
-export const notificationPreferencesUpdateSchema = z
-  .object({
-    communityPosts: z.boolean().optional(),
-    events: z.boolean().optional(),
-    eventReminders: z.boolean().optional(),
-    communityInvites: z.boolean().optional(),
-    memberJoins: z.boolean().optional(),
-  })
-  .strict();
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type CreateCommunityInput = z.infer<typeof createCommunitySchema>;

@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { registerAuthRoutes } from "./routes/auth";
 import { registerAdminRoutes } from "./routes/admin";
 
 /**
@@ -13,6 +14,7 @@ import { registerAdminRoutes } from "./routes/admin";
  * applied per-route, not globally (some routes are intentionally public).
  */
 export async function registerRoutes(app: Express): Promise<Server> {
+  registerAuthRoutes(app);
   registerAdminRoutes(app);
 
   return createServer(app);

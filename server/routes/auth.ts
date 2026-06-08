@@ -1,8 +1,16 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { supabaseClient, supabaseAdmin } from "../supabase";
-import { registerSchema, loginSchema } from "../validation";
-import { checkSignupRateLimit, checkLoginRateLimit } from "../rateLimit";
+import {
+  registerSchema,
+  loginSchema,
+  resendVerificationSchema,
+} from "../validation";
+import {
+  checkSignupRateLimit,
+  checkLoginRateLimit,
+  checkResendVerificationRateLimit,
+} from "../rateLimit";
 import type { AccountProfile, SessionResponse } from "@shared/types";
 
 // Auth routes (docs/API.md §4). Verification-first: signup never returns a
@@ -13,11 +21,23 @@ import type { AccountProfile, SessionResponse } from "@shared/types";
 export function registerAuthRoutes(app: Express): void {
   app.post("/api/v1/auth/signup", handleSignup);
   app.post("/api/v1/auth/login", handleLogin);
+  app.post("/api/v1/auth/resend-verification", handleResendVerification);
 }
 
 // Identical response for new and existing emails — the no-enumeration guarantee.
-function signupAccepted(res: Response): Response {
+function accepted(res: Response): Response {
   return res.status(202).json({ ok: true });
+}
+
+// Extracts a stable, NON-sensitive code for logging. Raw error objects/messages
+// can carry emails, SQL details, or request internals — never log those.
+function safeErrorCode(err: unknown): string {
+  if (err && typeof err === "object" && "code" in err) {
+    const code = (err as { code: unknown }).code;
+    if (typeof code === "string") return code;
+    if (typeof code === "number") return String(code);
+  }
+  return "unknown";
 }
 
 async function handleSignup(req: Request, res: Response): Promise<Response> {
@@ -40,7 +60,7 @@ async function handleSignup(req: Request, res: Response): Promise<Response> {
 
     // Existing account → identical 202, no rows, no email. No enumeration.
     const existing = await storage.getUserByEmail(email);
-    if (existing) return signupAccepted(res);
+    if (existing) return accepted(res);
 
     // Create the auth user UNCONFIRMED and WITHOUT sending email — the
     // verification email goes out only after our DB setup succeeds, so a user
@@ -52,7 +72,7 @@ async function handleSignup(req: Request, res: Response): Promise<Response> {
     });
     if (created.error || !created.data.user) {
       // Likely an existing/orphaned auth user — respond uniformly, never reveal.
-      return signupAccepted(res);
+      return accepted(res);
     }
     const authUserId = created.data.user.id;
 
@@ -69,20 +89,70 @@ async function handleSignup(req: Request, res: Response): Promise<Response> {
     } catch (dbErr) {
       // Roll back the auth user so no orphaned account survives (cross-system).
       await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
-      console.error("[POST /api/v1/auth/signup] DB tx failed; rolled back auth user", dbErr);
+      console.error(
+        "[POST /api/v1/auth/signup] DB transaction failed; rolled back auth user",
+        { code: safeErrorCode(dbErr) },
+      );
       return res.status(500).json({ error: "Internal Server Error" });
     }
 
     // DB setup succeeded — now send Supabase's built-in verification email.
-    // Non-fatal if delivery fails (account exists; a resend endpoint covers it).
+    // Non-fatal if delivery fails (the account exists; resend-verification covers it).
     const sent = await supabaseClient.auth.resend({ type: "signup", email });
     if (sent.error) {
-      console.error("[POST /api/v1/auth/signup] verification email failed", sent.error.message);
+      console.error(
+        "[POST /api/v1/auth/signup] verification email send failed",
+        { code: safeErrorCode(sent.error) },
+      );
     }
 
-    return signupAccepted(res);
+    return accepted(res);
   } catch (err) {
-    console.error("[POST /api/v1/auth/signup]", err);
+    console.error("[POST /api/v1/auth/signup] unexpected error", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleResendVerification(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const parsed = resendVerificationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const { email } = parsed.data;
+
+    const rate = await checkResendVerificationRateLimit(req, email);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    // Send only for a real, non-deleted account (Supabase no-ops if already
+    // verified). Always return the same 202 — never reveal existence.
+    const existing = await storage.getUserByEmail(email);
+    if (existing && !existing.deletedAt) {
+      const sent = await supabaseClient.auth.resend({ type: "signup", email });
+      if (sent.error) {
+        console.error(
+          "[POST /api/v1/auth/resend-verification] send failed",
+          { code: safeErrorCode(sent.error) },
+        );
+      }
+    }
+
+    return accepted(res);
+  } catch (err) {
+    console.error("[POST /api/v1/auth/resend-verification] unexpected error", {
+      code: safeErrorCode(err),
+    });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }
@@ -120,8 +190,18 @@ async function handleLogin(req: Request, res: Response): Promise<Response> {
     }
 
     const profile = await storage.getAccountProfile(result.data.user.id);
-    // Soft-deleted (or missing) account — never issue a session for it.
     if (!profile || profile.deletedAt) {
+      // Supabase already issued a session before we blocked the login. Revoke
+      // it (globally for this user) so it can't be used out-of-band, and audit
+      // the blocked attempt with the actor id.
+      await supabaseAdmin.auth.admin
+        .signOut(result.data.session.access_token, "global")
+        .catch(() => {});
+      await storage.writeAuditLog({
+        action: "user.login_failed",
+        actorId: result.data.user.id,
+        ipAddress: req.ip ?? null,
+      });
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -147,7 +227,9 @@ async function handleLogin(req: Request, res: Response): Promise<Response> {
     };
     return res.status(200).json(body);
   } catch (err) {
-    console.error("[POST /api/v1/auth/login]", err);
+    console.error("[POST /api/v1/auth/login] unexpected error", {
+      code: safeErrorCode(err),
+    });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }

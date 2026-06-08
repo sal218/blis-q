@@ -90,6 +90,7 @@ Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in 
 | Method | Path | Class | Rate | Body | Success |
 |---|---|---|---|---|---|
 | POST | `/signup` | 🌐 | `signupIp` | `RegisterInput` | `202 { ok: true }` |
+| POST | `/resend-verification` | 🌐 | `resendVerificationIp`+`resendVerificationEmail` | `{ email }` | `202 { ok: true }` |
 | POST | `/login` | 🌐 | `loginIp`+`loginEmail` | `{ email, password }` | `200 SessionResponse` |
 | POST | `/google` | 🌐 | `googleAuthIp` | `{ idToken }` (Firebase) | `200 SessionResponse` |
 | POST | `/forgot-password` | 🌐 | `passwordResetIp`+`passwordResetEmail` | `{ email }` | `200 { ok: true }` |
@@ -101,6 +102,8 @@ Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in 
 - Returns a **uniform `202 { ok: true }`** for both new and existing emails, and **never returns a session** — so account existence (an Article 9 signal: having a Blis-Q account reveals orientation) is never leaked. The client calls `/login` separately after the user verifies.
 - New users are created **unconfirmed**; the verification email is sent **only after** the DB transaction succeeds (no email for a half-initialised account). If the DB tx fails after the Supabase auth user is created, the auth user is **rolled back** (deleted).
 - **Login only succeeds after email verification** — Supabase rejects unverified accounts, surfaced as the same generic `401` as bad credentials.
+- **`/resend-verification`** re-sends the verification email if the first is lost — uniform `202` (no enumeration), dual-bucket rate-limited, and sends only for a real, non-deleted account (Supabase no-ops if already verified).
+- A login blocked by a **soft-deleted/missing local profile** also **revokes the Supabase session** (global sign-out) and writes `audit_log: user.login_failed`.
 - Sprint 1 uses **Supabase's built-in verification email**; switching to branded Resend on the verified domain is tracked (CLAUDE.md **P-6**) and does not change this auth model.
 
 **`forgot-password` returns `200` regardless of whether the email exists** — never reveal account existence. `login` failures are generic (`401 Invalid credentials`) and write `audit_log: user.login_failed`.

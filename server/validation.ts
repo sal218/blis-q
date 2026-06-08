@@ -19,6 +19,7 @@ const MAX_POST_LENGTH = 2000;
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_EVENT_TITLE_LENGTH = 150;
 const MAX_REPORT_REASON_LENGTH = 1000;
+const MAX_POLICY_VERSION_LENGTH = 32;
 const MIN_PASSWORD_LENGTH = 8;
 
 // Consent purposes recorded in consent_records (COMPLIANCE §5.1).
@@ -33,24 +34,29 @@ export const consentTypeSchema = z.enum([
 // `account_creation` — that's the lawful basis for the account itself (Article
 // 9(2)(a) explicit consent, COMPLIANCE §5.1). Enforced in the schema, not only
 // in route logic, so `["analytics"]` alone can never create an account.
+// email is lowercased at the boundary so DB uniqueness, rate-limit buckets, and
+// Supabase all see one canonical form. displayName is trimmed (no whitespace-
+// only names). consentedTypes are deduped so duplicates can't create duplicate
+// consent_records.
 export const registerSchema = z
   .object({
-    email: z.string().email().max(254),
+    email: z.string().email().max(254).toLowerCase(),
     password: z.string().min(MIN_PASSWORD_LENGTH).max(128),
-    displayName: z.string().min(1).max(MAX_DISPLAY_NAME_LENGTH),
+    displayName: z.string().trim().min(1).max(MAX_DISPLAY_NAME_LENGTH),
     consentedTypes: z
       .array(consentTypeSchema)
       .min(1)
       .refine((types) => types.includes("account_creation"), {
         message: "account_creation consent is required",
-      }),
-    policyVersion: z.string().min(1),
+      })
+      .transform((types) => [...new Set(types)]),
+    policyVersion: z.string().min(1).max(MAX_POLICY_VERSION_LENGTH),
   })
   .strict();
 
 export const loginSchema = z
   .object({
-    email: z.string().email().max(254),
+    email: z.string().email().max(254).toLowerCase(),
     password: z.string().min(1).max(128),
   })
   .strict();
@@ -58,7 +64,11 @@ export const loginSchema = z
 export const googleSignInSchema = z.object({ idToken: z.string().min(1) }).strict();
 
 export const passwordResetRequestSchema = z
-  .object({ email: z.string().email().max(254) })
+  .object({ email: z.string().email().max(254).toLowerCase() })
+  .strict();
+
+export const resendVerificationSchema = z
+  .object({ email: z.string().email().max(254).toLowerCase() })
   .strict();
 
 export const resetPasswordSchema = z
@@ -84,8 +94,8 @@ export const withdrawConsentSchema = z
 // 🚧 preferredCity is city-level only — no GPS coordinates (COMPLIANCE §5.8).
 export const updateProfileSchema = z
   .object({
-    displayName: z.string().min(1).max(MAX_DISPLAY_NAME_LENGTH).optional(),
-    preferredCity: z.string().max(100).optional(),
+    displayName: z.string().trim().min(1).max(MAX_DISPLAY_NAME_LENGTH).optional(),
+    preferredCity: z.string().trim().max(100).optional(),
     avatarKey: z.string().uuid().optional(),
   })
   .strict();

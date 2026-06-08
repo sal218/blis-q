@@ -497,7 +497,7 @@ Surfaced in the 2026-06-02 scaffold review. **P-1 and P-2 are hard blockers befo
 | P-3 | RevenueCat webhook route not implemented (env var + `revenuecatWebhookIp` limiter already scaffolded) | 🔒 | 🟠 | **BLOCKER — no payments until done.** Verify `Authorization` against `req.rawBody`, 400 on failure, then process. CLAUDE.md §4 |
 | P-4 | Functions exceeding ~40 lines: `setupCors`, `setupHelmet` (index.ts), `buildMessage` (notifications.ts) | 🔧 | 🟢 | Extract helpers/constants. ENGINEERING_STANDARDS §2 |
 | P-5 | `routes.ts` doc comment lists domain route modules not yet mounted | 📬 | 🟢 | Keep accurate as modules land |
-| P-6 | Auth/verification emails use Supabase's built-in sender; switch to branded Resend on the verified domain before launch | 📬 | 🟡 | Sprint-1 stand-in (does not change the verification-first auth model). Also add a `POST /api/v1/auth/resend-verification` endpoint. |
+| P-6 | Auth/verification emails use Supabase's built-in sender; switch to branded Resend on the verified domain before launch | 📬 | 🟡 | Sprint-1 stand-in (does not change the verification-first auth model). `POST /api/v1/auth/resend-verification` already exists. |
 
 ### Accepted Risks
 

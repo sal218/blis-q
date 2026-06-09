@@ -112,8 +112,32 @@ const envSchemaWithRefinements = envSchema.superRefine((data, ctx) => {
 
 export type Env = z.infer<typeof envSchema>;
 
+// Treat empty-string env vars as unset. A blank line in a .env file (e.g.
+// `R2_ENDPOINT=`) is a present empty string, which fails `.url()`/`.min(1)` even
+// on OPTIONAL fields — so "blank in .env" would wrongly crash startup. Mapping
+// "" → undefined makes blank behave like "not set". Required vars still fail
+// (undefined fails their validators) and production-required-optional vars still
+// fail in production (the superRefine sees them as missing).
+function emptyStringsToUndefined(
+  raw: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const cleaned: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    cleaned[key] = value === "" ? undefined : value;
+  }
+  return cleaned;
+}
+
+// Exported for testing — pure (no process.exit), so the parse outcome can be
+// asserted directly.
+export function parseEnv(
+  raw: Record<string, string | undefined>,
+): ReturnType<typeof envSchemaWithRefinements.safeParse> {
+  return envSchemaWithRefinements.safeParse(emptyStringsToUndefined(raw));
+}
+
 export function validateEnv(): Env {
-  const result = envSchemaWithRefinements.safeParse(process.env);
+  const result = parseEnv(process.env);
 
   if (!result.success) {
     const missing = result.error.errors

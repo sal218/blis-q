@@ -1,4 +1,4 @@
-import { eq, and, inArray, gt, isNull } from "drizzle-orm";
+import { eq, and, inArray, gt, isNull, exists } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -224,32 +224,54 @@ export class DatabaseStorage {
     });
   }
 
-  // Returns the token only if it matches, is unused, and is not expired.
-  async getValidPasswordResetToken(
+  // Atomically consume a reset token: a SINGLE UPDATE that marks it used ONLY
+  // if it is currently unused, unexpired, AND belongs to a live (non-deleted)
+  // user. RETURNING yields the row only to the caller that won the race, so two
+  // concurrent requests with the same token can never both succeed, and a
+  // soft-deleted account's pre-issued token can never reset it.
+  async consumePasswordResetToken(
     tokenHash: string,
   ): Promise<{ id: string; userId: string } | null> {
     const [row] = await db
-      .select({
-        id: passwordResetTokens.id,
-        userId: passwordResetTokens.userId,
-      })
-      .from(passwordResetTokens)
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
       .where(
         and(
           eq(passwordResetTokens.tokenHash, tokenHash),
           isNull(passwordResetTokens.usedAt),
           gt(passwordResetTokens.expiresAt, new Date()),
+          exists(
+            db
+              .select({ id: users.id })
+              .from(users)
+              .where(
+                and(
+                  eq(users.id, passwordResetTokens.userId),
+                  isNull(users.deletedAt),
+                ),
+              ),
+          ),
         ),
       )
-      .limit(1);
+      .returning({
+        id: passwordResetTokens.id,
+        userId: passwordResetTokens.userId,
+      });
     return row ?? null;
   }
 
-  async markPasswordResetTokenUsed(id: string): Promise<void> {
+  // Invalidate any outstanding unused reset tokens for a user — called when a
+  // new reset is requested, so at most one token is ever active per user.
+  async invalidatePasswordResetTokensForUser(userId: string): Promise<void> {
     await db
       .update(passwordResetTokens)
       .set({ usedAt: new Date() })
-      .where(eq(passwordResetTokens.id, id));
+      .where(
+        and(
+          eq(passwordResetTokens.userId, userId),
+          isNull(passwordResetTokens.usedAt),
+        ),
+      );
   }
 
   // NOTE: there is intentionally NO generic soft-delete/erasure method here.

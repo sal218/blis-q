@@ -219,6 +219,53 @@ describe("POST /api/v1/auth/reset-password", () => {
     expect(updateUserMock).not.toHaveBeenCalled();
   });
 
+  it("two parallel resets with the same token → only one updates the password", async () => {
+    const { email } = await seedUser();
+    const token = await requestResetToken(email);
+
+    const [a, b] = await Promise.all([
+      request(app)
+        .post("/api/v1/auth/reset-password")
+        .send({ token, newPassword: NEW_PASSWORD }),
+      request(app)
+        .post("/api/v1/auth/reset-password")
+        .send({ token, newPassword: NEW_PASSWORD }),
+    ]);
+
+    const statuses = [a.status, b.status].sort((x, y) => x - y);
+    expect(statuses).toEqual([200, 400]); // exactly one winner
+    expect(updateUserMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("token for a now-soft-deleted account → 400, no password change", async () => {
+    const { id, email } = await seedUser();
+    const token = await requestResetToken(email);
+    await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, id));
+
+    const res = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token, newPassword: NEW_PASSWORD });
+
+    expect(res.status).toBe(400);
+    expect(updateUserMock).not.toHaveBeenCalled();
+  });
+
+  it("requesting a new reset invalidates the previous token", async () => {
+    const { email } = await seedUser();
+    const token1 = await requestResetToken(email);
+    const token2 = await requestResetToken(email);
+
+    const first = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: token1, newPassword: NEW_PASSWORD });
+    expect(first.status).toBe(400); // old token was invalidated
+
+    const second = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: token2, newPassword: NEW_PASSWORD });
+    expect(second.status).toBe(200);
+  });
+
   it("rate-limited → 429", async () => {
     rlMock.mockResolvedValueOnce({ allowed: false, retryAfter: 60 });
     const res = await request(app)

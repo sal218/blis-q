@@ -75,7 +75,9 @@ async function sendEmail(params: {
   });
 
   if (error) {
-    console.error("[email] Resend send error:", error);
+    // Log only Resend's stable error name (e.g. "rate_limit_exceeded") — never
+    // the raw error object, which can carry the recipient or request internals.
+    console.error("[email] send failed", { code: error.name });
     throw new Error("Failed to send email");
   }
 }

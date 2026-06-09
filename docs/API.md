@@ -107,8 +107,8 @@ Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in 
 - Sprint 1 uses **Supabase's built-in verification email**; switching to branded Resend on the verified domain is tracked (CLAUDE.md **P-6**) and does not change this auth model.
 
 **Password reset is enumeration-resistant and uses hashed, single-use, expiring tokens:**
-- `forgot-password` → **uniform `202`** for any email; only a real, **non-deleted** account gets a reset email + token. The DB (`password_reset_tokens`) stores only a **SHA-256 hash** of the token (never the raw token), with a **30-minute expiry**. Writes `audit_log: user.password_reset_requested`.
-- `reset-password` → verifies the token (hash match **and** unexpired **and** unused), sets the new password via Supabase admin, **marks the token used (single-use)**, and writes `audit_log: user.password_reset`. **One generic `400`** for invalid / expired / already-used tokens. IP-rate-limited to deter token brute force.
+- `forgot-password` → **uniform `202`** for any email; only a real, **non-deleted** account gets a reset email + token. The DB (`password_reset_tokens`) stores only a **SHA-256 hash** of the token (never the raw token), with a **30-minute expiry**. Issuing a new token **invalidates any prior outstanding token** (at most one active per user). Writes `audit_log: user.password_reset_requested`.
+- `reset-password` → **atomically consumes** the token — a single `UPDATE ... SET used_at = now() WHERE token_hash = … AND used_at IS NULL AND expires_at > now() AND <user is live> RETURNING …` — then sets the new password via Supabase admin and writes `audit_log: user.password_reset`. The atomic consume closes the **double-use race** (two parallel requests → only one wins) and prevents resetting a **soft-deleted** account (token issued before deletion can't reset it). **One generic `400`** for invalid / expired / already-used / deleted-user tokens. IP-rate-limited to deter token brute force.
 
 Logout is client-side (discard tokens); an optional `POST /auth/logout` to revoke the refresh token may be added later.
 

@@ -269,6 +269,8 @@ async function handleForgotPassword(
     // ever exists in the emailed link — the DB stores its hash.
     const existing = await storage.getUserByEmail(email);
     if (existing && !existing.deletedAt) {
+      // Invalidate any prior outstanding token so only the newest is usable.
+      await storage.invalidatePasswordResetTokensForUser(existing.id);
       const rawToken = generateResetToken();
       await storage.createPasswordResetToken({
         userId: existing.id,
@@ -322,19 +324,22 @@ async function handleResetPassword(
         .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
     }
 
-    const match = await storage.getValidPasswordResetToken(
+    // Atomically consume the token (marks it used iff valid, unexpired, unused,
+    // and the user is live). This closes the double-use race and prevents
+    // resetting a soft-deleted account. One generic 400 for any failure.
+    const consumed = await storage.consumePasswordResetToken(
       hashResetToken(token),
     );
-    if (!match) {
-      // One generic error for invalid / expired / already-used tokens.
+    if (!consumed) {
       return res.status(400).json({ error: "Invalid or expired token" });
     }
 
     const updated = await supabaseAdmin.auth.admin.updateUserById(
-      match.userId,
+      consumed.userId,
       { password: newPassword },
     );
     if (updated.error) {
+      // The token is already consumed; the user requests a new reset link.
       console.error(
         "[POST /api/v1/auth/reset-password] password update failed",
         { code: safeErrorCode(updated.error) },
@@ -342,10 +347,9 @@ async function handleResetPassword(
       return res.status(500).json({ error: "Internal Server Error" });
     }
 
-    await storage.markPasswordResetTokenUsed(match.id); // single-use
     await storage.writeAuditLog({
       action: "user.password_reset",
-      actorId: match.userId,
+      actorId: consumed.userId,
       ipAddress: req.ip ?? null,
     });
 

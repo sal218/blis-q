@@ -1,17 +1,25 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { supabaseClient, supabaseAdmin } from "../supabase";
+import { generateResetToken, hashResetToken } from "../auth";
+import { sendPasswordResetEmail } from "../email";
 import {
   registerSchema,
   loginSchema,
   resendVerificationSchema,
+  passwordResetRequestSchema,
+  resetPasswordSchema,
 } from "../validation";
 import {
   checkSignupRateLimit,
   checkLoginRateLimit,
   checkResendVerificationRateLimit,
+  checkPasswordResetRateLimit,
 } from "../rateLimit";
 import type { AccountProfile, SessionResponse } from "@shared/types";
+
+// A reset link is valid for 30 minutes (matches the email copy).
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 
 // Auth routes (docs/API.md §4). Verification-first: signup never returns a
 // session and never reveals whether an email already exists (Article 9 — having
@@ -22,6 +30,8 @@ export function registerAuthRoutes(app: Express): void {
   app.post("/api/v1/auth/signup", handleSignup);
   app.post("/api/v1/auth/login", handleLogin);
   app.post("/api/v1/auth/resend-verification", handleResendVerification);
+  app.post("/api/v1/auth/forgot-password", handleForgotPassword);
+  app.post("/api/v1/auth/reset-password", handleResetPassword);
 }
 
 // Identical response for new and existing emails — the no-enumeration guarantee.
@@ -228,6 +238,120 @@ async function handleLogin(req: Request, res: Response): Promise<Response> {
     return res.status(200).json(body);
   } catch (err) {
     console.error("[POST /api/v1/auth/login] unexpected error", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleForgotPassword(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const parsed = passwordResetRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const { email } = parsed.data;
+
+    const rate = await checkPasswordResetRateLimit(req, email);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    // Only act for a real, non-deleted account; always return the same 202 so
+    // account existence is never revealed (no enumeration). The raw token only
+    // ever exists in the emailed link — the DB stores its hash.
+    const existing = await storage.getUserByEmail(email);
+    if (existing && !existing.deletedAt) {
+      const rawToken = generateResetToken();
+      await storage.createPasswordResetToken({
+        userId: existing.id,
+        tokenHash: hashResetToken(rawToken),
+        expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+      });
+      const resetLink = `${process.env.WEB_APP_URL ?? ""}/reset-password?token=${rawToken}`;
+      try {
+        await sendPasswordResetEmail(email, resetLink);
+      } catch (mailErr) {
+        // Non-fatal — the token is stored; the user can request another.
+        console.error(
+          "[POST /api/v1/auth/forgot-password] email send failed",
+          { code: safeErrorCode(mailErr) },
+        );
+      }
+      await storage.writeAuditLog({
+        action: "user.password_reset_requested",
+        actorId: existing.id,
+        ipAddress: req.ip ?? null,
+      });
+    }
+
+    return accepted(res);
+  } catch (err) {
+    console.error("[POST /api/v1/auth/forgot-password] unexpected error", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleResetPassword(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const { token, newPassword } = parsed.data;
+
+    // IP-only limit on the submit endpoint (token brute-force protection).
+    const rate = await checkPasswordResetRateLimit(req);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const match = await storage.getValidPasswordResetToken(
+      hashResetToken(token),
+    );
+    if (!match) {
+      // One generic error for invalid / expired / already-used tokens.
+      return res.status(400).json({ error: "Invalid or expired token" });
+    }
+
+    const updated = await supabaseAdmin.auth.admin.updateUserById(
+      match.userId,
+      { password: newPassword },
+    );
+    if (updated.error) {
+      console.error(
+        "[POST /api/v1/auth/reset-password] password update failed",
+        { code: safeErrorCode(updated.error) },
+      );
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
+
+    await storage.markPasswordResetTokenUsed(match.id); // single-use
+    await storage.writeAuditLog({
+      action: "user.password_reset",
+      actorId: match.userId,
+      ipAddress: req.ip ?? null,
+    });
+
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[POST /api/v1/auth/reset-password] unexpected error", {
       code: safeErrorCode(err),
     });
     return res.status(500).json({ error: "Internal Server Error" });

@@ -1,4 +1,4 @@
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, gt, isNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -7,6 +7,7 @@ import {
   communityMemberships,
   consentRecords,
   auditLog,
+  passwordResetTokens,
   type User,
   type NewUser,
 } from "@shared/schema";
@@ -207,6 +208,48 @@ export class DatabaseStorage {
       metadata: entry.metadata ?? null,
       ipAddress: entry.ipAddress ?? null,
     });
+  }
+
+  // ── Password reset tokens ─────────────────────────────────────────────────────
+
+  async createPasswordResetToken(input: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<void> {
+    await db.insert(passwordResetTokens).values({
+      userId: input.userId,
+      tokenHash: input.tokenHash,
+      expiresAt: input.expiresAt,
+    });
+  }
+
+  // Returns the token only if it matches, is unused, and is not expired.
+  async getValidPasswordResetToken(
+    tokenHash: string,
+  ): Promise<{ id: string; userId: string } | null> {
+    const [row] = await db
+      .select({
+        id: passwordResetTokens.id,
+        userId: passwordResetTokens.userId,
+      })
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          isNull(passwordResetTokens.usedAt),
+          gt(passwordResetTokens.expiresAt, new Date()),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  async markPasswordResetTokenUsed(id: string): Promise<void> {
+    await db
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(passwordResetTokens.id, id));
   }
 
   // NOTE: there is intentionally NO generic soft-delete/erasure method here.

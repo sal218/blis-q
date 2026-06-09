@@ -35,3 +35,4 @@ ALTER TABLE audit_log                 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_push_tokens        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_preferences  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE password_reset_tokens     ENABLE ROW LEVEL SECURITY;

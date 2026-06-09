@@ -501,6 +501,7 @@ Surfaced in the 2026-06-02 scaffold review. **P-1 and P-2 are hard blockers befo
 | P-6 | Auth/verification emails use Supabase's built-in sender; switch to branded Resend on the verified domain before launch | 📬 | 🟡 | Sprint-1 stand-in (does not change the verification-first auth model). `POST /api/v1/auth/resend-verification` already exists. |
 | P-7 | Migrate `shared/schema.ts` `pgTable` extra-config callbacks from the deprecated object-return form to the array-return form | 🔧 | 🟢 | Drizzle deprecation hints (not errors); whole-schema sweep, do in one pass. |
 | P-8 | Password reset does not force-logout the user's other Supabase sessions | 🔒 | 🟡 | **Before beta.** Supabase admin lacks a clean bulk "revoke all sessions by userId" (needs a JWT). Revisit when sessions/refresh-token revocation is wired. After reset, old refresh tokens may remain valid. |
+| P-9 | Reset/verification deep-link UI must not leak the token | 🔒 | 🟡 | When `feat/auth-screens-mobile` builds the reset screen: take the token from the deep link, strip it from any web URL/history, prevent Referer/analytics/third-party leakage, never log it. |
 
 ### Accepted Risks
 

@@ -93,7 +93,7 @@ Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in 
 | POST | `/resend-verification` | 🌐 | `resendVerificationIp`+`resendVerificationEmail` | `{ email }` | `202 { ok: true }` |
 | POST | `/login` | 🌐 | `loginIp`+`loginEmail` | `{ email, password }` | `200 SessionResponse` |
 | POST | `/google` | 🌐 | `googleAuthIp` | `{ idToken }` (Firebase) | `200 SessionResponse` |
-| POST | `/forgot-password` | 🌐 | `passwordResetIp`+`passwordResetEmail` | `{ email }` | `200 { ok: true }` |
+| POST | `/forgot-password` | 🌐 | `passwordResetIp`+`passwordResetEmail` | `{ email }` | `202 { ok: true }` |
 | POST | `/reset-password` | 🌐 | `passwordResetIp` | `{ token, newPassword }` | `200 { ok: true }` |
 
 **Compliance — signup MUST capture consent.** `RegisterInput = { email, password, displayName, consentedTypes: ConsentType[], policyVersion }`. The handler creates the user, **writes `consent_records`** (at minimum `account_creation`), seeds default `notification_preferences`, and writes `audit_log: user.registered` — **atomically (one DB transaction)**. A signup without a recorded consent row is invalid (COMPLIANCE §5.1). Consent is explicit and affirmative — the client must not pre-tick.
@@ -106,7 +106,9 @@ Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in 
 - A login blocked by a **soft-deleted/missing local profile** also **revokes the Supabase session** (global sign-out) and writes `audit_log: user.login_failed`.
 - Sprint 1 uses **Supabase's built-in verification email**; switching to branded Resend on the verified domain is tracked (CLAUDE.md **P-6**) and does not change this auth model.
 
-**`forgot-password` returns `200` regardless of whether the email exists** — never reveal account existence. `login` failures are generic (`401 Invalid credentials`) and write `audit_log: user.login_failed`.
+**Password reset is enumeration-resistant and uses hashed, single-use, expiring tokens:**
+- `forgot-password` → **uniform `202`** for any email; only a real, **non-deleted** account gets a reset email + token. The DB (`password_reset_tokens`) stores only a **SHA-256 hash** of the token (never the raw token), with a **30-minute expiry**. Issuing a new token **invalidates any prior outstanding token** (at most one active per user). Writes `audit_log: user.password_reset_requested`.
+- `reset-password` → **atomically consumes** the token — a single `UPDATE ... SET used_at = now() WHERE token_hash = … AND used_at IS NULL AND expires_at > now() AND <user is live> RETURNING …` — then sets the new password via Supabase admin and writes `audit_log: user.password_reset`. The atomic consume closes the **double-use race** (two parallel requests → only one wins) and prevents resetting a **soft-deleted** account (token issued before deletion can't reset it). **One generic `400`** for invalid / expired / already-used / deleted-user tokens. IP-rate-limited to deter token brute force.
 
 Logout is client-side (discard tokens); an optional `POST /auth/logout` to revoke the refresh token may be added later.
 

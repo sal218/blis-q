@@ -1,4 +1,4 @@
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, gt, isNull, exists } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -7,6 +7,7 @@ import {
   communityMemberships,
   consentRecords,
   auditLog,
+  passwordResetTokens,
   type User,
   type NewUser,
 } from "@shared/schema";
@@ -207,6 +208,70 @@ export class DatabaseStorage {
       metadata: entry.metadata ?? null,
       ipAddress: entry.ipAddress ?? null,
     });
+  }
+
+  // ── Password reset tokens ─────────────────────────────────────────────────────
+
+  async createPasswordResetToken(input: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<void> {
+    await db.insert(passwordResetTokens).values({
+      userId: input.userId,
+      tokenHash: input.tokenHash,
+      expiresAt: input.expiresAt,
+    });
+  }
+
+  // Atomically consume a reset token: a SINGLE UPDATE that marks it used ONLY
+  // if it is currently unused, unexpired, AND belongs to a live (non-deleted)
+  // user. RETURNING yields the row only to the caller that won the race, so two
+  // concurrent requests with the same token can never both succeed, and a
+  // soft-deleted account's pre-issued token can never reset it.
+  async consumePasswordResetToken(
+    tokenHash: string,
+  ): Promise<{ id: string; userId: string } | null> {
+    const [row] = await db
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          isNull(passwordResetTokens.usedAt),
+          gt(passwordResetTokens.expiresAt, new Date()),
+          exists(
+            db
+              .select({ id: users.id })
+              .from(users)
+              .where(
+                and(
+                  eq(users.id, passwordResetTokens.userId),
+                  isNull(users.deletedAt),
+                ),
+              ),
+          ),
+        ),
+      )
+      .returning({
+        id: passwordResetTokens.id,
+        userId: passwordResetTokens.userId,
+      });
+    return row ?? null;
+  }
+
+  // Invalidate any outstanding unused reset tokens for a user — called when a
+  // new reset is requested, so at most one token is ever active per user.
+  async invalidatePasswordResetTokensForUser(userId: string): Promise<void> {
+    await db
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(
+        and(
+          eq(passwordResetTokens.userId, userId),
+          isNull(passwordResetTokens.usedAt),
+        ),
+      );
   }
 
   // NOTE: there is intentionally NO generic soft-delete/erasure method here.

@@ -393,6 +393,31 @@ export const subscriptions = pgTable("subscriptions", {
     .defaultNow(),
 });
 
+// ── password_reset_tokens ─────────────────────────────────────────────────────
+// Custom password-reset flow. Stores only a SHA-256 HASH of the reset token
+// (never the raw token), an expiry, and a usedAt marker for single-use. userId
+// CASCADE: tokens vanish with the account. The raw token only ever exists in the
+// emailed link and the inbound reset request.
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }), // null until consumed
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    byHash: index("idx_password_reset_token_hash").on(t.tokenHash),
+    byUser: index("idx_password_reset_user").on(t.userId),
+  }),
+);
+
 // ── Inferred types ────────────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -419,3 +444,5 @@ export type DevicePushToken = typeof devicePushTokens.$inferSelect;
 export type NotificationPreferences =
   typeof notificationPreferences.$inferSelect;
 export type Subscription = typeof subscriptions.$inferSelect;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;

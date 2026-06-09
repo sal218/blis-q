@@ -2,10 +2,10 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-08 — during `feat/auth-password-reset`._
+_Last updated: 2026-06-08 — starting `feat/auth-google`._
 
 ## Current phase
-**Sprint 1 — email/password auth foundation.**
+**Sprint 1 — email/password auth foundation (complete) → adding Google Sign-In.**
 
 ## Merged to `main`
 | PR | What |
@@ -15,17 +15,17 @@ _Last updated: 2026-06-08 — during `feat/auth-password-reset`._
 | #3 | `docs/API.md` v1 API contract + `shared/types.ts` + Zod schemas |
 | #4 | `feat/auth-core` — consent-backed signup + login (verification-first); validated with a real-Supabase smoke test |
 | #5 | `fix/env-empty-string` — empty optional env vars treated as unset |
+| #6 | `feat/auth-password-reset` — atomic single-use expiring reset tokens, no enumeration, audit |
 
 ## In progress
-- **`feat/auth-password-reset`** — `forgot-password` + `reset-password`, hashed single-use expiring tokens (`password_reset_tokens`), no enumeration, rate limits, audit, integration tests. **Status: built, awaiting Codex review (no PR opened yet).**
+- **`feat/auth-google`** — `POST /api/v1/auth/google` (Google sign-in → Supabase session, consent enforced on first sign-up). **Status: branch created + plan drafted; awaiting Codex validation of the plan before implementation.**
 
 ## Sprint 1 — remaining
-- [ ] `feat/auth-google` — Google Sign-In verify (Firebase is provisioned → unblocked)
-- [ ] `feat/auth-screens-mobile` — mobile auth UI (signup → verify → login, consent)
+- [ ] `feat/auth-screens-mobile` — mobile auth UI (signup → verify → login, consent, reset screen — see P-9)
 - [ ] `feat/admin-login` — real Supabase admin sign-in (replace the token-paste scaffold)
 
 ## Auth endpoints live (`/api/v1/auth/*`)
-`signup` · `resend-verification` · `login` · `forgot-password` · `reset-password`. (Google pending.)
+`signup` · `resend-verification` · `login` · `forgot-password` · `reset-password`. (`google` in progress.)
 
 ## Infrastructure
 | Service | Status |
@@ -42,7 +42,8 @@ All infra is under the `blisqadmin@gmail.com` project account (PGC-owned) — **
 - **P-3** (🟠 blocker, before payments): RevenueCat webhook.
 - **P-6**: branded Resend email (currently Supabase built-in).
 - **P-7**: Drizzle `pgTable` extra-config deprecation sweep.
-- **P-8**: force-logout other sessions on password reset.
+- **P-8** (before beta): force-logout other sessions on password reset.
+- **P-9**: reset/verification deep-link UI must not leak the token (for `feat/auth-screens-mobile`).
 
 ## Next decision
-After `feat/auth-password-reset` merges, pick the next Sprint-1 branch (Google / mobile screens / admin login).
+`feat/auth-google` architecture (Supabase-native `signInWithIdToken` vs Firebase-admin verify) — pending Codex validation of the plan.

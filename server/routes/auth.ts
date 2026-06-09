@@ -262,6 +262,30 @@ function googleDisplayName(user: {
   return candidate.length > 0 ? candidate : "Blis-Q";
 }
 
+// Best-effort rollback of a just-created Supabase auth user when local setup
+// can't proceed (missing consent, or a failed DB transaction). Returns true ONLY
+// if Supabase confirms the delete. Callers MUST fail closed (500) on false — we
+// must never imply (via 422 or a "rolled back" log) that an orphan identity was
+// cleaned up when it wasn't. deleteUser can reject (network) or resolve with an
+// error; both count as failure. Logs a sanitized code only (never the raw error).
+async function deleteAuthUser(authUserId: string): Promise<boolean> {
+  try {
+    const result = await supabaseAdmin.auth.admin.deleteUser(authUserId);
+    if (result.error) {
+      console.error("[POST /api/v1/auth/google] auth-user cleanup failed", {
+        code: safeErrorCode(result.error),
+      });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[POST /api/v1/auth/google] auth-user cleanup threw", {
+      code: safeErrorCode(err),
+    });
+    return false;
+  }
+}
+
 // Google Sign-In (docs/API.md §4). Option A: the mobile app sends a Google OIDC
 // ID token, which we exchange for a Supabase session via signInWithIdToken —
 // Supabase verifies the token against Google and creates/links the auth user.
@@ -333,7 +357,13 @@ async function handleGoogleSignIn(
       // it, delete the auth user the exchange created (no orphan) and ask the
       // client to re-submit with consent. policyVersion must accompany consent.
       if (!consentedTypes || !policyVersion) {
-        await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
+        // Delete the auth user the exchange created. If cleanup FAILS, an
+        // unconsented identity may still exist — fail closed (500) rather than
+        // return 422, which would falsely imply the orphan was removed.
+        const cleaned = await deleteAuthUser(authUserId);
+        if (!cleaned) {
+          return res.status(500).json({ error: "Internal Server Error" });
+        }
         return res.status(422).json({ error: "consent_required" });
       }
       try {
@@ -348,10 +378,12 @@ async function handleGoogleSignIn(
         });
       } catch (dbErr) {
         // Roll back the auth user so no orphaned account survives (cross-system),
-        // exactly as email/password signup does.
-        await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
+        // exactly as email/password signup does. Log whether the rollback itself
+        // succeeded — a failed rollback may leave an orphan we must surface.
+        const cleaned = await deleteAuthUser(authUserId);
         console.error(
-          "[POST /api/v1/auth/google] DB transaction failed; rolled back auth user",
+          "[POST /api/v1/auth/google] DB transaction failed; auth-user rollback " +
+            (cleaned ? "succeeded" : "FAILED — orphan auth user may remain"),
           { code: safeErrorCode(dbErr) },
         );
         return res.status(500).json({ error: "Internal Server Error" });

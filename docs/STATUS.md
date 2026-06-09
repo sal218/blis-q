@@ -18,9 +18,10 @@ _Last updated: 2026-06-09 — `feat/auth-google` implemented; awaiting Codex re-
 | #6 | `feat/auth-password-reset` — atomic single-use expiring reset tokens, no enumeration, audit |
 
 ## In progress
-- **`feat/auth-google`** — `POST /api/v1/auth/google` (Google sign-in → Supabase session, consent enforced on first sign-up). **Status: implemented; 7 new integration tests + full suite (32) green; types/lint clean. Awaiting Codex re-review before PR.**
+- **`feat/auth-google`** — `POST /api/v1/auth/google` (Google sign-in → Supabase session, consent enforced on first sign-up). **Status: implemented + Codex P2 fix applied; 9 new integration tests + full suite (34) green; types/lint clean. Awaiting Codex re-review before PR.**
   - Architecture: **Option A** (Codex-approved) — `supabaseClient.auth.signInWithIdToken` exchanges the Google OIDC token; Supabase verifies it and owns the session. `firebase-admin` stays FCM-only.
   - Codex-required adjustments all in: orphan auth-user deleted on `consent_required`; auth-user rollback on DB-creation failure; optional `accessToken` + `nonce` pass-through; soft-deleted block revokes the session; regression tests for each.
+  - **Codex re-review P2 fix:** auth-user cleanup now **fails closed** — a `deleteAuthUser` helper reports success/failure; no-consent cleanup failure returns `500` (not `422`), DB-rollback failure is logged as a possible orphan. Two tests added for the cleanup-failure paths.
   - ⚠️ **Pending dashboard step before this works against real Supabase:** enable the **Google provider** in Supabase **prod + test** with the Google OAuth client IDs (from the Firebase project's Google Cloud). Tests mock the exchange, so CI is green without it, but the live flow needs it.
   - Also serialized Jest integration suites (`maxWorkers: 1`) — they share one real test DB and do global cleanup deletes, so parallel suites raced.
 

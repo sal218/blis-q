@@ -157,6 +157,48 @@ describe("POST /api/v1/auth/google", () => {
     expect(rows).toHaveLength(0);
   });
 
+  it("new user WITHOUT consent but auth-user cleanup FAILS → 500 (fail closed), not 422", async () => {
+    const id = randomUUID();
+    const email = uniqueEmail();
+    signInIdTokenMock.mockResolvedValue(googleSession(id, email));
+    // Supabase cleanup of the just-created auth user fails.
+    deleteUserMock.mockRejectedValueOnce(new Error("cleanup boom"));
+
+    const res = await request(app)
+      .post("/api/v1/auth/google")
+      .send({ idToken: ID_TOKEN });
+
+    // Must NOT return 422 — that would imply the orphan identity was removed.
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Internal Server Error" });
+    expect(deleteUserMock).toHaveBeenCalledWith(id);
+    const rows = await db.select().from(users).where(eq(users.id, id));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("DB failure AND rollback cleanup fails → still 500, no rows", async () => {
+    const id = randomUUID();
+    const email = uniqueEmail();
+    signInIdTokenMock.mockResolvedValue(googleSession(id, email));
+    const spy = jest
+      .spyOn(storage, "registerUser")
+      .mockRejectedValueOnce(new Error("boom"));
+    // The rollback delete also fails — the route must still fail closed (500).
+    deleteUserMock.mockRejectedValueOnce(new Error("cleanup boom"));
+
+    const res = await request(app).post("/api/v1/auth/google").send({
+      idToken: ID_TOKEN,
+      consentedTypes: ["account_creation"],
+      policyVersion: POLICY_VERSION,
+    });
+
+    expect(res.status).toBe(500);
+    expect(deleteUserMock).toHaveBeenCalledWith(id);
+    const rows = await db.select().from(users).where(eq(users.id, id));
+    expect(rows).toHaveLength(0);
+    spy.mockRestore();
+  });
+
   it("returning user → 200 session, no consent needed, no duplicate rows", async () => {
     const { id, email } = await seedUser();
     signInIdTokenMock.mockResolvedValue(googleSession(id, email));

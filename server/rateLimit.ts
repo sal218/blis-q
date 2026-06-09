@@ -47,6 +47,8 @@ const limiters = {
   googleAuthIp: makeLimiter(10, "15 m"), // mirrors login IP limit
   passwordResetIp: makeLimiter(5, "15 m"),
   passwordResetEmail: makeLimiter(3, "15 m"),
+  resendVerificationIp: makeLimiter(5, "15 m"),
+  resendVerificationEmail: makeLimiter(3, "15 m"),
 
   // Content & community — keyed by user ID
   contentCreateUser: makeLimiter(60, "1 m"), // community posts + chat messages
@@ -135,6 +137,28 @@ export async function checkPasswordResetRateLimit(
     const emailResult = await check(
       limiters.passwordResetEmail,
       `password-reset:email:${email.toLowerCase()}`,
+    );
+    if (!emailResult.allowed) return emailResult;
+  }
+
+  return { allowed: true };
+}
+
+// Resend verification — like password reset, dual IP + email buckets.
+export async function checkResendVerificationRateLimit(
+  req: { ip?: string },
+  email?: string,
+): Promise<RateLimitResult> {
+  const ipResult = await check(
+    limiters.resendVerificationIp,
+    `resend-verification:ip:${getIp(req)}`,
+  );
+  if (!ipResult.allowed) return ipResult;
+
+  if (email) {
+    const emailResult = await check(
+      limiters.resendVerificationEmail,
+      `resend-verification:email:${email.toLowerCase()}`,
     );
     if (!emailResult.allowed) return emailResult;
   }

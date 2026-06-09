@@ -14,6 +14,11 @@ const config: Config = {
     "^@/(.*)$": "<rootDir>/client/$1",
   },
   setupFiles: ["<rootDir>/server/__tests__/setup.ts"],
+  // Run suites serially. They all share ONE real test DB and do global cleanup
+  // deletes (e.g. removing all `user.login_failed` audit rows in afterEach).
+  // Parallel suites would race — one suite's cleanup can delete a row another
+  // suite's assertion depends on. Correctness over speed for shared-DB tests.
+  maxWorkers: 1,
 };
 
 export default config;

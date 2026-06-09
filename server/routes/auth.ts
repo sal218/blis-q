@@ -6,6 +6,7 @@ import { sendPasswordResetEmail } from "../email";
 import {
   registerSchema,
   loginSchema,
+  googleSignInSchema,
   resendVerificationSchema,
   passwordResetRequestSchema,
   resetPasswordSchema,
@@ -13,6 +14,7 @@ import {
 import {
   checkSignupRateLimit,
   checkLoginRateLimit,
+  checkGoogleAuthRateLimit,
   checkResendVerificationRateLimit,
   checkPasswordResetRateLimit,
 } from "../rateLimit";
@@ -29,6 +31,7 @@ const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 export function registerAuthRoutes(app: Express): void {
   app.post("/api/v1/auth/signup", handleSignup);
   app.post("/api/v1/auth/login", handleLogin);
+  app.post("/api/v1/auth/google", handleGoogleSignIn);
   app.post("/api/v1/auth/resend-verification", handleResendVerification);
   app.post("/api/v1/auth/forgot-password", handleForgotPassword);
   app.post("/api/v1/auth/reset-password", handleResetPassword);
@@ -238,6 +241,156 @@ async function handleLogin(req: Request, res: Response): Promise<Response> {
     return res.status(200).json(body);
   } catch (err) {
     console.error("[POST /api/v1/auth/login] unexpected error", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// Derive a display name for a first-time Google user from the Google profile
+// metadata, falling back to the email local-part and finally a constant. Trimmed
+// and capped to the displayName limit so it always satisfies the users column.
+function googleDisplayName(user: {
+  email?: string | null;
+  user_metadata?: Record<string, unknown> | null;
+}): string {
+  const meta = user.user_metadata ?? {};
+  const fullName = typeof meta.full_name === "string" ? meta.full_name : "";
+  const name = typeof meta.name === "string" ? meta.name : "";
+  const localPart = user.email ? user.email.split("@")[0] : "";
+  const candidate = (fullName || name || localPart).trim().slice(0, 50);
+  return candidate.length > 0 ? candidate : "Blis-Q";
+}
+
+// Google Sign-In (docs/API.md §4). Option A: the mobile app sends a Google OIDC
+// ID token, which we exchange for a Supabase session via signInWithIdToken —
+// Supabase verifies the token against Google and creates/links the auth user.
+// A FIRST-TIME user has no local account yet, so we require GDPR consent before
+// creating any local rows; until consent arrives we delete the auth user that
+// the exchange just created so no orphan identity survives (Codex review).
+async function handleGoogleSignIn(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const parsed = googleSignInSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const { idToken, accessToken, nonce, consentedTypes, policyVersion } =
+      parsed.data;
+
+    const rate = await checkGoogleAuthRateLimit(req);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    // Exchange the Google ID token for a Supabase session. Supabase verifies the
+    // token's signature/audience/expiry against Google. access_token and nonce
+    // are forwarded only when the client supplied them (native flow variants).
+    const result = await supabaseClient.auth.signInWithIdToken({
+      provider: "google",
+      token: idToken,
+      access_token: accessToken,
+      nonce,
+    });
+
+    // Bad/forged/expired token, or wrong audience → one generic 401, audited.
+    if (result.error || !result.data.session || !result.data.user) {
+      await storage.writeAuditLog({
+        action: "user.login_failed",
+        ipAddress: req.ip ?? null,
+      });
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const authUserId = result.data.user.id;
+    const email = (result.data.user.email ?? "").toLowerCase();
+    const profile = await storage.getAccountProfile(authUserId);
+
+    // Soft-deleted account → block like login does: revoke the session Supabase
+    // just issued (so it can't be used out-of-band) and audit with the actor id.
+    // We do NOT delete the auth identity here — it's a real, soft-deleted account.
+    if (profile && profile.deletedAt) {
+      await supabaseAdmin.auth.admin
+        .signOut(result.data.session.access_token, "global")
+        .catch(() => {});
+      await storage.writeAuditLog({
+        action: "user.login_failed",
+        actorId: authUserId,
+        ipAddress: req.ip ?? null,
+      });
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // First-time Google user — no local account yet.
+    if (!profile) {
+      // Consent is mandatory before any local record exists (Article 9). Without
+      // it, delete the auth user the exchange created (no orphan) and ask the
+      // client to re-submit with consent. policyVersion must accompany consent.
+      if (!consentedTypes || !policyVersion) {
+        await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
+        return res.status(422).json({ error: "consent_required" });
+      }
+      try {
+        await storage.registerUser({
+          id: authUserId,
+          email,
+          displayName: googleDisplayName(result.data.user),
+          consentTypes: consentedTypes,
+          policyVersion,
+          ipAddress: req.ip ?? null,
+          userAgent: req.get("user-agent") ?? null,
+        });
+      } catch (dbErr) {
+        // Roll back the auth user so no orphaned account survives (cross-system),
+        // exactly as email/password signup does.
+        await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
+        console.error(
+          "[POST /api/v1/auth/google] DB transaction failed; rolled back auth user",
+          { code: safeErrorCode(dbErr) },
+        );
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+    }
+
+    // Re-read so a freshly created profile is reflected in the response.
+    const account = profile ?? (await storage.getAccountProfile(authUserId));
+    if (!account) {
+      // Never hand back a session without a backing local profile.
+      await supabaseAdmin.auth.admin
+        .signOut(result.data.session.access_token, "global")
+        .catch(() => {});
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
+
+    const user: AccountProfile = {
+      id: account.id,
+      email: account.email,
+      displayName: account.displayName,
+      avatarUrl: account.avatarUrl,
+      isPremium: account.isPremium,
+      isAdmin: account.isAdmin,
+      preferredCity: account.preferredCity,
+      createdAt: account.createdAt.toISOString(),
+    };
+    const body: SessionResponse = {
+      user,
+      session: {
+        accessToken: result.data.session.access_token,
+        refreshToken: result.data.session.refresh_token,
+        expiresAt: new Date(
+          (result.data.session.expires_at ?? 0) * 1000,
+        ).toISOString(),
+      },
+    };
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[POST /api/v1/auth/google] unexpected error", {
       code: safeErrorCode(err),
     });
     return res.status(500).json({ error: "Internal Server Error" });

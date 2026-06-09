@@ -92,7 +92,7 @@ Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in 
 | POST | `/signup` | 🌐 | `signupIp` | `RegisterInput` | `202 { ok: true }` |
 | POST | `/resend-verification` | 🌐 | `resendVerificationIp`+`resendVerificationEmail` | `{ email }` | `202 { ok: true }` |
 | POST | `/login` | 🌐 | `loginIp`+`loginEmail` | `{ email, password }` | `200 SessionResponse` |
-| POST | `/google` | 🌐 | `googleAuthIp` | `{ idToken }` (Firebase) | `200 SessionResponse` |
+| POST | `/google` | 🌐 | `googleAuthIp` | `{ idToken, accessToken?, nonce?, consentedTypes?, policyVersion? }` | `200 SessionResponse` · `422 { error: "consent_required" }` (first sign-up) |
 | POST | `/forgot-password` | 🌐 | `passwordResetIp`+`passwordResetEmail` | `{ email }` | `202 { ok: true }` |
 | POST | `/reset-password` | 🌐 | `passwordResetIp` | `{ token, newPassword }` | `200 { ok: true }` |
 
@@ -105,6 +105,14 @@ Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in 
 - **`/resend-verification`** re-sends the verification email if the first is lost — uniform `202` (no enumeration), dual-bucket rate-limited, and sends only for a real, non-deleted account (Supabase no-ops if already verified).
 - A login blocked by a **soft-deleted/missing local profile** also **revokes the Supabase session** (global sign-out) and writes `audit_log: user.login_failed`.
 - Sprint 1 uses **Supabase's built-in verification email**; switching to branded Resend on the verified domain is tracked (CLAUDE.md **P-6**) and does not change this auth model.
+
+**Google Sign-In exchanges a Google OIDC token for a Supabase session (Option A):**
+- The mobile app obtains a Google **ID token** and posts it; the backend calls `supabaseClient.auth.signInWithIdToken({ provider: "google", token: idToken })`, so **Supabase verifies the token** (signature/audience/expiry against Google) and owns the session. `firebase-admin` is **not** used for this — Firebase remains only for FCM push. `accessToken` and `nonce` are **optional pass-throughs** for native flow variants (nonce-bound sign-in; flows that require the access token alongside the ID token).
+- **Returning user** (local profile exists, not deleted) → `200 SessionResponse`; no consent fields needed, existing `displayName` is preserved.
+- **First-time user** (no local profile) → GDPR consent is mandatory before any local row is created. If `consentedTypes` (must include `account_creation`) **and** `policyVersion` are absent → **`422 { error: "consent_required" }`**, and the Supabase auth user the exchange just created is **deleted** (no orphan identity); the client then re-submits the same token **with** consent. When consent is present, the handler creates the user, `consent_records`, default `notification_preferences`, and `audit_log: user.registered` **atomically** — and if that DB tx fails, the Supabase auth user is **rolled back** (deleted), exactly like email/password signup.
+- **Soft-deleted account** → same as login: generic `401`, the issued Supabase session is **revoked** (global sign-out), and `audit_log: user.login_failed` is written with the actor id. The auth identity is **not** hard-deleted (it's a real, soft-deleted account).
+- An **invalid/forged/expired token** → generic `401` + `audit_log: user.login_failed`.
+- **Infra:** requires the **Google provider enabled in Supabase** (prod + test) with the Google OAuth client IDs — a one-time dashboard step (see `docs/STATUS.md`).
 
 **Password reset is enumeration-resistant and uses hashed, single-use, expiring tokens:**
 - `forgot-password` → **uniform `202`** for any email; only a real, **non-deleted** account gets a reset email + token. The DB (`password_reset_tokens`) stores only a **SHA-256 hash** of the token (never the raw token), with a **30-minute expiry**. Issuing a new token **invalidates any prior outstanding token** (at most one active per user). Writes `audit_log: user.password_reset_requested`.

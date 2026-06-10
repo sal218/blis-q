@@ -7,7 +7,8 @@ dotenv.config();
 // database access goes through Drizzle ORM over a direct Postgres connection
 // using the service_role (see server/db.ts), never PostgREST. The anon key
 // below is used solely for sign-in operations that must return a user session
-// (signInWithPassword) and, client-side, for Supabase Realtime Broadcast —
+// (signInWithPassword, signInWithIdToken for Google) and, client-side, for
+// Supabase Realtime Broadcast —
 // which bypasses the database entirely. No anon DB grants are needed or wanted
 // (RLS zero-policy = deny-all). See CLAUDE.md §2.
 
@@ -25,7 +26,8 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 });
 
 // Regular client: uses anon key, used for sign-in operations that must
-// return a user session (signInWithPassword).
+// return a user session (signInWithPassword; signInWithIdToken for Google —
+// Supabase verifies the Google OIDC token and owns the session, Option A).
 export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: false,

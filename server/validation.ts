@@ -61,7 +61,34 @@ export const loginSchema = z
   })
   .strict();
 
-export const googleSignInSchema = z.object({ idToken: z.string().min(1) }).strict();
+// Google Sign-In (docs/API.md §4). The mobile app obtains a Google OIDC ID
+// token and posts it here; the backend exchanges it for a Supabase session via
+// signInWithIdToken (Option A — Supabase owns Supabase sessions). `accessToken`
+// and `nonce` are optional pass-throughs: some native Google flows must send the
+// access token alongside the ID token, and nonce-bound flows (mobile generates
+// the nonce) require it for verification. On FIRST sign-up there is no local
+// account yet, so consent must be supplied exactly as in registerSchema — the
+// route returns `consent_required` (422) when it is absent and the mobile app
+// then re-submits with consent. consentedTypes/policyVersion are optional here
+// (a returning user needs neither); the refine still enforces account_creation
+// whenever consentedTypes IS present, so a partial consent set can never slip
+// through.
+export const googleSignInSchema = z
+  .object({
+    idToken: z.string().min(1),
+    accessToken: z.string().min(1).optional(),
+    nonce: z.string().min(1).optional(),
+    consentedTypes: z
+      .array(consentTypeSchema)
+      .min(1)
+      .refine((types) => types.includes("account_creation"), {
+        message: "account_creation consent is required",
+      })
+      .transform((types) => [...new Set(types)])
+      .optional(),
+    policyVersion: z.string().min(1).max(MAX_POLICY_VERSION_LENGTH).optional(),
+  })
+  .strict();
 
 export const passwordResetRequestSchema = z
   .object({ email: z.string().email().max(254).toLowerCase() })

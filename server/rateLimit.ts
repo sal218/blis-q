@@ -116,7 +116,8 @@ export async function checkSignupRateLimit(req: {
 }
 
 // Google Sign-In is an auth mutation — rate limited per CLAUDE.md §6. Keyed by
-// IP only: the user identity isn't known until the Firebase token is verified.
+// IP only: the user identity isn't known until Supabase verifies the Google
+// OIDC token (signInWithIdToken, Option A).
 export async function checkGoogleAuthRateLimit(req: {
   ip?: string;
 }): Promise<RateLimitResult> {

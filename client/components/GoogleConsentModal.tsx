@@ -1,6 +1,7 @@
 import { Modal, View, Text, StyleSheet } from "react-native";
 import { useConsent } from "@/hooks/useConsent";
 import { ConsentList } from "@/components/ConsentList";
+import { LegalLinks } from "@/components/LegalLinks";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { TextLink } from "@/components/forms/TextLink";
 import { FormError } from "@/components/forms/FormError";
@@ -45,6 +46,7 @@ export function GoogleConsentModal({
           <Text style={styles.intro}>{strings.consent.googleIntro}</Text>
 
           <ConsentList selected={selected} onToggle={toggle} />
+          <LegalLinks />
 
           <FormError message={error} />
 

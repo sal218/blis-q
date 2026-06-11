@@ -86,6 +86,11 @@ export const pl = {
       "Zgadzam się na wykorzystanie miasta z mojego profilu (opcjonalnie).",
     requiredBadge: "wymagane",
     confirm: "Akceptuję i kontynuuję",
+    legalIntro: "Zapoznaj się z dokumentami:",
+    terms: "Regulamin",
+    privacy: "Polityka prywatności",
+    legalUnavailable:
+      "Regulamin i Polityka prywatności będą dostępne przed premierą.",
     googleTitle: "Jeszcze jeden krok",
     googleIntro:
       "Aby dokończyć rejestrację przez Google, potwierdź wymagane zgody.",

@@ -76,8 +76,14 @@ export function useGoogleSignIn({ onSignedIn }: Props) {
       try {
         let result = await submitGoogleConsent(credential, consent, googleSignIn);
 
-        // Stored ID token rejected (likely expired) → fresh sign-in, retry once.
-        if (result.status === "failed" && result.error.kind !== "google") {
+        // ONLY a rejected token (401 → invalidCredentials, e.g. the ID token
+        // expired between the first exchange and consent) warrants re-acquiring
+        // a fresh credential and retrying. Rate-limit / network / server errors
+        // are surfaced directly — re-running Google sign-in wouldn't help.
+        if (
+          result.status === "failed" &&
+          result.error.kind === "invalidCredentials"
+        ) {
           const fresh = await startGoogleSignIn(signInWithGoogle, googleSignIn);
           if (fresh.status === "needsConsent") {
             credentialRef.current = fresh.credential;

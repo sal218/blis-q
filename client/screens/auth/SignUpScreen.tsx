@@ -5,6 +5,7 @@ import { AuthScreen } from "@/components/AuthScreen";
 import { TextField } from "@/components/forms/TextField";
 import { PasswordField } from "@/components/forms/PasswordField";
 import { ConsentList } from "@/components/ConsentList";
+import { LegalLinks } from "@/components/LegalLinks";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { TextLink } from "@/components/forms/TextLink";
 import { FormError } from "@/components/forms/FormError";
@@ -92,6 +93,7 @@ export function SignUpScreen({ navigation }: AuthScreenProps<"SignUp">) {
 
       <View style={styles.consent}>
         <ConsentList selected={consent.selected} onToggle={consent.toggle} />
+        <LegalLinks />
       </View>
 
       <PrimaryButton

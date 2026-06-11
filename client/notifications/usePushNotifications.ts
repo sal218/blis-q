@@ -1,8 +1,14 @@
 import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
+import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { fetchWithAuth, getAccessToken } from "@/lib/auth";
+
+// The exact Expo push token last registered with the backend. We persist it so
+// logout can deactivate THAT token (registration and deregistration must use the
+// same token — the Expo push token, not the native device token).
+const PUSH_TOKEN_KEY = "blis-q.push-token";
 
 // Show notifications even when the app is in the foreground.
 // Call this once at module load time (before any component mounts).
@@ -56,26 +62,32 @@ export async function registerPushToken(): Promise<void> {
   }
 }
 
-/** Deactivate the current device's push token (call on logout). */
+/**
+ * Deactivate this device's push token on the backend. MUST be called on logout
+ * BEFORE the auth session is cleared, so fetchWithAuth can still attach the
+ * access token — otherwise a signed-out (possibly shared) device keeps
+ * receiving the previous account's notifications, which in Blis-Q can reveal
+ * sensitive membership/activity. Uses the exact Expo push token that was
+ * registered (read from SecureStore), not the native device token.
+ */
 export async function deregisterPushToken(): Promise<void> {
   if (Platform.OS === "web") return;
 
   try {
-    // Best-effort: if we can't get the token, skip silently
-    const tokenData = await Notifications.getDevicePushTokenAsync().catch(
+    const token = await SecureStore.getItemAsync(PUSH_TOKEN_KEY).catch(
       () => null,
     );
-    if (!tokenData) return;
+    if (!token) return;
 
-    const res = await fetchWithAuth("PATCH", "/api/push-tokens", {
-      token: tokenData.data,
-    });
+    const res = await fetchWithAuth("PATCH", "/api/push-tokens", { token });
     if (!res.ok) {
       console.warn(
         "[PushTokens] Failed to deregister token, status:",
         res.status,
       );
     }
+    // Drop the stored token regardless — this device is signing out.
+    await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY).catch(() => {});
   } catch (err) {
     console.warn("[PushTokens] Deregister error:", err);
   }
@@ -98,6 +110,8 @@ async function _sendTokenToBackend(
     if (!res.ok) {
       console.warn("[PushTokens] Backend rejected token, status:", res.status);
     } else {
+      // Remember the exact token we registered so logout can deactivate it.
+      await SecureStore.setItemAsync(PUSH_TOKEN_KEY, token).catch(() => {});
       console.log("[PushTokens] Token registered with backend");
     }
   } catch (err) {

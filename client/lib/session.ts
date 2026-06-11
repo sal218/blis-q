@@ -11,9 +11,9 @@ import type { AccountProfile, SessionResponse } from "@shared/types";
 // (tracked before-beta); see docs/STATUS.md.
 
 export const ACCESS_TOKEN_KEY = "blis-q.session-token"; // also read by fetchWithAuth
-const REFRESH_TOKEN_KEY = "blis-q.refresh-token";
-const EXPIRES_KEY = "blis-q.session-expires";
-const PROFILE_KEY = "blis-q.profile";
+export const REFRESH_TOKEN_KEY = "blis-q.refresh-token";
+export const EXPIRES_KEY = "blis-q.session-expires";
+export const PROFILE_KEY = "blis-q.profile";
 
 export type StoredSession = {
   user: AccountProfile;
@@ -33,7 +33,13 @@ export async function saveSession(session: SessionResponse): Promise<void> {
   ]);
 }
 
-// Restore a persisted session on launch, or null if none/partial/corrupt.
+// Restore a persisted session on launch, or null if none/partial/corrupt/expired.
+//
+// Until token refresh exists (tracker P-10), an EXPIRED access token must be
+// treated as signed out — otherwise a stale cached profile would route the user
+// into the authenticated tree with a token the backend will reject. A missing or
+// unparseable expiry is treated the same way (fail safe). Expired/invalid state
+// is cleared so it can't be retried.
 export async function loadSession(): Promise<StoredSession | null> {
   try {
     const [accessToken, refreshToken, expiresAt, profileRaw] =
@@ -44,6 +50,14 @@ export async function loadSession(): Promise<StoredSession | null> {
         SecureStore.getItemAsync(PROFILE_KEY),
       ]);
     if (!accessToken || !refreshToken || !profileRaw) return null;
+
+    const expiryMs = Date.parse(expiresAt ?? "");
+    if (Number.isNaN(expiryMs) || expiryMs <= Date.now()) {
+      // Missing/invalid/past expiry → not usable until refresh exists. Clear it.
+      await clearSession();
+      return null;
+    }
+
     const user = JSON.parse(profileRaw) as AccountProfile;
     return { user, accessToken, refreshToken, expiresAt: expiresAt ?? "" };
   } catch {

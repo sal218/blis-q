@@ -488,6 +488,14 @@ RevenueCat (and any future payment provider) webhook signature verification requ
 2. **Client env**: set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` + `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`.
 3. **app.json**: replace the `iosUrlScheme` placeholder (`com.googleusercontent.apps.REPLACE_WITH_IOS_CLIENT_ID`) in the google-signin plugin with the real reversed iOS client ID.
 
+### Push Token Must Be Deregistered on Logout (before clearing the session)
+
+Logout must call `deregisterPushToken()` **before** clearing the auth session, while `fetchWithAuth` can still attach the access token. Otherwise a signed-out (possibly shared) device stays attached to the old account on the backend and keeps receiving its notifications — in Blis-Q those can reveal sensitive membership/activity. Registration and deregistration must use the **same** token: the **Expo push token** (`getExpoPushTokenAsync`), not the native device token (`getDevicePushTokenAsync`). The registered token is persisted in SecureStore (`client/notifications/usePushNotifications.ts`) so logout deactivates exactly that token.
+
+### Expired Session Is Signed Out (until refresh exists)
+
+`client/lib/session.ts` `loadSession()` treats a missing/invalid/**past** `expiresAt` as signed out (clears the store, returns null). Until token refresh is wired (tracker **P-10**), a cached profile must NOT route the user into the authenticated tree with an access token the backend will reject.
+
 ### Reset Deep-Link Token Must Not Leak (P-9)
 
 The reset-password deep link carries the raw token. `client/screens/auth/ResetPasswordScreen.tsx` captures it once into a ref, then scrubs it from navigation state (`setParams({ token: undefined })`) and the web URL (`history.replaceState`). Never put the token in logs, analytics, or persisted navigation state. The emailed `https://<web>/reset-password` link needs iOS Associated Domains / Android App Links configured at provisioning to open the app directly.

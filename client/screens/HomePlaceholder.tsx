@@ -2,6 +2,7 @@ import { View, Text, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
 import { signOutGoogle } from "@/lib/googleAuth";
+import { deregisterPushToken } from "@/notifications/usePushNotifications";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { strings } from "@/i18n";
 import { colors, spacing } from "@/constants/theme";
@@ -16,6 +17,10 @@ export function HomePlaceholder() {
   const { user, signOut } = useAuth();
 
   async function onSignOut() {
+    // Deactivate this device's push token while the access token is still
+    // available — BEFORE clearing the session — so the signed-out device stops
+    // receiving the account's notifications (P1, privacy-sensitive in Blis-Q).
+    await deregisterPushToken();
     await signOutGoogle();
     await signOut();
   }

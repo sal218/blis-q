@@ -137,6 +137,31 @@ describe("POST /api/admin/login", () => {
     expect(audits.some((a) => a.action === "admin.login")).toBe(false);
   });
 
+  it("non-admin AND session revocation fails → still generic 401, no session body, audit written", async () => {
+    const { id, email } = await seedUser({ isAdmin: false });
+    signInMock.mockResolvedValue({
+      data: { user: { id }, session: VALID_SESSION },
+      error: null,
+    });
+    // Supabase revocation fails — the route must fail safe: still 401, audited,
+    // and obviously no session in the body (it was never returned anyway).
+    signOutMock.mockRejectedValueOnce(new Error("revoke boom"));
+
+    const res = await request(app)
+      .post("/api/admin/login")
+      .send({ email, password: PASSWORD });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: "Invalid credentials" });
+    expect(res.body.session).toBeUndefined();
+    expect(signOutMock).toHaveBeenCalledWith("at", "global");
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.actorId, id));
+    expect(audits.some((a) => a.action === "admin.login_failed")).toBe(true);
+  });
+
   it("bad credentials → generic 401 + admin.login_failed (no session issued)", async () => {
     signInMock.mockResolvedValue({
       data: { user: null, session: null },

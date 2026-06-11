@@ -44,6 +44,27 @@ export function registerAdminRoutes(app: Express): void {
   );
 }
 
+// Best-effort revocation of the session Supabase issued before the admin gate
+// rejected the user. The session is never returned to the client, so a failure
+// here is not a token leak — but the security contract says we revoke it, so a
+// failure must be logged (sanitized code only), not swallowed. A rejection OR a
+// resolved { error } both count as failure; either way the caller still returns
+// the same generic 401.
+async function revokeIssuedSession(accessToken: string): Promise<void> {
+  try {
+    const result = await supabaseAdmin.auth.admin.signOut(accessToken, "global");
+    if (result?.error) {
+      console.error("[POST /api/admin/login] session revocation failed", {
+        code: safeErrorCode(result.error),
+      });
+    }
+  } catch (err) {
+    console.error("[POST /api/admin/login] session revocation threw", {
+      code: safeErrorCode(err),
+    });
+  }
+}
+
 // Admin email/password sign-in. Authenticates via Supabase, then gates on a
 // verified, live, isAdmin profile. Every failure mode — bad credentials,
 // unverified email, missing profile, soft-deleted, or non-admin — returns the
@@ -90,9 +111,7 @@ async function handleAdminLogin(
     // Not a live admin (missing / soft-deleted / not isAdmin) → revoke the
     // session Supabase just issued, audit with the actor id, return generic 401.
     if (!profile || profile.deletedAt || !profile.isAdmin) {
-      await supabaseAdmin.auth.admin
-        .signOut(result.data.session.access_token, "global")
-        .catch(() => {});
+      await revokeIssuedSession(result.data.session.access_token);
       await storage.writeAuditLog({
         action: "admin.login_failed",
         actorId: result.data.user.id,

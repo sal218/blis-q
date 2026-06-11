@@ -2,7 +2,7 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-11 — Sprint 1 auth complete (#9 merged); starting Sprint 2 (`feat/account-profile`, account/GDPR backend)._
+_Last updated: 2026-06-11 — Sprint 2 slice 1 merged (#10); starting slice 2 (`feat/account-export`, Art. 20 / P-1)._
 
 ## Current phase
 **Sprint 2 — Auth complete → Profiles + GDPR erasure/export (ROADMAP Sprint 2). Goal: close the P-1/P-2 compliance blockers; a user can fully manage and delete their account.**
@@ -19,22 +19,21 @@ _Last updated: 2026-06-11 — Sprint 1 auth complete (#9 merged); starting Sprin
 | #7 | `feat/auth-google` — Google sign-in (Supabase `signInWithIdToken`, Option A); consent on first sign-up, fail-closed cleanup; +`forceExit` CI fix |
 | #8 | `feat/auth-screens-mobile` — end-to-end mobile auth UI (Polish/LTR), Google consent retry, SecureStore session, push-deregister on logout, jest-expo harness |
 | #9 | `feat/admin-login` — real admin email/password sign-in (`POST /api/admin/login`, server-side `isAdmin` gate, generic 401, session revoke + sanitized logging, audit) |
+| #10 | `feat/account-profile` — Sprint-2 slice 1: `GET/PATCH /api/v1/profile`, `POST /account/change-password` (verification-session revoked on every exit), `GET /account/consents`; closes the P-1 "no GET /me" gap |
 
 **🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9).
 
 ## In progress
-- **`feat/account-profile`** — Sprint-2 account backend, slice 1 of 3. **Status: implemented + Codex round-1 fixes; Codex-approved (no blocking issues at `4da2687`); 13 backend integration tests green; types/lint clean. PR open — awaiting GitHub CI before merge.**
-  - Routes (corrected per Codex to the locked API contract): `GET /api/v1/profile` (closes the P-1 "no `GET /me`" gap), `PATCH /api/v1/profile` (`{ displayName?, preferredCity? }` — strict, empty-body→400, trimmed, city-level only; **avatarKey rejected/deferred** until R2), `POST /api/v1/account/change-password`, `GET /api/v1/account/consents`.
-  - **change-password session hygiene (Codex):** verifies current password via Supabase, updates it, then **revokes the user's refresh sessions** (incl. the verification session) via global sign-out — failure is logged (sanitized), not swallowed. Access JWTs remain valid until expiry (JWKS); client treats password change as requiring re-login. Audits `user.password_changed` / `user.password_change_failed`.
-  - **Codex round-1 fixes:** (P1) change-password now revokes the verification session on **every** exit via `finally` — `global` scope on success (force re-login), `local` on failure (kill only the temp session, leave real sessions intact); regression test for update-fails-after-verify. (P2) blank/whitespace `preferredCity` now **clears to null** (user can remove their city); test added.
-  - Tests use the new **authenticated-route pattern** (mock only `isAuthenticated` to inject `req.user`; real DB for storage; Supabase/rate-limiter mocked). **13 tests** incl. unauth→401, empty-body/strict→400, avatarKey→400, trim, blank-city→null, change-password revoke (success+failure paths), consents.
-  - Then slice 2 `feat/account-export` (`GET /api/account/export`, Art. 20 — **P-1**) and slice 3 `feat/account-erasure` (`DELETE /api/account` anonymisation cascade — **P-2**, isolated for careful review).
-  - Avatar upload (R2 presigned) **deferred** — R2 not provisioned; non-avatar fields ship now.
+- **`feat/account-export`** — Sprint-2 account backend, **slice 2 of 3**: `GET /api/v1/account/export` — portable JSON of all the user's data (GDPR Art. 20, **P-1**). **Status: implemented + Codex-approved (no blocking issues at `43d6fa4`); 6 backend integration tests green; types/lint clean. PR open — awaiting GitHub CI before merge.**
+  - **Expanded shape (Codex):** `AccountExport` now also includes `notificationPreferences`, `blocks`, `reports` submitted, and `subscription` state. **Soft-deleted posts/messages included** as-is (flagged `deleted`). **Excluded** (documented in API.md §5): push tokens, reset-token hashes, auth internals, `audit_log`.
+  - Storage-owned multi-table reads (`getAccountExport`), all scoped to `userId`; rate-limited (`exportUser`), audited (`user.data_exported`), export body never logged. Content tables are empty today (no create routes yet) but the export is forward-compatible.
+  - Tests seed content directly (AR-2): full export incl. soft-deleted, **isolation** (only caller's data), empty user, audit row, unauth→401, 429.
+  - Slice 3 `feat/account-erasure` (`DELETE /api/account` cascade — **P-2**) follows, isolated for careful review.
 - **Backlog (Codex):** "Deactivate account" = a **reversible pause** (hide from public/community, block/limit login, retain data, keep audit) — a safety/account-control feature, **not** GDPR erasure. Parked in [ROADMAP](ROADMAP.md) **Sprint 4** so it can't delay export/erasure.
 
 ## Auth endpoints live (`/api/v1/auth/*`)
 `signup` · `resend-verification` · `login` · `google` · `forgot-password` · `reset-password`. (All merged. `google` live flow still needs the Supabase Google-provider dashboard step before a real device can use it.) **No regular-user `GET /me`/`/account` endpoint yet** (P-1) — the mobile app persists the profile from the auth response.
-Account (🔑, this branch): `GET/PATCH /api/v1/profile` · `POST /api/v1/account/change-password` · `GET /api/v1/account/consents`. (export + erasure = next two slices.)
+Account (🔑): `GET/PATCH /api/v1/profile` · `POST /api/v1/account/change-password` · `GET /api/v1/account/consents` (merged #10). `GET /api/v1/account/export` = this branch; `DELETE /api/v1/account` = next slice.
 Admin: **`POST /api/admin/login`** (#9, merged) + `GET /api/admin/me`.
 
 ## Sprint 1 — status
@@ -74,4 +73,4 @@ Tracked here so they stay explicit (per Codex), not just implied by the roadmap.
 **Legal / infra gates (🏢 Client + provisioning)** — see [ROADMAP](ROADMAP.md) Week-0 + critical path: ⛔ **DPA signed**, ⛔ **DPIA complete** (schema can't be finalised until then), **Privacy Policy + ToS live** (PL), and the remaining infra cutover (Upstash Redis, Cloudflare R2, Resend domain, Fly.io, Sentry — all **not yet** provisioned).
 
 ## Next decision
-**Sprint 2 plan** — proposed 3-branch account/GDPR sequence: `feat/account-profile` (GET/PATCH self + change-password + consents) → `feat/account-export` (Art. 20) → `feat/account-erasure` (`DELETE /api/account` cascade, P-2). Avatar upload deferred (R2 not provisioned). Awaiting Codex validation of the plan + sequencing before implementation. None of the mobile-provisioning steps are needed for this work.
+**Slice 2 (`feat/account-export`) plan** awaiting Codex validation, then implement → review → PR. Slice 3 (`feat/account-erasure`, the P-2 cascade) closes the Sprint-2 GDPR blockers. None of the mobile-provisioning steps are needed for this work.

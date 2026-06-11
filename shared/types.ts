@@ -214,12 +214,34 @@ export type ConsentRecordDTO = {
   withdrawnAt: string | null;
 };
 
+// The user's complete portable record (Art. 20). Includes ALL non-secret user
+// data we store. Soft-deleted posts/messages are included as-is (with whatever
+// `content` holds, e.g. "[deleted]") and flagged via `deleted` — they're still
+// the user's records. EXCLUDED by design (security/ops artifacts, not portable
+// personal data): raw push tokens, password-reset token hashes, Supabase auth
+// internals, and the audit_log. See docs/API.md §5.
 export type AccountExport = {
   profile: AccountProfile;
+  createdAt: string;
   communities: { id: string; name: string; joinedAt: string }[];
-  posts: { id: string; communityId: string; content: string; createdAt: string }[];
-  messages: { id: string; communityId: string; content: string; createdAt: string }[];
+  posts: {
+    id: string;
+    communityId: string;
+    content: string;
+    createdAt: string;
+    deleted: boolean;
+  }[];
+  messages: {
+    id: string;
+    communityId: string;
+    content: string;
+    createdAt: string;
+    deleted: boolean;
+  }[];
   events: { id: string; title: string; status: RsvpStatus }[];
   consents: ConsentRecordDTO[];
-  createdAt: string;
+  notificationPreferences: NotificationPreferencesDTO;
+  blocks: { blockedUserId: string; createdAt: string }[];
+  reports: ReportDTO[];
+  subscription: SubscriptionDTO | null;
 };

@@ -7,8 +7,16 @@ import { updateProfileSchema, changePasswordSchema } from "../validation";
 import {
   checkAccountUpdateRateLimit,
   checkChangePasswordRateLimit,
+  checkExportRateLimit,
 } from "../rateLimit";
-import type { AccountProfile, ConsentRecordDTO } from "@shared/types";
+import type {
+  AccountProfile,
+  AccountExport,
+  ConsentRecordDTO,
+  RsvpStatus,
+  ReportResourceType,
+  SubscriptionStatus,
+} from "@shared/types";
 
 // Self-service account management (docs/API.md §5/§6). Every route is
 // isAuthenticated — req.user is the caller; a user can only ever read/modify
@@ -24,6 +32,7 @@ export function registerAccountRoutes(app: Express): void {
     handleChangePassword,
   );
   app.get("/api/v1/account/consents", isAuthenticated, handleGetConsents);
+  app.get("/api/v1/account/export", isAuthenticated, handleExportAccount);
 }
 
 function toAccountProfile(profile: {
@@ -218,6 +227,101 @@ async function revokeSession(
       "[POST /api/v1/account/change-password] session revocation threw",
       { code: safeErrorCode(err) },
     );
+  }
+}
+
+// GDPR Art. 20 portability: a complete JSON of the caller's data. Scoped to
+// req.user.id (the verified token) — never a body param. Soft-deleted content is
+// included (flagged). Excludes security/ops artifacts (push tokens, reset-token
+// hashes, audit_log) — see docs/API.md §5. The export body is never logged.
+async function handleExportAccount(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+
+    const rate = await checkExportRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const data = await storage.getAccountExport(userId);
+    if (!data.profile) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const payload: AccountExport = {
+      profile: toAccountProfile(data.profile),
+      createdAt: data.profile.createdAt.toISOString(),
+      communities: data.communities.map((c) => ({
+        id: c.id,
+        name: c.name,
+        joinedAt: c.joinedAt.toISOString(),
+      })),
+      posts: data.posts.map((p) => ({
+        id: p.id,
+        communityId: p.communityId,
+        content: p.content,
+        createdAt: p.createdAt.toISOString(),
+        deleted: p.deleted,
+      })),
+      messages: data.messages.map((m) => ({
+        id: m.id,
+        communityId: m.communityId,
+        content: m.content,
+        createdAt: m.createdAt.toISOString(),
+        deleted: m.deleted,
+      })),
+      events: data.events.map((e) => ({
+        id: e.id,
+        title: e.title,
+        status: e.status as RsvpStatus,
+      })),
+      consents: data.consents.map((r) => ({
+        consentType: r.consentType as ConsentRecordDTO["consentType"],
+        policyVersion: r.policyVersion,
+        grantedAt: r.grantedAt.toISOString(),
+        withdrawnAt: r.withdrawnAt ? r.withdrawnAt.toISOString() : null,
+      })),
+      notificationPreferences: data.notificationPreferences,
+      blocks: data.blocks.map((b) => ({
+        blockedUserId: b.blockedUserId,
+        createdAt: b.createdAt.toISOString(),
+      })),
+      reports: data.reports.map((r) => ({
+        id: r.id,
+        resourceType: r.resourceType as ReportResourceType,
+        resourceId: r.resourceId,
+        reason: r.reason,
+        status: r.status as AccountExport["reports"][number]["status"],
+        createdAt: r.createdAt.toISOString(),
+      })),
+      subscription: data.subscription
+        ? {
+            status: data.subscription.status as SubscriptionStatus,
+            productId: data.subscription.productId,
+            expiresAt: data.subscription.expiresAt
+              ? data.subscription.expiresAt.toISOString()
+              : null,
+          }
+        : null,
+    };
+
+    await storage.writeAuditLog({
+      action: "user.data_exported",
+      actorId: userId,
+      ipAddress: req.ip ?? null,
+    });
+
+    return res.status(200).json(payload);
+  } catch (err) {
+    console.error("[GET /api/v1/account/export] unexpected error", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 }
 

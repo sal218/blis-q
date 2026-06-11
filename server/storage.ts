@@ -4,7 +4,15 @@ import {
   users,
   notificationPreferences,
   devicePushTokens,
+  communities,
   communityMemberships,
+  posts,
+  messages,
+  events,
+  eventRsvps,
+  blocks,
+  reports,
+  subscriptions,
   consentRecords,
   auditLog,
   passwordResetTokens,
@@ -67,6 +75,46 @@ export type ConsentRecordRow = {
   policyVersion: string;
   grantedAt: Date;
   withdrawnAt: Date | null;
+};
+
+// Everything in a user's Art. 20 export, with raw Date fields (the route maps to
+// AccountExport ISO strings). Soft-deleted posts/messages are INCLUDED (flagged
+// via `deleted`). Excludes security/ops artifacts (push tokens, reset-token
+// hashes, audit_log) by simply not reading them here.
+export type AccountExportData = {
+  profile: AccountProfileRow | null;
+  consents: ConsentRecordRow[];
+  notificationPreferences: NotificationPreferenceFlags;
+  communities: { id: string; name: string; joinedAt: Date }[];
+  posts: {
+    id: string;
+    communityId: string;
+    content: string;
+    createdAt: Date;
+    deleted: boolean;
+  }[];
+  messages: {
+    id: string;
+    communityId: string;
+    content: string;
+    createdAt: Date;
+    deleted: boolean;
+  }[];
+  events: { id: string; title: string; status: string }[];
+  blocks: { blockedUserId: string; createdAt: Date }[];
+  reports: {
+    id: string;
+    resourceType: string;
+    resourceId: string;
+    reason: string;
+    status: string;
+    createdAt: Date;
+  }[];
+  subscription: {
+    status: string;
+    productId: string | null;
+    expiresAt: Date | null;
+  } | null;
 };
 
 // The boolean flags read by server/notifications.ts preferenceKey(). Returned
@@ -221,6 +269,117 @@ export class DatabaseStorage {
       .from(consentRecords)
       .where(eq(consentRecords.userId, userId))
       .orderBy(desc(consentRecords.grantedAt));
+  }
+
+  // Assembles a user's complete Art. 20 export (server/routes/account.ts maps it
+  // to AccountExport). Every query is scoped to userId — a user only ever exports
+  // their OWN data. Soft-deleted posts/messages are included (deleted = true).
+  async getAccountExport(userId: string): Promise<AccountExportData> {
+    const [profile, consents, notificationPreferences] = await Promise.all([
+      this.getAccountProfile(userId),
+      this.getConsentRecords(userId),
+      this.getNotificationPreferences(userId),
+    ]);
+
+    const communityRows = await db
+      .select({
+        id: communities.id,
+        name: communities.name,
+        joinedAt: communityMemberships.joinedAt,
+      })
+      .from(communityMemberships)
+      .innerJoin(
+        communities,
+        eq(communities.id, communityMemberships.communityId),
+      )
+      .where(eq(communityMemberships.userId, userId));
+
+    const postRows = await db
+      .select({
+        id: posts.id,
+        communityId: posts.communityId,
+        content: posts.content,
+        createdAt: posts.createdAt,
+        deletedAt: posts.deletedAt,
+      })
+      .from(posts)
+      .where(eq(posts.authorId, userId));
+
+    const messageRows = await db
+      .select({
+        id: messages.id,
+        communityId: messages.communityId,
+        content: messages.content,
+        createdAt: messages.createdAt,
+        deletedAt: messages.deletedAt,
+      })
+      .from(messages)
+      .where(eq(messages.senderId, userId));
+
+    const eventRows = await db
+      .select({
+        id: events.id,
+        title: events.title,
+        status: eventRsvps.status,
+      })
+      .from(eventRsvps)
+      .innerJoin(events, eq(events.id, eventRsvps.eventId))
+      .where(eq(eventRsvps.userId, userId));
+
+    const blockRows = await db
+      .select({
+        blockedUserId: blocks.blockedId,
+        createdAt: blocks.createdAt,
+      })
+      .from(blocks)
+      .where(eq(blocks.blockerId, userId));
+
+    const reportRows = await db
+      .select({
+        id: reports.id,
+        resourceType: reports.resourceType,
+        resourceId: reports.resourceId,
+        reason: reports.reason,
+        status: reports.status,
+        createdAt: reports.createdAt,
+      })
+      .from(reports)
+      .where(eq(reports.reporterId, userId));
+
+    const [subscription] = await db
+      .select({
+        status: subscriptions.status,
+        productId: subscriptions.productId,
+        expiresAt: subscriptions.expiresAt,
+      })
+      .from(subscriptions)
+      .where(eq(subscriptions.userId, userId))
+      .limit(1);
+
+    return {
+      profile,
+      consents,
+      notificationPreferences,
+      communities: communityRows,
+      posts: postRows.map((p) => ({
+        id: p.id,
+        communityId: p.communityId,
+        content: p.content,
+        createdAt: p.createdAt,
+        deleted: p.deletedAt !== null,
+      })),
+      messages: messageRows.map((m) => ({
+        id: m.id,
+        communityId: m.communityId,
+        content: m.content,
+        createdAt: m.createdAt,
+        deleted: m.deletedAt !== null,
+      })),
+      events: eventRows,
+      blocks: blockRows,
+      reports: reportRows,
+      subscription: subscription ?? null,
+    };
   }
 
   async writeAuditLog(entry: AuditLogInput): Promise<void> {

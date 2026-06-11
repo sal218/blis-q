@@ -2,10 +2,10 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-09 — `feat/auth-google` implemented; awaiting Codex re-review before PR._
+_Last updated: 2026-06-10 — `feat/auth-screens-mobile` Codex-approved (2 rounds); PR open, awaiting GitHub CI before merge._
 
 ## Current phase
-**Sprint 1 — email/password auth foundation (complete) → adding Google Sign-In.**
+**Sprint 1 — backend auth foundation complete (signup/login/google/reset); mobile auth UI built and Codex-approved; PR in CI.**
 
 ## Merged to `main`
 | PR | What |
@@ -16,21 +16,23 @@ _Last updated: 2026-06-09 — `feat/auth-google` implemented; awaiting Codex re-
 | #4 | `feat/auth-core` — consent-backed signup + login (verification-first); validated with a real-Supabase smoke test |
 | #5 | `fix/env-empty-string` — empty optional env vars treated as unset |
 | #6 | `feat/auth-password-reset` — atomic single-use expiring reset tokens, no enumeration, audit |
+| #7 | `feat/auth-google` — Google sign-in (Supabase `signInWithIdToken`, Option A); consent on first sign-up, fail-closed cleanup; +`forceExit` CI fix |
 
 ## In progress
-- **`feat/auth-google`** — `POST /api/v1/auth/google` (Google sign-in → Supabase session, consent enforced on first sign-up). **Status: implemented + Codex P2 fix applied; 9 new integration tests + full suite (34) green; types/lint clean. Awaiting Codex re-review before PR.**
-  - Architecture: **Option A** (Codex-approved) — `supabaseClient.auth.signInWithIdToken` exchanges the Google OIDC token; Supabase verifies it and owns the session. `firebase-admin` stays FCM-only.
-  - Codex-required adjustments all in: orphan auth-user deleted on `consent_required`; auth-user rollback on DB-creation failure; optional `accessToken` + `nonce` pass-through; soft-deleted block revokes the session; regression tests for each.
-  - **Codex re-review P2 fix:** auth-user cleanup now **fails closed** — a `deleteAuthUser` helper reports success/failure; no-consent cleanup failure returns `500` (not `422`), DB-rollback failure is logged as a possible orphan. Two tests added for the cleanup-failure paths.
-  - ⚠️ **Pending dashboard step before this works against real Supabase:** enable the **Google provider** in Supabase **prod + test** with the Google OAuth client IDs (from the Firebase project's Google Cloud). Tests mock the exchange, so CI is green without it, but the live flow needs it.
-  - Also serialized Jest integration suites (`maxWorkers: 1`) — they share one real test DB and do global cleanup deletes, so parallel suites raced.
+- **`feat/auth-screens-mobile`** — the end-to-end mobile auth journey (Welcome → signup+consent → verify-email → login → forgot/reset → Google incl. `consent_required` retry → session persistence → polished error states). **Status: implemented + Codex round-1 fixes applied; Codex-approved (round 2, no blocking issues at `5c5ff23`); 44 client tests green; types/lint clean; CI gains a `test:client` step. PR open — awaiting GitHub CI before merge.**
+  - **Codex round-1 fixes:** (P1) logout now deregisters the **exact Expo push token** (registration/deregistration use the same token) **before** clearing the session, so a signed-out/shared device stops receiving the account's notifications; (P2) `loadSession` now treats missing/invalid/**expired** `expiresAt` as signed-out (clears + returns null) until refresh exists; (P2/P3) consent surfaces now render tappable **Terms/Privacy** links (or an honest "available before launch" note until the web URL is configured); plus the Google consent retry only re-acquires on `invalidCredentials` (token rejection), not on rate-limit/network/server.
+  - **Decisions (Codex-approved):** Polish/LTR with an i18n-ready typed strings layer (no Arabic/RTL this branch); `@react-native-google-signin/google-signin` for the Google ID token; lightweight strings module (no i18next); session = AccountProfile + access + refresh tokens in **SecureStore** (profile is sensitive); logic + light component tests; Google consent retry reuses the in-memory credential (never persisted/logged), re-runs sign-in on token expiry.
+  - **Structure:** `client/i18n`, `client/validation`, `client/lib/{api,session,googleAuth,googleFlow,messages}`, `client/hooks`, `client/components/{forms,…}`, `client/screens/auth`, `client/navigation`. `AuthContext` now holds the profile + drives the root navigator.
+  - **P-9 handled:** reset deep-link token captured once, scrubbed from nav state + web history, never logged.
+  - ⚠️ **Provisioning follow-ups before the live Google/reset flows work on a device** (CI is green via mocks): Supabase Google provider; `EXPO_PUBLIC_GOOGLE_WEB/IOS_CLIENT_ID`; app.json `iosUrlScheme` placeholder; iOS Associated Domains / Android App Links for the emailed reset link. Needs an **EAS dev client** (Google native module ≠ Expo Go).
+  - **New tracker item P-10:** mobile token refresh not wired yet (refresh token is stored but unused) — before beta.
 
 ## Sprint 1 — remaining
-- [ ] `feat/auth-screens-mobile` — mobile auth UI (signup → verify → login, consent, reset screen — see P-9)
-- [ ] `feat/admin-login` — real Supabase admin sign-in (replace the token-paste scaffold)
+- [~] `feat/auth-screens-mobile` — **implemented, awaiting Codex review / PR** (this branch)
+- [ ] `feat/admin-login` — real Supabase admin sign-in (replace the token-paste scaffold) — *next, after the mobile flow proves the backend auth contract in practice*
 
 ## Auth endpoints live (`/api/v1/auth/*`)
-`signup` · `resend-verification` · `login` · `google` · `forgot-password` · `reset-password`. (`google` pending Codex re-review + the Supabase Google-provider dashboard step.)
+`signup` · `resend-verification` · `login` · `google` · `forgot-password` · `reset-password`. (All merged. `google` live flow still needs the Supabase Google-provider dashboard step before a real device can use it.) **No regular-user `GET /me`/`/account` endpoint yet** (P-1) — the mobile app persists the profile from the auth response.
 
 ## Infrastructure
 | Service | Status |
@@ -48,7 +50,8 @@ All infra is under the `blisqadmin@gmail.com` project account (PGC-owned) — **
 - **P-6**: branded Resend email (currently Supabase built-in).
 - **P-7**: Drizzle `pgTable` extra-config deprecation sweep.
 - **P-8** (before beta): force-logout other sessions on password reset.
-- **P-9**: reset/verification deep-link UI must not leak the token (for `feat/auth-screens-mobile`).
+- **P-9**: ✅ addressed in this branch (reset deep-link token captured + scrubbed from nav/web state, never logged); re-verify when universal/App Links land.
+- **P-10** (before beta): mobile token refresh not wired (refresh token stored but unused).
 
 ## Next decision
-`feat/auth-google` architecture **resolved → Option A** (Supabase-native `signInWithIdToken`), Codex-approved. Next up after merge: `feat/auth-screens-mobile` or `feat/admin-login`.
+`feat/auth-screens-mobile` Codex-approved → PR open → **awaiting GitHub CI, then merge**. After merge: `feat/admin-login`. Provisioning (Supabase Google provider, Google client IDs, app links, EAS dev client) tracked for when the live device flow is exercised.

@@ -5,41 +5,58 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import { getStoredToken, clearStoredToken } from "@/lib/auth";
+import type { AccountProfile, SessionResponse } from "@shared/types";
+import { loadSession, saveSession, clearSession } from "@/lib/session";
 
-// Minimal auth state for the shell: tracks whether a session token is present.
-// The full profile fetch (GET the authenticated user) is wired when the auth
-// API routes are built in Sprint 1. Until then isAuthenticated is derived from
-// token presence, which is enough to drive navigation and push registration.
+// App-wide auth state. On launch it rehydrates the persisted session from
+// SecureStore (no network — there's no GET /me endpoint yet, tracker P-1) and
+// exposes the profile plus signIn/signOut. `isAuthenticated` drives the root
+// navigator (auth stack vs app) and push-token registration.
+//
+// signIn is called with the SessionResponse from signup/login/google; it
+// persists tokens + profile and flips the app into the authenticated tree.
 
 type AuthContextValue = {
-  token: string | null;
+  user: AccountProfile | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  signIn: (session: SessionResponse) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<AccountProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      setToken(await getStoredToken());
+      const stored = await loadSession();
+      setUser(stored?.user ?? null);
       setIsLoading(false);
     })();
   }, []);
 
+  const signIn = useCallback(async (session: SessionResponse) => {
+    await saveSession(session);
+    setUser(session.user);
+  }, []);
+
   const signOut = useCallback(async () => {
-    await clearStoredToken();
-    setToken(null);
+    await clearSession();
+    setUser(null);
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ token, isLoading, isAuthenticated: !!token, signOut }}
+      value={{
+        user,
+        isLoading,
+        isAuthenticated: !!user,
+        signIn,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>

@@ -25,9 +25,11 @@ _Last updated: 2026-06-11 — Sprint 2 slice 2 merged (#11); starting slice 3 (`
 **🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9).
 
 ## In progress
-- **`feat/account-erasure`** — Sprint-2 account backend, **slice 3 of 3** (final GDPR blocker): `DELETE /api/v1/account` — transactional anonymisation cascade (GDPR Art. 17, **P-2**). **Status: branch created + plan drafted; awaiting Codex validation of the plan before implementation.**
-  - Proposed: **anonymise the `users` row** (scrub PII, set `deletedAt`) consistent with the existing `deletedAt` blocking checks — not a hard row delete. One DB transaction: content (posts/messages) → `[deleted]` + author/sender severed; drop relational/consent/token rows (memberships, RSVPs, blocks, consents, push tokens, notif prefs, subscription, reset tokens); null set-null creator/reporter FKs; **anonymise `audit_log.actorId` → null** (retain rows) + write `user.deleted`. Then `invalidateProfileCache`, **revoke Supabase sessions + delete the Supabase auth user** (best-effort, DB-first ordering), generic `200`.
-  - Open questions for Codex: anonymise-vs-hard-delete the `users` row; audit `actorId` null-vs-pseudonymise; cross-system rollback ordering. Tested against **every** user-referencing table.
+- **`feat/account-erasure`** — Sprint-2 account backend, **slice 3 of 3** (final GDPR blocker): `DELETE /api/v1/account` — transactional anonymisation cascade (GDPR Art. 17, **P-2**). **Status: implemented (Codex-approved plan + all required changes); 5 backend integration tests green; types/lint clean. Awaiting Codex review before PR.**
+  - **Ordering (Codex, DB-first — no drift):** capture bearer token → **one DB transaction** (the anonymisation cascade) → `invalidateProfileCache(userId)` → **best-effort** Supabase global sign-out + auth-user delete → generic `200`.
+  - **`users` row anonymised in place** (email `deleted-<uuid>@…`, displayName `[deleted]`, avatar/city null, isPremium/isAdmin false, `deletedAt` set) — not hard-deleted. Content → `[deleted]` + author/sender nulled; creator/reporter/reviewer FKs (communities, events, safe_places, **ad_campaigns** — Codex's catch, reports) nulled; relational/consent/token rows (memberships, RSVPs, blocks, consents, push tokens, notif prefs, **subscriptions**, reset tokens) deleted; `audit_log.actorId` → null (rows retained) + `user.deleted` with **no user identifier** anywhere.
+  - New `eraseUser` per-user rate limiter. Tested against **every** user-referencing table incl. `ad_campaigns`, plus anonymise-in-place, audit no-leak, signOut+deleteUser best-effort, idempotency, 401, 429.
+  - **After merge: P-1/P-2 closed — account fully manageable, exportable, and erasable (Sprint-2 GDPR scope complete).**
 - **Backlog (Codex):** "Deactivate account" = a **reversible pause** (hide from public/community, block/limit login, retain data, keep audit) — a safety/account-control feature, **not** GDPR erasure. Parked in [ROADMAP](ROADMAP.md) **Sprint 4** so it can't delay export/erasure.
 
 ## Auth endpoints live (`/api/v1/auth/*`)
@@ -61,7 +63,7 @@ All infra is under the `blisqadmin@gmail.com` project account (PGC-owned) — **
 Tracked here so they stay explicit (per Codex), not just implied by the roadmap.
 
 **Code / engineering (PGC):**
-- 🔴 **GDPR erasure + export** (P-1/P-2) — `DELETE /api/account` cascade + `GET /api/account/export`. **Hard gate before any beta testers** (testers are real users). ← Sprint 2, this work.
+- 🔴 **GDPR erasure + export** (P-1/P-2) — export `GET /api/account/export` ✅ merged (#11); erasure `DELETE /api/account` cascade **in review** (this branch). Once merged, P-1/P-2 close. **Hard gate before any beta testers** (testers are real users).
 - 🟡 **Reset-session revocation** (P-8) — password reset doesn't force-logout other Supabase sessions. Before beta.
 - 🟡 **Mobile token refresh** (P-10) — refresh token stored but unused; expired session = silent re-login. Before beta.
 - 🟠 **RevenueCat webhook** (P-3) — before any payments (Sprint 8).

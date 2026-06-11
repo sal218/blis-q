@@ -10,6 +10,8 @@ import {
   messages,
   events,
   eventRsvps,
+  safePlaces,
+  adCampaigns,
   blocks,
   reports,
   subscriptions,
@@ -457,12 +459,105 @@ export class DatabaseStorage {
       );
   }
 
-  // NOTE: there is intentionally NO generic soft-delete/erasure method here.
-  // GDPR erasure is a transactional anonymisation cascade (clear PII, content
-  // → "[deleted]", drop memberships/RSVPs/tokens/consents, write an audit
-  // entry, invalidate the profile cache) and lives in the DELETE /api/account
-  // handler (COMPLIANCE §5.2, tracker P-2). A partial "just stamp deletedAt"
-  // method would be easy to misuse, so it is not exposed until that flow ships.
+  /**
+   * GDPR Art. 17 erasure (COMPLIANCE §5.2, tracker P-2). ONE transaction that
+   * anonymises the user across EVERY user-referencing table:
+   *   • content (posts/messages) → "[deleted]" with author/sender severed,
+   *   • creator/reporter/reviewer FKs (communities, events, safe_places,
+   *     ad_campaigns, reports) → null (those rows survive, de-linked),
+   *   • relational/consent/token rows (memberships, RSVPs, blocks, consents,
+   *     push tokens, notification prefs, subscriptions, reset tokens) → deleted,
+   *   • audit_log: existing rows' actorId → null (rows RETAINED), then a
+   *     `user.deleted` entry with NO user identifier anywhere (actorId/
+   *     resourceId/metadata all null — never leak the erased uuid),
+   *   • the users row itself is ANONYMISED in place (PII scrubbed, deletedAt set)
+   *     — NOT hard-deleted, so the deletedAt blocking checks keep working.
+   * Then invalidateProfileCache. Cross-system Supabase cleanup (session revoke +
+   * auth-user delete) happens in the route AFTER this commits (DB-first).
+   */
+  async eraseUser(userId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Content → scrub + sever the personal link.
+      await tx
+        .update(posts)
+        .set({ content: "[deleted]", authorId: null })
+        .where(eq(posts.authorId, userId));
+      await tx
+        .update(messages)
+        .set({ content: "[deleted]", senderId: null })
+        .where(eq(messages.senderId, userId));
+
+      // Creator / reporter / reviewer FKs → null (rows survive, de-linked).
+      await tx
+        .update(communities)
+        .set({ createdById: null })
+        .where(eq(communities.createdById, userId));
+      await tx
+        .update(events)
+        .set({ createdById: null })
+        .where(eq(events.createdById, userId));
+      await tx
+        .update(safePlaces)
+        .set({ createdById: null })
+        .where(eq(safePlaces.createdById, userId));
+      await tx
+        .update(adCampaigns)
+        .set({ createdById: null })
+        .where(eq(adCampaigns.createdById, userId));
+      await tx
+        .update(reports)
+        .set({ reporterId: null })
+        .where(eq(reports.reporterId, userId));
+      await tx
+        .update(reports)
+        .set({ reviewedById: null })
+        .where(eq(reports.reviewedById, userId));
+
+      // Relational / consent / token rows → delete.
+      await tx
+        .delete(communityMemberships)
+        .where(eq(communityMemberships.userId, userId));
+      await tx.delete(eventRsvps).where(eq(eventRsvps.userId, userId));
+      await tx.delete(blocks).where(eq(blocks.blockerId, userId));
+      await tx.delete(blocks).where(eq(blocks.blockedId, userId));
+      await tx.delete(consentRecords).where(eq(consentRecords.userId, userId));
+      await tx
+        .delete(devicePushTokens)
+        .where(eq(devicePushTokens.userId, userId));
+      await tx
+        .delete(notificationPreferences)
+        .where(eq(notificationPreferences.userId, userId));
+      await tx.delete(subscriptions).where(eq(subscriptions.userId, userId));
+      await tx
+        .delete(passwordResetTokens)
+        .where(eq(passwordResetTokens.userId, userId));
+
+      // Audit: anonymise the actor on existing rows, RETAIN the rows.
+      await tx
+        .update(auditLog)
+        .set({ actorId: null })
+        .where(eq(auditLog.actorId, userId));
+
+      // Anonymise the users row in place (NOT a hard delete).
+      await tx
+        .update(users)
+        .set({
+          email: `deleted-${userId}@deleted.invalid`,
+          displayName: "[deleted]",
+          avatarUrl: null,
+          preferredCity: null,
+          isPremium: false,
+          isAdmin: false,
+          deletedAt: new Date(),
+        })
+        .where(eq(users.id, userId));
+
+      // Erasure audit entry — carries NO identifier of the erased user.
+      await tx.insert(auditLog).values({ action: "user.deleted" });
+    });
+
+    await invalidateProfileCache(userId);
+  }
 
   // ── Notification preferences ──────────────────────────────────────────────────
 

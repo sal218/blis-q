@@ -64,7 +64,7 @@ Response: { "data": T[], "page": number, "pageSize": number, "total": number, "t
 ```
 
 ### Rate limiting
-Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in prod). Auth flows use **dual buckets** (IP **and** email/userId — both must pass). Limiter names referenced per-endpoint below: `loginIp`/`loginEmail`, `signupIp`, `googleAuthIp`, `passwordResetIp`/`passwordResetEmail`, `contentCreateUser`, `reportUser`, `communityJoinUser`, `pushTokenUser`, `exportUser`, `revenuecatWebhookIp`.
+Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in prod). Auth flows use **dual buckets** (IP **and** email/userId — both must pass). Limiter names referenced per-endpoint below: `loginIp`/`loginEmail`, `signupIp`, `googleAuthIp`, `passwordResetIp`/`passwordResetEmail`, `contentCreateUser`, `reportUser`, `communityJoinUser`, `pushTokenUser`, `accountUpdateUser`, `changePasswordUser`, `exportUser`, `eraseUser`, `revenuecatWebhookIp`.
 
 ---
 
@@ -131,12 +131,22 @@ These are part of the **locked contract** (COMPLIANCE §5.2/§5.5) — not optio
 | Method | Path | Rate | Body | Success | Notes |
 |---|---|---|---|---|---|
 | GET | `/api/v1/account/export` | `exportUser` | — | `200 AccountExport` | Art. 20 portability. Complete JSON of the caller's non-secret data: profile + createdAt, communities joined (+ when), posts, messages, events RSVP'd, consent records, **notification preferences, blocks, reports submitted, subscription state**. **Soft-deleted posts/messages are included as-is** (flagged `deleted: true`, content e.g. `[deleted]`). **Excluded by design** (security/ops artifacts, not portable personal data): raw **push tokens**, **password-reset token hashes**, Supabase **auth internals**, and the **`audit_log`**. Scoped to `req.user` (own data only); audited `user.data_exported`; the export body is never logged. |
-| DELETE | `/api/v1/account` | — | — | `200 { ok: true }` | Art. 17 erasure. **Generic response — leaks no internal detail.** |
+| DELETE | `/api/v1/account` | `eraseUser` | — | `200 { ok: true }` | Art. 17 erasure (transactional anonymisation cascade). **Generic response — leaks no internal detail.** |
 | POST | `/api/v1/account/change-password` | `changePasswordUser` | `{ currentPassword, newPassword }` | `200 { ok: true }` | Verifies the current password (generic `401` if wrong), updates it, then **revokes the user's refresh sessions** (incl. the verification session) — a password change requires **re-login**. Locally-verified access JWTs stay valid until they expire (JWKS, no per-request revocation). Audits `user.password_changed` / `user.password_change_failed`. |
 | GET | `/api/v1/account/consents` | — | — | `200 ConsentRecord[]` | Active + withdrawn consents, newest grant first. |
 | POST | `/api/v1/account/consents/withdraw` | — | `{ consentType }` | `200 { ok: true }` | Withdrawing `account_creation` triggers the deletion flow. |
 
-**`DELETE /account` behaviour (server, COMPLIANCE §5.2):** verify `req.user.id` (never a body `userId`) → revoke Supabase sessions → deactivate push tokens → run the **anonymisation cascade in one transaction** (clear PII; content → `[deleted]`; drop memberships/RSVPs/tokens/consents) → **`invalidateProfileCache(userId)`** → write `audit_log: user.deleted` (actor anonymised) → return `200`. The response body reveals none of these steps.
+**`DELETE /account` behaviour (server, COMPLIANCE §5.2) — ordering is deliberate (DB-first):**
+1. `req.user.id` (never a body `userId`); rate-limited (`eraseUser`); **capture the bearer access token** before erasing.
+2. **One DB transaction — the anonymisation cascade** across every user-referencing table:
+   - content (`posts`/`messages`) → `content = '[deleted]'`, author/sender **nulled**;
+   - creator/reporter/reviewer FKs (`communities`, `events`, `safe_places`, `ad_campaigns`, `reports`) → **null** (rows survive, de-linked);
+   - relational/consent/token rows (`community_memberships`, `event_rsvps`, `blocks`, `consent_records`, `device_push_tokens`, `notification_preferences`, `subscriptions`, `password_reset_tokens`) → **deleted**;
+   - `audit_log`: existing rows' `actorId` → **null** (rows **retained**), then a `user.deleted` entry carrying **no user identifier** (`actorId`/`resourceId`/metadata all null);
+   - the `users` row is **anonymised in place** (`email = deleted-<uuid>@deleted.invalid`, `displayName = '[deleted]'`, `avatarUrl`/`preferredCity` → null, `isPremium`/`isAdmin` → false, `deletedAt = now()`) — **not hard-deleted**, so the `deletedAt` blocking checks keep working.
+3. **`invalidateProfileCache(userId)`** (a 60s-stale deleted identity is a security issue).
+4. **Best-effort Supabase cleanup** (after the DB commit): global **sign-out** of the captured token + **delete the Supabase auth user**. Failures are logged (sanitized), not fatal — the PII is already erased and the anonymised row blocks login.
+5. Return generic `200 { ok: true }`. The response reveals none of these steps; the flow is idempotent.
 
 ---
 

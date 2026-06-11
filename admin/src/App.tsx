@@ -1,14 +1,18 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
-import { adminFetch, getToken, setToken, clearToken } from "./lib/api";
+import {
+  adminFetch,
+  getToken,
+  clearToken,
+  adminLogin,
+  type AdminUser,
+} from "./lib/api";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ModerationPage } from "./pages/ModerationPage";
 import { UsersPage } from "./pages/UsersPage";
 import { SafePlacesPage } from "./pages/SafePlacesPage";
 import { EventsPage } from "./pages/EventsPage";
 import { AdCampaignsPage } from "./pages/AdCampaignsPage";
-
-type AdminUser = { id: string; displayName: string; isAdmin: boolean };
 
 const NAV_ITEMS = [
   { path: "/reports", label: "Zgłoszenia", element: <ReportsPage /> },
@@ -85,27 +89,31 @@ export function App() {
   );
 }
 
-// Scaffold sign-in: accepts a Supabase session JWT for an admin account. A full
-// email/password sign-in form (producing the JWT) is wired when admin auth is
-// built; the token is verified against /api/admin/me on submit.
+// Admin email/password sign-in. Posts to POST /api/admin/login, which only
+// returns a session for a verified platform admin. The error copy is generic
+// (never "you're not an admin") so the form reveals nothing about who is an
+// admin. The token is persisted by adminLogin on success.
 function LoginScreen({
   onAuthenticated,
 }: {
   onAuthenticated: (admin: AdminUser) => void;
 }) {
-  const [tokenInput, setTokenInput] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setToken(tokenInput.trim());
+    setSubmitting(true);
     try {
-      const verified = await adminFetch<AdminUser>("GET", "/api/admin/me");
-      onAuthenticated(verified);
+      const admin = await adminLogin(email.trim().toLowerCase(), password);
+      onAuthenticated(admin);
     } catch {
-      clearToken();
-      setError("Nieprawidłowy token lub brak uprawnień administratora.");
+      setError("Nieprawidłowe dane logowania.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -116,14 +124,23 @@ function LoginScreen({
         <p style={styles.loginHint}>Panel administracyjny</p>
         <input
           style={styles.input}
+          type="email"
+          placeholder="E-mail"
+          autoComplete="username"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <input
+          style={styles.input}
           type="password"
-          placeholder="Token sesji administratora"
-          value={tokenInput}
-          onChange={(e) => setTokenInput(e.target.value)}
+          placeholder="Hasło"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
         />
         {error && <p style={styles.error}>{error}</p>}
-        <button type="submit" style={styles.primaryButton}>
-          Zaloguj się
+        <button type="submit" style={styles.primaryButton} disabled={submitting}>
+          {submitting ? "Logowanie…" : "Zaloguj się"}
         </button>
       </form>
     </div>

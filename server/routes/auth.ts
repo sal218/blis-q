@@ -44,7 +44,7 @@ function accepted(res: Response): Response {
 
 // Extracts a stable, NON-sensitive code for logging. Raw error objects/messages
 // can carry emails, SQL details, or request internals — never log those.
-function safeErrorCode(err: unknown): string {
+export function safeErrorCode(err: unknown): string {
   if (err && typeof err === "object" && "code" in err) {
     const code = (err as { code: unknown }).code;
     if (typeof code === "string") return code;

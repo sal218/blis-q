@@ -2,10 +2,10 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-10 — `feat/auth-screens-mobile` merged (#8); starting `feat/admin-login` (last Sprint-1 item)._
+_Last updated: 2026-06-10 — `feat/admin-login` implemented (last Sprint-1 item); awaiting Codex review before PR._
 
 ## Current phase
-**Sprint 1 — auth foundation + mobile auth UI complete; building real admin sign-in (replaces the token-paste scaffold). Last Sprint-1 item.**
+**Sprint 1 — auth foundation + mobile auth UI complete; real admin sign-in built (replaces the token-paste scaffold). Last Sprint-1 item, in review.**
 
 ## Merged to `main`
 | PR | What |
@@ -20,13 +20,17 @@ _Last updated: 2026-06-10 — `feat/auth-screens-mobile` merged (#8); starting `
 | #8 | `feat/auth-screens-mobile` — end-to-end mobile auth UI (Polish/LTR), Google consent retry, SecureStore session, push-deregister on logout, jest-expo harness |
 
 ## In progress
-- **`feat/admin-login`** — real email/password admin sign-in for the `admin/` dashboard, replacing the token-paste scaffold (`admin/src/App.tsx` `LoginScreen`). **Status: branch created + plan drafted; awaiting Codex validation of the plan before implementation.**
-  - Proposed: a dedicated **`POST /api/admin/login`** that authenticates via Supabase **and gates on `isAdmin` server-side** — a non-admin (or unverified/soft-deleted) gets a generic `401` and the issued session is revoked, so no session is ever handed to a non-admin. Admin login attempts are audited (`admin.login` / `admin.login_failed`) and dual-bucket rate-limited.
-  - Admin web app gets an email/password form (replacing the JWT paste); token stays in `localStorage` (**AR-1**, accepted for the owner-operated panel).
-  - Open questions for Codex: dedicated `/api/admin/login` (recommended) vs reuse `/api/v1/auth/login` + `/api/admin/me`; whether to add an admin-frontend test harness or rely on backend integration tests.
+- **`feat/admin-login`** — real email/password admin sign-in for the `admin/` dashboard, replacing the token-paste scaffold. **Status: implemented (Option B, Codex-approved plan); 7 backend integration tests green; types/lint clean; admin app `tsc && vite build` clean. Awaiting Codex review before PR.**
+  - **`POST /api/admin/login`** (the one unauthenticated admin route) — Supabase `signInWithPassword` then a server-side **verified/live/`isAdmin` gate**. Every failure (bad creds, unverified, missing/soft-deleted, non-admin) → the **same generic `401`**; any session issued before the gate fails is **revoked** (global sign-out). Audited `admin.login` / `admin.login_failed`; dual-bucket rate-limited (`adminLoginIp` + `adminLoginEmail`).
+  - Admin web app: token-paste replaced with a Polish email/password form (`adminLogin()`); generic error copy only; token stays in `localStorage` (**AR-1**, accepted; httpOnly-cookie hardening tracked as a future AR-1 follow-up, not this branch).
+  - Tests: backend integration only (admin app has no test harness) — success, non-admin revoke+401, bad creds, unverified, soft-deleted revoke, 429, audit rows.
 
 ## Auth endpoints live (`/api/v1/auth/*`)
 `signup` · `resend-verification` · `login` · `google` · `forgot-password` · `reset-password`. (All merged. `google` live flow still needs the Supabase Google-provider dashboard step before a real device can use it.) **No regular-user `GET /me`/`/account` endpoint yet** (P-1) — the mobile app persists the profile from the auth response.
+Admin: **`POST /api/admin/login`** (this branch) + `GET /api/admin/me`.
+
+## Sprint 1 — status
+Backend auth (#4/#6/#7) ✅ · mobile auth UI (#8) ✅ · admin sign-in (this branch, in review). **After this merges, Sprint 1's auth scope is complete.** Sprint 2 (community/profile features) is next per [ROADMAP](ROADMAP.md).
 
 ## Infrastructure
 | Service | Status |
@@ -48,4 +52,4 @@ All infra is under the `blisqadmin@gmail.com` project account (PGC-owned) — **
 - **P-10** (before beta): mobile token refresh not wired (refresh token stored but unused).
 
 ## Next decision
-`feat/admin-login` plan — open questions for Codex: dedicated `POST /api/admin/login` (server-side `isAdmin` gate, recommended) vs reuse user login + `/api/admin/me`; admin-frontend test harness vs backend-integration coverage only. Awaiting Codex validation before implementation. Provisioning (Supabase Google provider, Google client IDs, app links, EAS dev client) still tracked for when the **live mobile device flow** is first exercised — **not needed for admin-login**.
+`feat/admin-login` implemented (Option B) → Codex review → PR → CI → merge. That closes Sprint-1 auth. **Next: Sprint 2** (community/profile features per ROADMAP). Mobile provisioning (Supabase Google provider, Google client IDs, app links, EAS dev client) still tracked for when the **live device flow / first EAS build** is exercised — **not needed for admin-login**.

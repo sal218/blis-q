@@ -43,6 +43,8 @@ const limiters = {
   // Auth — dual IP + email buckets
   loginIp: makeLimiter(10, "15 m"),
   loginEmail: makeLimiter(5, "15 m"),
+  adminLoginIp: makeLimiter(10, "15 m"), // mirrors login; admin panel is small
+  adminLoginEmail: makeLimiter(5, "15 m"),
   signupIp: makeLimiter(5, "1 h"),
   googleAuthIp: makeLimiter(10, "15 m"), // mirrors login IP limit
   passwordResetIp: makeLimiter(5, "15 m"),
@@ -113,6 +115,29 @@ export async function checkSignupRateLimit(req: {
   ip?: string;
 }): Promise<RateLimitResult> {
   return check(limiters.signupIp, `signup:ip:${getIp(req)}`);
+}
+
+// Admin sign-in — dual IP + email buckets, separate from user login so the two
+// quotas never interfere. Keyed on its own `admin-login:` namespace.
+export async function checkAdminLoginRateLimit(
+  req: { ip?: string },
+  email?: string,
+): Promise<RateLimitResult> {
+  const ipResult = await check(
+    limiters.adminLoginIp,
+    `admin-login:ip:${getIp(req)}`,
+  );
+  if (!ipResult.allowed) return ipResult;
+
+  if (email) {
+    const emailResult = await check(
+      limiters.adminLoginEmail,
+      `admin-login:email:${email.toLowerCase()}`,
+    );
+    if (!emailResult.allowed) return emailResult;
+  }
+
+  return { allowed: true };
 }
 
 // Google Sign-In is an auth mutation — rate limited per CLAUDE.md §6. Keyed by

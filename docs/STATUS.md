@@ -58,7 +58,7 @@ All infra is under the `blisqadmin@gmail.com` project account (PGC-owned) — **
 
 ## Known follow-ups (CLAUDE.md issue tracker)
 
-- **P-1/P-2** (🔴 blocker, before real users): GDPR registration consent ✅ done in #4; erasure (`DELETE /api/account`) + export still pending.
+- **P-1/P-2** (🔴 blocker, before real users): GDPR registration consent ✅ done in #4; export ✅ merged (#11); erasure (`DELETE /api/account`) implemented, **in review** (this branch). Once erasure merges, P-1/P-2 close.
 - **P-3** (🟠 blocker, before payments): RevenueCat webhook.
 - **P-6**: branded Resend email (currently Supabase built-in).
 - **P-7**: Drizzle `pgTable` extra-config deprecation sweep.

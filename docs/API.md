@@ -158,7 +158,7 @@ These are part of the **locked contract** (COMPLIANCE §5.2/§5.5) — not optio
 
 1. `req.user.id` (never a body `userId`); rate-limited (`eraseUser`); **capture the bearer access token** before erasing.
 2. **One DB transaction — the anonymisation cascade** across every user-referencing table:
-   - content (`posts`/`messages`) → `content = '[deleted]'`, author/sender **nulled**;
+   - content scrubbed + marked deleted: `posts` → `content='[deleted]'`, `imageUrl=null`, `authorId=null`, `deletedAt=now`; `messages` → `content='[deleted]'`, `senderId=null`, `deletedAt=now`;
    - creator/reporter/reviewer FKs (`communities`, `events`, `safe_places`, `ad_campaigns`, `reports`) → **null** (rows survive, de-linked);
    - relational/consent/token rows (`community_memberships`, `event_rsvps`, `blocks`, `consent_records`, `device_push_tokens`, `notification_preferences`, `subscriptions`, `password_reset_tokens`) → **deleted**;
    - `audit_log`: existing rows' `actorId` → **null** (rows **retained**), then a `user.deleted` entry carrying **no user identifier** (`actorId`/`resourceId`/metadata all null);

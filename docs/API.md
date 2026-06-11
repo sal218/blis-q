@@ -132,8 +132,8 @@ These are part of the **locked contract** (COMPLIANCE §5.2/§5.5) — not optio
 |---|---|---|---|---|---|
 | GET | `/api/v1/account/export` | `exportUser` | — | `200 AccountExport` | Art. 20 portability. JSON of profile, communities joined (+ when), posts, messages, events attended, consent records, createdAt. |
 | DELETE | `/api/v1/account` | — | — | `200 { ok: true }` | Art. 17 erasure. **Generic response — leaks no internal detail.** |
-| POST | `/api/v1/account/change-password` | — | `{ currentPassword, newPassword }` | `200 { ok: true }` | |
-| GET | `/api/v1/account/consents` | — | — | `200 ConsentRecord[]` | Active + withdrawn consents. |
+| POST | `/api/v1/account/change-password` | `changePasswordUser` | `{ currentPassword, newPassword }` | `200 { ok: true }` | Verifies the current password (generic `401` if wrong), updates it, then **revokes the user's refresh sessions** (incl. the verification session) — a password change requires **re-login**. Locally-verified access JWTs stay valid until they expire (JWKS, no per-request revocation). Audits `user.password_changed` / `user.password_change_failed`. |
+| GET | `/api/v1/account/consents` | — | — | `200 ConsentRecord[]` | Active + withdrawn consents, newest grant first. |
 | POST | `/api/v1/account/consents/withdraw` | — | `{ consentType }` | `200 { ok: true }` | Withdrawing `account_creation` triggers the deletion flow. |
 
 **`DELETE /account` behaviour (server, COMPLIANCE §5.2):** verify `req.user.id` (never a body `userId`) → revoke Supabase sessions → deactivate push tokens → run the **anonymisation cascade in one transaction** (clear PII; content → `[deleted]`; drop memberships/RSVPs/tokens/consents) → **`invalidateProfileCache(userId)`** → write `audit_log: user.deleted` (actor anonymised) → return `200`. The response body reveals none of these steps.
@@ -144,8 +144,8 @@ These are part of the **locked contract** (COMPLIANCE §5.2/§5.5) — not optio
 
 | Method | Path | Class | Body | Success | Notes |
 |---|---|---|---|---|---|
-| GET | `/profile` | 🔑 | — | `200 AccountProfile` | The caller's own account. |
-| PATCH | `/profile` | 🔑 | `UpdateProfileInput` | `200 AccountProfile` | `{ displayName?, preferredCity?, avatarKey? }`. 🚧 `preferredCity` is city-level only — **no GPS** (COMPLIANCE §5.8). Writes invalidate the profile cache. |
+| GET | `/profile` | 🔑 | — | `200 AccountProfile` | The caller's own account (closes the prior "no `GET /me`" gap, P-1). |
+| PATCH | `/profile` | 🔑 | `{ displayName?, preferredCity? }` | `200 AccountProfile` | Strict; **empty body → `400`** (must change something); fields trimmed. 🚧 `preferredCity` is city-level only — **no GPS** (COMPLIANCE §5.8); a **blank/whitespace `preferredCity` clears it to `null`** (removes the city). 🚧 **`avatarKey` deferred** until R2 is provisioned (currently rejected). Rate-limited (`accountUpdateUser`); writes invalidate the profile cache + audit `user.profile_updated`. |
 | GET | `/users/:id` | 🔑 | — | `200 PublicUser` | **`displayName`/`avatarUrl` only — never email.** |
 | POST | `/uploads/:assetType` | 🔑 | `{ contentType }` | `200 { uploadUrl, key }` | `assetType ∈ {avatar, community, event, post}`. Returns a presigned R2 PUT URL + UUID `key`; client uploads directly, then sets `key` on the target resource (`avatarKey`/`imageKey`). Private buckets, signed URLs only. |
 

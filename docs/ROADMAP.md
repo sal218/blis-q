@@ -113,6 +113,7 @@ All EU-region, **regions are irreversible at creation** (TRANSFER §3.1):
 - **Mobile (👨‍💻):** post feed + composer + report flow; **safety**: discreet-icon setting + **emergency contacts** screen (quick-exit overlay already built in scaffold — wire the trigger everywhere).
 - **Admin (👨‍💻):** **Reports** + **Moderation** pages complete (review, resolve, ban/mute, action history).
 - **Design:** safe-places + premium + paywall mockups.
+- **Backlog — "Deactivate account" (account-control / safety, NOT GDPR erasure):** a **reversible pause**, distinct from `DELETE /api/account` (Sprint 2, irreversible erasure). High-level intent (data model / UX / reactivation rules to be designed when built): while deactivated, the user is **hidden/disabled** from public + community surfaces; login/session access is **blocked or heavily limited** until reactivation; **data is retained** (not erased); **audit logs kept**. This is a user-safety control (step back without losing the account), so it lives here, not on the Sprint-2 GDPR critical path — **it must not delay export/erasure.**
 
 ## Sprint 5 — Community chat (Supabase Realtime Broadcast) (≈ Aug 4 – 15)
 

@@ -52,6 +52,10 @@ const limiters = {
   resendVerificationIp: makeLimiter(5, "15 m"),
   resendVerificationEmail: makeLimiter(3, "15 m"),
 
+  // Account self-service — keyed by user ID
+  accountUpdateUser: makeLimiter(20, "15 m"), // PATCH /profile
+  changePasswordUser: makeLimiter(5, "15 m"), // sensitive — tighter
+
   // Content & community — keyed by user ID
   contentCreateUser: makeLimiter(60, "1 m"), // community posts + chat messages
   reportUser: makeLimiter(10, "1 h"),
@@ -199,6 +203,18 @@ export async function checkContentCreateRateLimit(
   userId: string,
 ): Promise<RateLimitResult> {
   return check(limiters.contentCreateUser, `content-create:user:${userId}`);
+}
+
+export async function checkAccountUpdateRateLimit(
+  userId: string,
+): Promise<RateLimitResult> {
+  return check(limiters.accountUpdateUser, `account-update:user:${userId}`);
+}
+
+export async function checkChangePasswordRateLimit(
+  userId: string,
+): Promise<RateLimitResult> {
+  return check(limiters.changePasswordUser, `change-password:user:${userId}`);
 }
 
 export async function checkReportRateLimit(

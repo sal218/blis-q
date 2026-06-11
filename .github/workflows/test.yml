@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   fast-gate:
-    name: Lint · Types · Unit Tests · Server Build
+    name: Lint · Types · Unit · Client · Server Build
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://ci:ci@localhost:5432/blisq_ci_placeholder
@@ -74,6 +74,9 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Client tests (jest-expo)
+        run: npm run test:client
 
       - name: Server build
         run: npm run server:build

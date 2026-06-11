@@ -2,10 +2,10 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-10 — `feat/auth-google` merged (#7); starting `feat/auth-screens-mobile`._
+_Last updated: 2026-06-10 — `feat/auth-screens-mobile` implemented; awaiting Codex review before PR._
 
 ## Current phase
-**Sprint 1 — backend auth foundation complete (signup/login/google/reset) → building the mobile auth UI.**
+**Sprint 1 — backend auth foundation complete (signup/login/google/reset); mobile auth UI built (awaiting review).**
 
 ## Merged to `main`
 | PR | What |
@@ -19,13 +19,16 @@ _Last updated: 2026-06-10 — `feat/auth-google` merged (#7); starting `feat/aut
 | #7 | `feat/auth-google` — Google sign-in (Supabase `signInWithIdToken`, Option A); consent on first sign-up, fail-closed cleanup; +`forceExit` CI fix |
 
 ## In progress
-- **`feat/auth-screens-mobile`** — the real end-to-end mobile auth journey against the live backend contract (signup+consent → verify-email → login → forgot/reset → Google incl. `consent_required` retry → session persistence → polished error states). **Status: branch created + plan drafted; awaiting Codex validation of the plan before implementation.**
-  - ⚠️ **Open question flagged to the user:** the request mentioned *Arabic/RTL*, but Blis-Q ships in **Polish (LTR)** (memory: all user-facing copy in Polish; existing screens are Polish). Plan assumes **Polish/LTR with an i18n-ready string layer**; Arabic/RTL not built unless confirmed.
-  - Key decisions for Codex: navigator lib, Google-token mechanism (`@react-native-google-signin` vs `expo-auth-session`), i18n approach, session/profile persistence (no `GET /me` endpoint exists yet — P-1), and the RN test strategy.
+- **`feat/auth-screens-mobile`** — the end-to-end mobile auth journey (Welcome → signup+consent → verify-email → login → forgot/reset → Google incl. `consent_required` retry → session persistence → polished error states). **Status: implemented; 35 client tests (logic + light component) green; types/lint clean; CI gains a `test:client` step. Awaiting Codex review before PR.**
+  - **Decisions (Codex-approved):** Polish/LTR with an i18n-ready typed strings layer (no Arabic/RTL this branch); `@react-native-google-signin/google-signin` for the Google ID token; lightweight strings module (no i18next); session = AccountProfile + access + refresh tokens in **SecureStore** (profile is sensitive); logic + light component tests; Google consent retry reuses the in-memory credential (never persisted/logged), re-runs sign-in on token expiry.
+  - **Structure:** `client/i18n`, `client/validation`, `client/lib/{api,session,googleAuth,googleFlow,messages}`, `client/hooks`, `client/components/{forms,…}`, `client/screens/auth`, `client/navigation`. `AuthContext` now holds the profile + drives the root navigator.
+  - **P-9 handled:** reset deep-link token captured once, scrubbed from nav state + web history, never logged.
+  - ⚠️ **Provisioning follow-ups before the live Google/reset flows work on a device** (CI is green via mocks): Supabase Google provider; `EXPO_PUBLIC_GOOGLE_WEB/IOS_CLIENT_ID`; app.json `iosUrlScheme` placeholder; iOS Associated Domains / Android App Links for the emailed reset link. Needs an **EAS dev client** (Google native module ≠ Expo Go).
+  - **New tracker item P-10:** mobile token refresh not wired yet (refresh token is stored but unused) — before beta.
 
 ## Sprint 1 — remaining
-- [ ] `feat/auth-screens-mobile` — **in progress** (this branch)
-- [ ] `feat/admin-login` — real Supabase admin sign-in (replace the token-paste scaffold) — *after the mobile flow proves the backend auth contract in practice*
+- [~] `feat/auth-screens-mobile` — **implemented, awaiting Codex review / PR** (this branch)
+- [ ] `feat/admin-login` — real Supabase admin sign-in (replace the token-paste scaffold) — *next, after the mobile flow proves the backend auth contract in practice*
 
 ## Auth endpoints live (`/api/v1/auth/*`)
 `signup` · `resend-verification` · `login` · `google` · `forgot-password` · `reset-password`. (All merged. `google` live flow still needs the Supabase Google-provider dashboard step before a real device can use it.) **No regular-user `GET /me`/`/account` endpoint yet** (P-1) — the mobile app persists the profile from the auth response.
@@ -46,7 +49,8 @@ All infra is under the `blisqadmin@gmail.com` project account (PGC-owned) — **
 - **P-6**: branded Resend email (currently Supabase built-in).
 - **P-7**: Drizzle `pgTable` extra-config deprecation sweep.
 - **P-8** (before beta): force-logout other sessions on password reset.
-- **P-9**: reset/verification deep-link UI must not leak the token (for `feat/auth-screens-mobile`).
+- **P-9**: ✅ addressed in this branch (reset deep-link token captured + scrubbed from nav/web state, never logged); re-verify when universal/App Links land.
+- **P-10** (before beta): mobile token refresh not wired (refresh token stored but unused).
 
 ## Next decision
-`feat/auth-screens-mobile` plan — open questions for Codex: **Arabic/RTL vs Polish/LTR** (recommend Polish/LTR), Google-token mechanism, i18n layer, session/profile persistence without a `GET /me` endpoint, and RN test strategy. Awaiting Codex validation before implementation.
+`feat/auth-screens-mobile` implementation done → Codex review → PR. After merge: `feat/admin-login`. Provisioning (Supabase Google provider, Google client IDs, app links, EAS dev client) tracked for when the live device flow is exercised.

@@ -197,7 +197,8 @@ No exceptions.
 * **Tests live next to fixes.** No separate test branches. The test and the fix are one atomic commit.
 * **Integration tests use the real test DB** (Blisko test Supabase project). Credentials in `.env.test` (gitignored) and GitHub Actions secrets.
 * **Run before reporting done:** Always run `npm run test:integration` before telling the user a fix is complete.
-* **Test runner:** `npm test` (unit, node:test) + `npm run test:integration` (Jest, real DB) + `npm run test:all` (both).
+* **Test runner:** `npm test` (server unit, node:test) + `npm run test:integration` (Jest, real DB) + `npm run test:client` (Jest + `jest-expo`, React Native client logic + light component tests) + `npm run test:all` (all three).
+* **Client (mobile) tests** live in `client/**/__tests__/` and run under the `jest-expo` preset (`jest.client.config.ts`). They mock the network/native boundary and cover pure logic (validation, API mapping, the Google consent/retry flow) plus light component behaviour (consent gating, error states). No real device or backend needed.
 
 ---
 
@@ -301,7 +302,7 @@ Configured in `babel.config.js` and `tsconfig.json`:
 
 * **Entry**: `index.ts` — Express setup. Startup order is non-negotiable: `validateEnv()` → `validateAuthConfig()` → CORS → Helmet → `rawBody` capture → logging → `%3F` fix → routes → error handler
 * **Routes**: `routes.ts` — all API endpoints
-* **Auth**: `auth.ts` — Supabase GoTrue (email/password + Google Sign-In via firebase-admin). Two-tier cache: JWKS local JWT verification + Redis profile cache (60s TTL, key: `profile:{userId}`)
+* **Auth**: `auth.ts` — Supabase GoTrue (email/password + Google Sign-In via Supabase `signInWithIdToken`, Option A — firebase-admin is FCM-only). Two-tier cache: JWKS local JWT verification + Redis profile cache (60s TTL, key: `profile:{userId}`)
 * **Database**: `storage.ts` — repository pattern via `DatabaseStorage` class
 * **Object storage**: `objectStorage.ts` — Cloudflare R2 (private, presigned URLs only, Redis-backed upload claims)
 * **Notifications**: `notifications.ts` — Firebase Cloud Messaging via firebase-admin
@@ -334,8 +335,8 @@ PostgreSQL with Drizzle ORM. Key tables:
 ### Authentication
 
 * **Email/Password**: Supabase GoTrue
-* **Google Sign-In**: Firebase client SDK → firebase-admin server verification → Supabase session
-* **Token storage**: SecureStore (native) — Supabase session tokens
+* **Google Sign-In** (Option A): native Google SDK (`@react-native-google-signin/google-signin`) → Google OIDC ID token → backend `supabaseClient.auth.signInWithIdToken` (Supabase verifies the token) → session. firebase-admin is **not** used for auth (FCM only). Consent is enforced on first sign-up (422 `consent_required` → retry with consent).
+* **Token storage**: SecureStore (native) — Supabase session tokens **and** the profile (sensitive in this app). See `client/lib/session.ts`. Token refresh is not yet wired (tracker **P-10**).
 * **Middleware**: `isAuthenticated` in `auth.ts` — local JWKS JWT verification + Redis profile cache + `deletedAt` check
 
 ### Real-Time Chat
@@ -377,6 +378,13 @@ EXPO_PUBLIC_FIREBASE_APP_ID
 FIREBASE_PROJECT_ID             # Server-side admin
 FIREBASE_CLIENT_EMAIL           # Server-side admin
 FIREBASE_PRIVATE_KEY            # Server-side admin (include escaped newlines — \n)
+```
+
+Google Sign-In (native, mobile client — Option A `signInWithIdToken`):
+
+```
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID   # OAuth Web client ID — its audience must match the Supabase Google provider
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID   # OAuth iOS client ID (also the basis for the app.json iosUrlScheme)
 ```
 
 Cloudflare R2:
@@ -421,7 +429,8 @@ App URLs:
 
 ```
 INVITE_LINK_BASE                # Base URL for invite/deep links (Fly.io server URL)
-WEB_APP_URL                     # Expo web URL
+WEB_APP_URL                     # Expo web URL (server-side)
+EXPO_PUBLIC_WEB_APP_URL         # Web app base URL exposed to the client (deep-link prefix + legal doc links)
 ```
 
 ---
@@ -472,6 +481,17 @@ The quick-exit overlay must switch to the neutral screen with zero animation. An
 
 RevenueCat (and any future payment provider) webhook signature verification requires the raw request bytes. Express's `json()` body parser re-serializes the body by default. Ensure the body parser is configured with a `verify` callback that captures `req.rawBody = buf`. Without this, signature verification will always fail.
 
+### Google Sign-In — Dev Client Required (not Expo Go) + Provisioning
+
+`@react-native-google-signin/google-signin` is a native module: it does **not** run in Expo Go — use a custom **EAS dev client** / build. Three provisioning steps must be done before the live Google flow works (mocks keep CI green without them):
+1. **Supabase**: enable the Google provider (prod + test) with the Google OAuth client IDs (audience must match `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`).
+2. **Client env**: set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` + `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`.
+3. **app.json**: replace the `iosUrlScheme` placeholder (`com.googleusercontent.apps.REPLACE_WITH_IOS_CLIENT_ID`) in the google-signin plugin with the real reversed iOS client ID.
+
+### Reset Deep-Link Token Must Not Leak (P-9)
+
+The reset-password deep link carries the raw token. `client/screens/auth/ResetPasswordScreen.tsx` captures it once into a ref, then scrubs it from navigation state (`setParams({ token: undefined })`) and the web URL (`history.replaceState`). Never put the token in logs, analytics, or persisted navigation state. The emailed `https://<web>/reset-password` link needs iOS Associated Domains / Android App Links configured at provisioning to open the app directly.
+
 ---
 
 ## 📋 Issue Tracker
@@ -501,7 +521,8 @@ Surfaced in the 2026-06-02 scaffold review. **P-1 and P-2 are hard blockers befo
 | P-6 | Auth/verification emails use Supabase's built-in sender; switch to branded Resend on the verified domain before launch | 📬 | 🟡 | Sprint-1 stand-in (does not change the verification-first auth model). `POST /api/v1/auth/resend-verification` already exists. |
 | P-7 | Migrate `shared/schema.ts` `pgTable` extra-config callbacks from the deprecated object-return form to the array-return form | 🔧 | 🟢 | Drizzle deprecation hints (not errors); whole-schema sweep, do in one pass. |
 | P-8 | Password reset does not force-logout the user's other Supabase sessions | 🔒 | 🟡 | **Before beta.** Supabase admin lacks a clean bulk "revoke all sessions by userId" (needs a JWT). Revisit when sessions/refresh-token revocation is wired. After reset, old refresh tokens may remain valid. |
-| P-9 | Reset/verification deep-link UI must not leak the token | 🔒 | 🟡 | When `feat/auth-screens-mobile` builds the reset screen: take the token from the deep link, strip it from any web URL/history, prevent Referer/analytics/third-party leakage, never log it. |
+| P-9 | Reset/verification deep-link UI must not leak the token | 🔒 | 🟡 | **Addressed in `feat/auth-screens-mobile`:** `ResetPasswordScreen` captures the token once, scrubs it from navigation state via `setParams({ token: undefined })` and from the web URL via `history.replaceState`, and never logs it. **Re-verify** when universal/App Links replace the `blisq://` scheme at provisioning. |
+| P-10 | Mobile session-token refresh not implemented | 🔒 | 🟡 | **Before beta / before real usage.** `client/lib/session.ts` persists the Supabase `refreshToken` in SecureStore but nothing exchanges it — an expired access token currently means a silent 401 until re-login. Wire a refresh path (and pair with P-8 session revocation). |
 
 ### Accepted Risks
 

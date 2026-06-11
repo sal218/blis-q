@@ -1,39 +1,35 @@
 import * as SecureStore from "expo-secure-store";
+import { ACCESS_TOKEN_KEY } from "@/lib/session";
 
-// Session token storage + authenticated fetch helper. The token is the Supabase
-// session JWT; it lives in SecureStore (native keychain/keystore), never in
-// AsyncStorage. server/auth.ts verifies it locally via JWKS.
+// Authenticated fetch helper. The access token is the Supabase session JWT; it
+// lives in SecureStore under the key owned by @/lib/session (the single source
+// of truth for session storage). server/auth.ts verifies it locally via JWKS.
+//
+// Writing/clearing the session is done through @/lib/session (saveSession /
+// clearSession) — this module only READS the access token to attach it.
 
-const TOKEN_KEY = "blis-q.session-token";
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "";
 
-export async function getStoredToken(): Promise<string | null> {
+export async function getAccessToken(): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync(TOKEN_KEY);
+    return await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
   } catch {
     return null;
   }
 }
 
-export async function setStoredToken(token: string): Promise<void> {
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
-}
-
-export async function clearStoredToken(): Promise<void> {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
-}
-
 /**
- * fetch() wrapper that attaches the bearer token. Returns the raw Response so
- * callers decide how to handle status codes. The frontend is a view layer —
- * it only ever talks to the Express API, never the database (CLAUDE.md §1).
+ * fetch() wrapper that attaches the bearer token when present. Returns the raw
+ * Response so callers decide how to handle status codes. The frontend is a view
+ * layer — it only ever talks to the Express API, never the database (CLAUDE.md
+ * §1). Never logs the token, the body, or the response.
  */
 export async function fetchWithAuth(
   method: string,
   path: string,
   body?: unknown,
 ): Promise<Response> {
-  const token = await getStoredToken();
+  const token = await getAccessToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
-import { fetchWithAuth, getStoredToken } from "@/lib/auth";
+import { fetchWithAuth, getAccessToken } from "@/lib/auth";
 
 // Show notifications even when the app is in the foreground.
 // Call this once at module load time (before any component mounts).
@@ -87,7 +87,7 @@ async function _sendTokenToBackend(
 ): Promise<void> {
   try {
     // Guard: only call if we have an auth token (user is logged in)
-    const authToken = await getStoredToken();
+    const authToken = await getAccessToken();
     if (!authToken) return;
 
     const res = await fetchWithAuth("POST", "/api/push-tokens", {

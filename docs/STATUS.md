@@ -23,12 +23,17 @@ _Last updated: 2026-06-11 — Sprint 1 auth complete (#9 merged); starting Sprin
 **🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9).
 
 ## In progress
-- **`feat/account-profile`** — Sprint-2 account backend, slice 1 of 3: `GET /api/v1/account` (the missing self/profile read — closes the P-1 "no GET /me" gap), `PATCH /api/v1/account` (displayName, preferredCity — city-level only), `POST /api/v1/account/change-password`, `GET /api/v1/account/consents`. **Status: branch created + plan drafted; awaiting Codex validation of the plan before implementation.**
+- **`feat/account-profile`** — Sprint-2 account backend, slice 1 of 3. **Status: implemented (Codex-approved plan + corrections); 11 backend integration tests green; types/lint clean. Awaiting Codex review before PR.**
+  - Routes (corrected per Codex to the locked API contract): `GET /api/v1/profile` (closes the P-1 "no `GET /me`" gap), `PATCH /api/v1/profile` (`{ displayName?, preferredCity? }` — strict, empty-body→400, trimmed, city-level only; **avatarKey rejected/deferred** until R2), `POST /api/v1/account/change-password`, `GET /api/v1/account/consents`.
+  - **change-password session hygiene (Codex):** verifies current password via Supabase, updates it, then **revokes the user's refresh sessions** (incl. the verification session) via global sign-out — failure is logged (sanitized), not swallowed. Access JWTs remain valid until expiry (JWKS); client treats password change as requiring re-login. Audits `user.password_changed` / `user.password_change_failed`.
+  - Tests use the new **authenticated-route pattern** (mock only `isAuthenticated` to inject `req.user`; real DB for storage; Supabase/rate-limiter mocked) incl. unauth→401, empty-body/strict→400, avatarKey→400, change-password revoke, consents.
   - Then slice 2 `feat/account-export` (`GET /api/account/export`, Art. 20 — **P-1**) and slice 3 `feat/account-erasure` (`DELETE /api/account` anonymisation cascade — **P-2**, isolated for careful review).
-  - Avatar upload (R2 presigned) is **deferred** — R2 is not provisioned yet; non-avatar profile fields ship now.
+  - Avatar upload (R2 presigned) **deferred** — R2 not provisioned; non-avatar fields ship now.
+- **Backlog (Codex):** "Deactivate account" = a **reversible pause** (hide from public/community, block/limit login, retain data, keep audit) — a safety/account-control feature, **not** GDPR erasure. Parked in [ROADMAP](ROADMAP.md) **Sprint 4** so it can't delay export/erasure.
 
 ## Auth endpoints live (`/api/v1/auth/*`)
 `signup` · `resend-verification` · `login` · `google` · `forgot-password` · `reset-password`. (All merged. `google` live flow still needs the Supabase Google-provider dashboard step before a real device can use it.) **No regular-user `GET /me`/`/account` endpoint yet** (P-1) — the mobile app persists the profile from the auth response.
+Account (🔑, this branch): `GET/PATCH /api/v1/profile` · `POST /api/v1/account/change-password` · `GET /api/v1/account/consents`. (export + erasure = next two slices.)
 Admin: **`POST /api/admin/login`** (#9, merged) + `GET /api/admin/me`.
 
 ## Sprint 1 — status

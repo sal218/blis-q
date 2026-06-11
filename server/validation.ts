@@ -118,14 +118,20 @@ export const withdrawConsentSchema = z
 
 // ── Profile / uploads ─────────────────────────────────────────────────────────
 
-// 🚧 preferredCity is city-level only — no GPS coordinates (COMPLIANCE §5.8).
+// 🚧 preferredCity is city-level TEXT only — no GPS coordinates (COMPLIANCE §5.8).
+// avatarKey is intentionally NOT accepted yet: avatar upload needs R2, which is
+// not provisioned. It will be added back (with the presigned-upload flow) when
+// R2 lands. An empty body is rejected — PATCH must change something.
 export const updateProfileSchema = z
   .object({
     displayName: z.string().trim().min(1).max(MAX_DISPLAY_NAME_LENGTH).optional(),
     preferredCity: z.string().trim().max(100).optional(),
-    avatarKey: z.string().uuid().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (d) => d.displayName !== undefined || d.preferredCity !== undefined,
+    { message: "Provide at least one field to update" },
+  );
 
 export const assetTypeSchema = z.enum(["avatar", "community", "event", "post"]);
 

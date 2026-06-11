@@ -1,4 +1,4 @@
-import { eq, and, inArray, gt, isNull, exists } from "drizzle-orm";
+import { eq, and, inArray, gt, isNull, exists, desc } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -58,6 +58,15 @@ export type AuthUserProfile = {
   isPremium: boolean;
   isAdmin: boolean;
   deletedAt: Date | null;
+};
+
+// A consent_records row projected for the account consents endpoint. The route
+// serialises grantedAt/withdrawnAt to ISO strings (ConsentRecordDTO).
+export type ConsentRecordRow = {
+  consentType: string;
+  policyVersion: string;
+  grantedAt: Date;
+  withdrawnAt: Date | null;
 };
 
 // The boolean flags read by server/notifications.ts preferenceKey(). Returned
@@ -197,6 +206,21 @@ export class DatabaseStorage {
 
     // New row, so nothing is cached yet — but the rule is unconditional.
     await invalidateProfileCache(input.id);
+  }
+
+  // A user's consent history (active + withdrawn), newest grant first. Maps to
+  // ConsentRecordDTO in the route after serialising the timestamps.
+  async getConsentRecords(userId: string): Promise<ConsentRecordRow[]> {
+    return db
+      .select({
+        consentType: consentRecords.consentType,
+        policyVersion: consentRecords.policyVersion,
+        grantedAt: consentRecords.grantedAt,
+        withdrawnAt: consentRecords.withdrawnAt,
+      })
+      .from(consentRecords)
+      .where(eq(consentRecords.userId, userId))
+      .orderBy(desc(consentRecords.grantedAt));
   }
 
   async writeAuditLog(entry: AuditLogInput): Promise<void> {

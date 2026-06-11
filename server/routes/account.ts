@@ -21,8 +21,9 @@ import type {
 // Self-service account management (docs/API.md §5/§6). Every route is
 // isAuthenticated — req.user is the caller; a user can only ever read/modify
 // their OWN account (the id comes from the verified token, never the body).
-// Erasure (DELETE /account) and export (GET /account/export) ship in their own
-// branches; this slice is profile read/update, change-password, and consents.
+// This module covers profile read/update, change-password, consents, and the
+// GDPR data export. Erasure (DELETE /account, the anonymisation cascade) ships
+// in its own branch.
 export function registerAccountRoutes(app: Express): void {
   app.get("/api/v1/profile", isAuthenticated, handleGetProfile);
   app.patch("/api/v1/profile", isAuthenticated, handleUpdateProfile);

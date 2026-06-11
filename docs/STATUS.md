@@ -24,7 +24,7 @@ _Last updated: 2026-06-11 — Sprint 2 slice 1 merged (#10); starting slice 2 (`
 **🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9).
 
 ## In progress
-- **`feat/account-export`** — Sprint-2 account backend, **slice 2 of 3**: `GET /api/v1/account/export` — portable JSON of all the user's data (GDPR Art. 20, **P-1**). **Status: implemented (Codex-approved plan + adjustments); 6 backend integration tests green; types/lint clean. Awaiting Codex review before PR.**
+- **`feat/account-export`** — Sprint-2 account backend, **slice 2 of 3**: `GET /api/v1/account/export` — portable JSON of all the user's data (GDPR Art. 20, **P-1**). **Status: implemented + Codex-approved (no blocking issues at `43d6fa4`); 6 backend integration tests green; types/lint clean. PR open — awaiting GitHub CI before merge.**
   - **Expanded shape (Codex):** `AccountExport` now also includes `notificationPreferences`, `blocks`, `reports` submitted, and `subscription` state. **Soft-deleted posts/messages included** as-is (flagged `deleted`). **Excluded** (documented in API.md §5): push tokens, reset-token hashes, auth internals, `audit_log`.
   - Storage-owned multi-table reads (`getAccountExport`), all scoped to `userId`; rate-limited (`exportUser`), audited (`user.data_exported`), export body never logged. Content tables are empty today (no create routes yet) but the export is forward-compatible.
   - Tests seed content directly (AR-2): full export incl. soft-deleted, **isolation** (only caller's data), empty user, audit row, unauth→401, 429.

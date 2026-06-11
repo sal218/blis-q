@@ -2,7 +2,7 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-11 — Sprint 2 slice 1 merged (#10); starting slice 2 (`feat/account-export`, Art. 20 / P-1)._
+_Last updated: 2026-06-11 — Sprint 2 slice 2 merged (#11); starting slice 3 (`feat/account-erasure`, Art. 17 / P-2)._
 
 ## Current phase
 **Sprint 2 — Auth complete → Profiles + GDPR erasure/export (ROADMAP Sprint 2). Goal: close the P-1/P-2 compliance blockers; a user can fully manage and delete their account.**
@@ -20,15 +20,14 @@ _Last updated: 2026-06-11 — Sprint 2 slice 1 merged (#10); starting slice 2 (`
 | #8 | `feat/auth-screens-mobile` — end-to-end mobile auth UI (Polish/LTR), Google consent retry, SecureStore session, push-deregister on logout, jest-expo harness |
 | #9 | `feat/admin-login` — real admin email/password sign-in (`POST /api/admin/login`, server-side `isAdmin` gate, generic 401, session revoke + sanitized logging, audit) |
 | #10 | `feat/account-profile` — Sprint-2 slice 1: `GET/PATCH /api/v1/profile`, `POST /account/change-password` (verification-session revoked on every exit), `GET /account/consents`; closes the P-1 "no GET /me" gap |
+| #11 | `feat/account-export` — Sprint-2 slice 2: `GET /api/v1/account/export` (GDPR Art. 20); expanded shape (notif prefs, blocks, reports, subscription), soft-deleted incl., security exclusions documented |
 
 **🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9).
 
 ## In progress
-- **`feat/account-export`** — Sprint-2 account backend, **slice 2 of 3**: `GET /api/v1/account/export` — portable JSON of all the user's data (GDPR Art. 20, **P-1**). **Status: implemented + Codex-approved (no blocking issues at `43d6fa4`); 6 backend integration tests green; types/lint clean. PR open — awaiting GitHub CI before merge.**
-  - **Expanded shape (Codex):** `AccountExport` now also includes `notificationPreferences`, `blocks`, `reports` submitted, and `subscription` state. **Soft-deleted posts/messages included** as-is (flagged `deleted`). **Excluded** (documented in API.md §5): push tokens, reset-token hashes, auth internals, `audit_log`.
-  - Storage-owned multi-table reads (`getAccountExport`), all scoped to `userId`; rate-limited (`exportUser`), audited (`user.data_exported`), export body never logged. Content tables are empty today (no create routes yet) but the export is forward-compatible.
-  - Tests seed content directly (AR-2): full export incl. soft-deleted, **isolation** (only caller's data), empty user, audit row, unauth→401, 429.
-  - Slice 3 `feat/account-erasure` (`DELETE /api/account` cascade — **P-2**) follows, isolated for careful review.
+- **`feat/account-erasure`** — Sprint-2 account backend, **slice 3 of 3** (final GDPR blocker): `DELETE /api/v1/account` — transactional anonymisation cascade (GDPR Art. 17, **P-2**). **Status: branch created + plan drafted; awaiting Codex validation of the plan before implementation.**
+  - Proposed: **anonymise the `users` row** (scrub PII, set `deletedAt`) consistent with the existing `deletedAt` blocking checks — not a hard row delete. One DB transaction: content (posts/messages) → `[deleted]` + author/sender severed; drop relational/consent/token rows (memberships, RSVPs, blocks, consents, push tokens, notif prefs, subscription, reset tokens); null set-null creator/reporter FKs; **anonymise `audit_log.actorId` → null** (retain rows) + write `user.deleted`. Then `invalidateProfileCache`, **revoke Supabase sessions + delete the Supabase auth user** (best-effort, DB-first ordering), generic `200`.
+  - Open questions for Codex: anonymise-vs-hard-delete the `users` row; audit `actorId` null-vs-pseudonymise; cross-system rollback ordering. Tested against **every** user-referencing table.
 - **Backlog (Codex):** "Deactivate account" = a **reversible pause** (hide from public/community, block/limit login, retain data, keep audit) — a safety/account-control feature, **not** GDPR erasure. Parked in [ROADMAP](ROADMAP.md) **Sprint 4** so it can't delay export/erasure.
 
 ## Auth endpoints live (`/api/v1/auth/*`)
@@ -73,4 +72,4 @@ Tracked here so they stay explicit (per Codex), not just implied by the roadmap.
 **Legal / infra gates (🏢 Client + provisioning)** — see [ROADMAP](ROADMAP.md) Week-0 + critical path: ⛔ **DPA signed**, ⛔ **DPIA complete** (schema can't be finalised until then), **Privacy Policy + ToS live** (PL), and the remaining infra cutover (Upstash Redis, Cloudflare R2, Resend domain, Fly.io, Sentry — all **not yet** provisioned).
 
 ## Next decision
-**Slice 2 (`feat/account-export`) plan** awaiting Codex validation, then implement → review → PR. Slice 3 (`feat/account-erasure`, the P-2 cascade) closes the Sprint-2 GDPR blockers. None of the mobile-provisioning steps are needed for this work.
+**Slice 3 (`feat/account-erasure`) plan** awaiting Codex validation (anonymise-vs-delete, audit actorId, cross-system ordering), then implement → review → PR. This is the **last Sprint-2 GDPR blocker** — once it merges, P-1/P-2 are closed and the account can be fully managed, exported, and erased. None of the mobile-provisioning steps are needed for this work.

@@ -145,7 +145,7 @@ These are part of the **locked contract** (COMPLIANCE §5.2/§5.5) — not optio
 | Method | Path | Class | Body | Success | Notes |
 |---|---|---|---|---|---|
 | GET | `/profile` | 🔑 | — | `200 AccountProfile` | The caller's own account (closes the prior "no `GET /me`" gap, P-1). |
-| PATCH | `/profile` | 🔑 | `{ displayName?, preferredCity? }` | `200 AccountProfile` | Strict; **empty body → `400`** (must change something); fields trimmed. 🚧 `preferredCity` is city-level only — **no GPS** (COMPLIANCE §5.8). 🚧 **`avatarKey` deferred** until R2 is provisioned (currently rejected). Rate-limited (`accountUpdateUser`); writes invalidate the profile cache + audit `user.profile_updated`. |
+| PATCH | `/profile` | 🔑 | `{ displayName?, preferredCity? }` | `200 AccountProfile` | Strict; **empty body → `400`** (must change something); fields trimmed. 🚧 `preferredCity` is city-level only — **no GPS** (COMPLIANCE §5.8); a **blank/whitespace `preferredCity` clears it to `null`** (removes the city). 🚧 **`avatarKey` deferred** until R2 is provisioned (currently rejected). Rate-limited (`accountUpdateUser`); writes invalidate the profile cache + audit `user.profile_updated`. |
 | GET | `/users/:id` | 🔑 | — | `200 PublicUser` | **`displayName`/`avatarUrl` only — never email.** |
 | POST | `/uploads/:assetType` | 🔑 | `{ contentType }` | `200 { uploadUrl, key }` | `assetType ∈ {avatar, community, event, post}`. Returns a presigned R2 PUT URL + UUID `key`; client uploads directly, then sets `key` on the target resource (`avatarKey`/`imageKey`). Private buckets, signed URLs only. |
 

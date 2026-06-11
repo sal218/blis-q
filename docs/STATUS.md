@@ -2,10 +2,10 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-10 — `feat/auth-screens-mobile` Codex-approved (2 rounds); PR open, awaiting GitHub CI before merge._
+_Last updated: 2026-06-10 — `feat/admin-login` implemented (last Sprint-1 item); awaiting Codex review before PR._
 
 ## Current phase
-**Sprint 1 — backend auth foundation complete (signup/login/google/reset); mobile auth UI built and Codex-approved; PR in CI.**
+**Sprint 1 — auth foundation + mobile auth UI complete; real admin sign-in built (replaces the token-paste scaffold). Last Sprint-1 item, in review.**
 
 ## Merged to `main`
 | PR | What |
@@ -17,22 +17,21 @@ _Last updated: 2026-06-10 — `feat/auth-screens-mobile` Codex-approved (2 round
 | #5 | `fix/env-empty-string` — empty optional env vars treated as unset |
 | #6 | `feat/auth-password-reset` — atomic single-use expiring reset tokens, no enumeration, audit |
 | #7 | `feat/auth-google` — Google sign-in (Supabase `signInWithIdToken`, Option A); consent on first sign-up, fail-closed cleanup; +`forceExit` CI fix |
+| #8 | `feat/auth-screens-mobile` — end-to-end mobile auth UI (Polish/LTR), Google consent retry, SecureStore session, push-deregister on logout, jest-expo harness |
 
 ## In progress
-- **`feat/auth-screens-mobile`** — the end-to-end mobile auth journey (Welcome → signup+consent → verify-email → login → forgot/reset → Google incl. `consent_required` retry → session persistence → polished error states). **Status: implemented + Codex round-1 fixes applied; Codex-approved (round 2, no blocking issues at `5c5ff23`); 44 client tests green; types/lint clean; CI gains a `test:client` step. PR open — awaiting GitHub CI before merge.**
-  - **Codex round-1 fixes:** (P1) logout now deregisters the **exact Expo push token** (registration/deregistration use the same token) **before** clearing the session, so a signed-out/shared device stops receiving the account's notifications; (P2) `loadSession` now treats missing/invalid/**expired** `expiresAt` as signed-out (clears + returns null) until refresh exists; (P2/P3) consent surfaces now render tappable **Terms/Privacy** links (or an honest "available before launch" note until the web URL is configured); plus the Google consent retry only re-acquires on `invalidCredentials` (token rejection), not on rate-limit/network/server.
-  - **Decisions (Codex-approved):** Polish/LTR with an i18n-ready typed strings layer (no Arabic/RTL this branch); `@react-native-google-signin/google-signin` for the Google ID token; lightweight strings module (no i18next); session = AccountProfile + access + refresh tokens in **SecureStore** (profile is sensitive); logic + light component tests; Google consent retry reuses the in-memory credential (never persisted/logged), re-runs sign-in on token expiry.
-  - **Structure:** `client/i18n`, `client/validation`, `client/lib/{api,session,googleAuth,googleFlow,messages}`, `client/hooks`, `client/components/{forms,…}`, `client/screens/auth`, `client/navigation`. `AuthContext` now holds the profile + drives the root navigator.
-  - **P-9 handled:** reset deep-link token captured once, scrubbed from nav state + web history, never logged.
-  - ⚠️ **Provisioning follow-ups before the live Google/reset flows work on a device** (CI is green via mocks): Supabase Google provider; `EXPO_PUBLIC_GOOGLE_WEB/IOS_CLIENT_ID`; app.json `iosUrlScheme` placeholder; iOS Associated Domains / Android App Links for the emailed reset link. Needs an **EAS dev client** (Google native module ≠ Expo Go).
-  - **New tracker item P-10:** mobile token refresh not wired yet (refresh token is stored but unused) — before beta.
-
-## Sprint 1 — remaining
-- [~] `feat/auth-screens-mobile` — **implemented, awaiting Codex review / PR** (this branch)
-- [ ] `feat/admin-login` — real Supabase admin sign-in (replace the token-paste scaffold) — *next, after the mobile flow proves the backend auth contract in practice*
+- **`feat/admin-login`** — real email/password admin sign-in for the `admin/` dashboard, replacing the token-paste scaffold. **Status: implemented (Option B) + Codex P2 fix; Codex-approved (no blocking issues at `5c1cf53`); 8 backend integration tests green; types/lint clean; admin app `tsc && vite build` clean. PR open — awaiting GitHub CI before merge.**
+  - **`POST /api/admin/login`** (the one unauthenticated admin route) — Supabase `signInWithPassword` then a server-side **verified/live/`isAdmin` gate**. Every failure (bad creds, unverified, missing/soft-deleted, non-admin) → the **same generic `401`**; any session issued before the gate fails is **revoked** (global sign-out). Audited `admin.login` / `admin.login_failed`; dual-bucket rate-limited (`adminLoginIp` + `adminLoginEmail`).
+  - Admin web app: token-paste replaced with a Polish email/password form (`adminLogin()`); generic error copy only; token stays in `localStorage` (**AR-1**, accepted; httpOnly-cookie hardening tracked as a future AR-1 follow-up, not this branch).
+  - **Codex P2 fix:** session revocation is no longer swallowed — a `revokeIssuedSession` helper logs a sanitized code on failure (reject or resolved-error) and the route still returns the generic `401` + audit. Regression test added (signOut rejects → still 401, no session, audited).
+  - Tests: backend integration only (admin app has no test harness) — 8 tests: success, non-admin revoke+401, **revoke-failure still 401**, bad creds, unverified, soft-deleted revoke, 429, invalid input, audit rows.
 
 ## Auth endpoints live (`/api/v1/auth/*`)
 `signup` · `resend-verification` · `login` · `google` · `forgot-password` · `reset-password`. (All merged. `google` live flow still needs the Supabase Google-provider dashboard step before a real device can use it.) **No regular-user `GET /me`/`/account` endpoint yet** (P-1) — the mobile app persists the profile from the auth response.
+Admin: **`POST /api/admin/login`** (this branch) + `GET /api/admin/me`.
+
+## Sprint 1 — status
+Backend auth (#4/#6/#7) ✅ · mobile auth UI (#8) ✅ · admin sign-in (this branch, in review). **After this merges, Sprint 1's auth scope is complete.** Sprint 2 (community/profile features) is next per [ROADMAP](ROADMAP.md).
 
 ## Infrastructure
 | Service | Status |
@@ -54,4 +53,4 @@ All infra is under the `blisqadmin@gmail.com` project account (PGC-owned) — **
 - **P-10** (before beta): mobile token refresh not wired (refresh token stored but unused).
 
 ## Next decision
-`feat/auth-screens-mobile` Codex-approved → PR open → **awaiting GitHub CI, then merge**. After merge: `feat/admin-login`. Provisioning (Supabase Google provider, Google client IDs, app links, EAS dev client) tracked for when the live device flow is exercised.
+`feat/admin-login` implemented (Option B) → Codex review → PR → CI → merge. That closes Sprint-1 auth. **Next: Sprint 2** (community/profile features per ROADMAP). Mobile provisioning (Supabase Google provider, Google client IDs, app links, EAS dev client) still tracked for when the **live device flow / first EAS build** is exercised — **not needed for admin-login**.

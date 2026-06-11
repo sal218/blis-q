@@ -157,30 +157,38 @@ async function handleChangePassword(
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const updated = await supabaseAdmin.auth.admin.updateUserById(userId, {
-      password: newPassword,
-    });
-    if (updated.error) {
-      console.error("[POST /api/v1/account/change-password] update failed", {
-        code: safeErrorCode(updated.error),
+    // From here on a real Supabase verification session exists. It MUST be
+    // revoked on EVERY exit (even if the update fails), so the cleanup runs in a
+    // finally. On success we revoke globally (force re-login everywhere); on
+    // failure we revoke only this temporary session (scope: "local"), leaving
+    // the user's real sessions intact since nothing changed.
+    const verificationToken = verify.data.session.access_token;
+    let passwordChanged = false;
+    try {
+      const updated = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        password: newPassword,
       });
-      return res.status(500).json({ error: "Internal Server Error" });
+      if (updated.error) {
+        console.error("[POST /api/v1/account/change-password] update failed", {
+          code: safeErrorCode(updated.error),
+        });
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+      passwordChanged = true;
+
+      await storage.writeAuditLog({
+        action: "user.password_changed",
+        actorId: userId,
+        ipAddress: req.ip ?? null,
+      });
+
+      // Locally-verified access JWTs stay valid until they expire (JWKS, no
+      // per-request revocation) — the client should treat a password change as
+      // requiring re-login.
+      return res.status(200).json({ ok: true });
+    } finally {
+      await revokeSession(verificationToken, passwordChanged ? "global" : "local");
     }
-
-    // Revoke the user's refresh sessions (including the verification session
-    // just created) so the password change forces re-login. Note: locally
-    // verified access JWTs remain valid until they expire (JWKS, no per-request
-    // revocation check) — the client should treat a password change as
-    // requiring re-login. A failure here is logged, not swallowed.
-    await revokeUserSessions(verify.data.session.access_token);
-
-    await storage.writeAuditLog({
-      action: "user.password_changed",
-      actorId: userId,
-      ipAddress: req.ip ?? null,
-    });
-
-    return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("[POST /api/v1/account/change-password] unexpected error", {
       code: safeErrorCode(err),
@@ -189,12 +197,16 @@ async function handleChangePassword(
   }
 }
 
-// Best-effort global session revocation. Reject OR resolved { error } = failure;
-// log a sanitized code only. The password is already changed, so a revoke
-// failure doesn't undo that — but it must be observable, not swallowed.
-async function revokeUserSessions(accessToken: string): Promise<void> {
+// Best-effort session revocation. `scope: "global"` revokes all of the user's
+// refresh sessions; `"local"` revokes only the session of the provided token.
+// Reject OR resolved { error } = failure; log a sanitized code only — a revoke
+// failure must be observable, not swallowed.
+async function revokeSession(
+  accessToken: string,
+  scope: "global" | "local",
+): Promise<void> {
   try {
-    const result = await supabaseAdmin.auth.admin.signOut(accessToken, "global");
+    const result = await supabaseAdmin.auth.admin.signOut(accessToken, scope);
     if (result?.error) {
       console.error(
         "[POST /api/v1/account/change-password] session revocation failed",

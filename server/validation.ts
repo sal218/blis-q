@@ -125,7 +125,14 @@ export const withdrawConsentSchema = z
 export const updateProfileSchema = z
   .object({
     displayName: z.string().trim().min(1).max(MAX_DISPLAY_NAME_LENGTH).optional(),
-    preferredCity: z.string().trim().max(100).optional(),
+    // city-level text; blank (or whitespace) CLEARS the city → null, so a user
+    // can remove it. Omitted → undefined → not touched.
+    preferredCity: z
+      .string()
+      .trim()
+      .max(100)
+      .transform((v) => (v.length === 0 ? null : v))
+      .optional(),
   })
   .strict()
   .refine(

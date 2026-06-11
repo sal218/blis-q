@@ -164,6 +164,24 @@ describe("PATCH /api/v1/profile", () => {
     expect(profile?.displayName).toBe("Ola");
   });
 
+  it("blank preferredCity clears it to null", async () => {
+    const { id } = await seedUser();
+    mockUser = { id };
+
+    // First set a city, then clear it with whitespace.
+    await request(app)
+      .patch("/api/v1/profile")
+      .send({ preferredCity: "Gdańsk" });
+    const res = await request(app)
+      .patch("/api/v1/profile")
+      .send({ preferredCity: "   " });
+
+    expect(res.status).toBe(200);
+    expect(res.body.preferredCity).toBeNull();
+    const profile = await storage.getAccountProfile(id);
+    expect(profile?.preferredCity).toBeNull();
+  });
+
   it("empty body → 400 (must change something)", async () => {
     const { id } = await seedUser();
     mockUser = { id };
@@ -240,6 +258,34 @@ describe("POST /api/v1/account/change-password", () => {
       .from(auditLog)
       .where(eq(auditLog.actorId, id));
     expect(audits.some((a) => a.action === "user.password_changed")).toBe(true);
+  });
+
+  it("update fails after verification → 500, verification session still revoked (local), no password_changed audit", async () => {
+    const { id } = await seedUser();
+    mockUser = { id };
+    signInMock.mockResolvedValue({
+      data: { session: { access_token: "verify-token" } },
+      error: null,
+    });
+    // The password update itself fails AFTER the verification session exists.
+    updateUserByIdMock.mockResolvedValue({
+      data: {},
+      error: { message: "supabase down" },
+    });
+
+    const res = await request(app)
+      .post("/api/v1/account/change-password")
+      .send({ currentPassword: "supersecret", newPassword: "newsupersecret" });
+
+    expect(res.status).toBe(500);
+    // The temporary verification session is cleaned up (scope "local") even on
+    // the failure path — it must never be left dangling.
+    expect(signOutMock).toHaveBeenCalledWith("verify-token", "local");
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.actorId, id));
+    expect(audits.some((a) => a.action === "user.password_changed")).toBe(false);
   });
 
   it("rate-limited → 429, Supabase never called", async () => {

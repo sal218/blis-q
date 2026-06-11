@@ -259,7 +259,10 @@ async function handleChangePassword(
       // requiring re-login.
       return res.status(200).json({ ok: true });
     } finally {
-      await revokeSession(verificationToken, passwordChanged ? "global" : "local");
+      await revokeSession(
+        verificationToken,
+        passwordChanged ? "global" : "local",
+      );
     }
   } catch (err) {
     console.error("[POST /api/v1/account/change-password] unexpected error", {

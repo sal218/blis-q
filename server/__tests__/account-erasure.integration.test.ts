@@ -78,7 +78,8 @@ jest.setTimeout(30000); // heavy multi-table seeding against the real DB
 
 const invalidateMock = invalidateProfileCache as unknown as jest.Mock;
 const signOutMock = supabaseAdmin.auth.admin.signOut as unknown as jest.Mock;
-const deleteUserMock = supabaseAdmin.auth.admin.deleteUser as unknown as jest.Mock;
+const deleteUserMock = supabaseAdmin.auth.admin
+  .deleteUser as unknown as jest.Mock;
 const eraseRl = checkEraseAccountRateLimit as unknown as jest.Mock;
 
 const POLICY_VERSION = "2026-06-10";
@@ -119,7 +120,12 @@ async function seedEverything(userId: string, otherUserId: string) {
     .values({ communityId: community.id, userId, role: "member" });
   const [post] = await db
     .insert(posts)
-    .values({ communityId: community.id, authorId: userId, content: "Cześć" })
+    .values({
+      communityId: community.id,
+      authorId: userId,
+      content: "Cześć",
+      imageUrl: "https://r2.example/posts/abc.jpg",
+    })
     .returning({ id: posts.id });
   const [message] = await db
     .insert(messages)
@@ -171,12 +177,8 @@ async function seedEverything(userId: string, otherUserId: string) {
     .returning({ id: reports.id });
   createdReportIds.push(report1.id, report2.id);
 
-  await db
-    .insert(blocks)
-    .values({ blockerId: userId, blockedId: otherUserId });
-  await db
-    .insert(blocks)
-    .values({ blockerId: otherUserId, blockedId: userId });
+  await db.insert(blocks).values({ blockerId: userId, blockedId: otherUserId });
+  await db.insert(blocks).values({ blockerId: otherUserId, blockedId: userId });
   await db
     .insert(devicePushTokens)
     .values({ userId, token: `tok-${userId}`, platform: "ios" });
@@ -204,7 +206,9 @@ afterEach(async () => {
     await db.delete(reports).where(inArray(reports.id, createdReportIds));
   }
   if (createdSafePlaceIds.length) {
-    await db.delete(safePlaces).where(inArray(safePlaces.id, createdSafePlaceIds));
+    await db
+      .delete(safePlaces)
+      .where(inArray(safePlaces.id, createdSafePlaceIds));
   }
   if (createdAdCampaignIds.length) {
     await db
@@ -277,19 +281,22 @@ describe("DELETE /api/v1/account", () => {
     expect(user.isAdmin).toBe(false);
     expect(user.deletedAt).not.toBeNull();
 
-    // Content scrubbed + author/sender severed.
+    // Content scrubbed (text + media), author/sender severed, marked deleted.
     const [post] = await db
       .select()
       .from(posts)
       .where(eq(posts.id, seeded.post.id));
     expect(post.content).toBe("[deleted]");
+    expect(post.imageUrl).toBeNull();
     expect(post.authorId).toBeNull();
+    expect(post.deletedAt).not.toBeNull();
     const [message] = await db
       .select()
       .from(messages)
       .where(eq(messages.id, seeded.message.id));
     expect(message.content).toBe("[deleted]");
     expect(message.senderId).toBeNull();
+    expect(message.deletedAt).not.toBeNull();
 
     // Creator/reporter/reviewer FKs nulled; rows SURVIVE.
     const [community] = await db
@@ -393,19 +400,16 @@ describe("DELETE /api/v1/account", () => {
     expect(deleteUserMock).toHaveBeenCalledWith(id);
   });
 
-  it("is idempotent — a second erase still returns 200 and stays anonymised", async () => {
+  // NOTE: we do NOT assert endpoint-level idempotency here. In production the
+  // real isAuthenticated rejects the now-deletedAt user's token (401) before the
+  // handler on a repeat DELETE — this suite mocks auth, so a second request would
+  // bypass that gate and misrepresent production. We instead assert that the
+  // storage cascade itself is safely re-runnable (no crash, stays anonymised).
+  it("storage.eraseUser is safely re-runnable (stays anonymised, no crash)", async () => {
     const { id } = await seedUser();
-    mockUser = { id };
 
-    const first = await request(app)
-      .delete("/api/v1/account")
-      .set("Authorization", "Bearer access-tok");
-    expect(first.status).toBe(200);
-
-    const second = await request(app)
-      .delete("/api/v1/account")
-      .set("Authorization", "Bearer access-tok");
-    expect(second.status).toBe(200);
+    await storage.eraseUser(id);
+    await storage.eraseUser(id);
 
     const [user] = await db.select().from(users).where(eq(users.id, id));
     expect(user.displayName).toBe("[deleted]");

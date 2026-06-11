@@ -243,9 +243,7 @@ export class DatabaseStorage {
         })),
       );
 
-      await tx
-        .insert(notificationPreferences)
-        .values({ userId: input.id });
+      await tx.insert(notificationPreferences).values({ userId: input.id });
 
       await tx.insert(auditLog).values({
         actorId: input.id,
@@ -462,7 +460,9 @@ export class DatabaseStorage {
   /**
    * GDPR Art. 17 erasure (COMPLIANCE §5.2, tracker P-2). ONE transaction that
    * anonymises the user across EVERY user-referencing table:
-   *   • content (posts/messages) → "[deleted]" with author/sender severed,
+   *   • content (posts/messages) → "[deleted]" + media (posts.imageUrl) cleared,
+   *     author/sender severed, and deletedAt set (consistent with the deleted
+   *     contract the DTOs expose),
    *   • creator/reporter/reviewer FKs (communities, events, safe_places,
    *     ad_campaigns, reports) → null (those rows survive, de-linked),
    *   • relational/consent/token rows (memberships, RSVPs, blocks, consents,
@@ -477,14 +477,20 @@ export class DatabaseStorage {
    */
   async eraseUser(userId: string): Promise<void> {
     await db.transaction(async (tx) => {
-      // Content → scrub + sever the personal link.
+      // Content → scrub text + media, sever the personal link, mark deleted.
+      const now = new Date();
       await tx
         .update(posts)
-        .set({ content: "[deleted]", authorId: null })
+        .set({
+          content: "[deleted]",
+          imageUrl: null,
+          authorId: null,
+          deletedAt: now,
+        })
         .where(eq(posts.authorId, userId));
       await tx
         .update(messages)
-        .set({ content: "[deleted]", senderId: null })
+        .set({ content: "[deleted]", senderId: null, deletedAt: now })
         .where(eq(messages.senderId, userId));
 
       // Creator / reporter / reviewer FKs → null (rows survive, de-linked).
@@ -583,9 +589,7 @@ export class DatabaseStorage {
 
   // ── Push tokens ───────────────────────────────────────────────────────────────
 
-  async getActiveTokensForUser(
-    userId: string,
-  ): Promise<{ token: string }[]> {
+  async getActiveTokensForUser(userId: string): Promise<{ token: string }[]> {
     return db
       .select({ token: devicePushTokens.token })
       .from(devicePushTokens)

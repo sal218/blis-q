@@ -8,6 +8,7 @@ import {
   checkAccountUpdateRateLimit,
   checkChangePasswordRateLimit,
   checkExportRateLimit,
+  checkEraseAccountRateLimit,
 } from "../rateLimit";
 import type {
   AccountProfile,
@@ -34,6 +35,67 @@ export function registerAccountRoutes(app: Express): void {
   );
   app.get("/api/v1/account/consents", isAuthenticated, handleGetConsents);
   app.get("/api/v1/account/export", isAuthenticated, handleExportAccount);
+  app.delete("/api/v1/account", isAuthenticated, handleDeleteAccount);
+}
+
+function extractBearer(req: Request): string | null {
+  const header = req.headers.authorization;
+  return header?.startsWith("Bearer ") ? header.slice(7) : null;
+}
+
+// GDPR Art. 17 erasure. Ordering is deliberate (Codex): capture the bearer token
+// BEFORE erasure → run the DB anonymisation cascade (which commits the PII
+// erasure and invalidates the profile cache) → THEN best-effort Supabase cleanup
+// (global sign-out + auth-user delete). Supabase failures are logged (sanitized),
+// not fatal: the PII is already erased and the anonymised deletedAt row blocks
+// login, so the cleanup is retry-able. Always a generic 200 — leaks nothing.
+async function handleDeleteAccount(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+
+    const rate = await checkEraseAccountRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    // Capture the current access token before the account is erased.
+    const bearer = extractBearer(req);
+
+    // 1) DB anonymisation cascade (commits PII erasure) + cache invalidation.
+    await storage.eraseUser(userId);
+
+    // 2) Best-effort Supabase cleanup AFTER the DB erasure (DB-first).
+    if (bearer) {
+      const signedOut = await supabaseAdmin.auth.admin
+        .signOut(bearer, "global")
+        .catch(() => ({ error: { message: "threw" } }));
+      if (signedOut?.error) {
+        console.error("[DELETE /api/v1/account] session revocation failed", {
+          code: safeErrorCode(signedOut.error),
+        });
+      }
+    }
+    const deleted = await supabaseAdmin.auth.admin
+      .deleteUser(userId)
+      .catch(() => ({ error: { message: "threw" } }));
+    if (deleted?.error) {
+      console.error("[DELETE /api/v1/account] auth-user delete failed", {
+        code: safeErrorCode(deleted.error),
+      });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/v1/account] unexpected error", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 }
 
 function toAccountProfile(profile: {
@@ -197,7 +259,10 @@ async function handleChangePassword(
       // requiring re-login.
       return res.status(200).json({ ok: true });
     } finally {
-      await revokeSession(verificationToken, passwordChanged ? "global" : "local");
+      await revokeSession(
+        verificationToken,
+        passwordChanged ? "global" : "local",
+      );
     }
   } catch (err) {
     console.error("[POST /api/v1/account/change-password] unexpected error", {

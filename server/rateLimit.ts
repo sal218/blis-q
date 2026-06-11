@@ -55,6 +55,7 @@ const limiters = {
   // Account self-service — keyed by user ID
   accountUpdateUser: makeLimiter(20, "15 m"), // PATCH /profile
   changePasswordUser: makeLimiter(5, "15 m"), // sensitive — tighter
+  eraseUser: makeLimiter(3, "1 h"), // DELETE /account — one-shot destructive
 
   // Content & community — keyed by user ID
   contentCreateUser: makeLimiter(60, "1 m"), // community posts + chat messages
@@ -215,6 +216,12 @@ export async function checkChangePasswordRateLimit(
   userId: string,
 ): Promise<RateLimitResult> {
   return check(limiters.changePasswordUser, `change-password:user:${userId}`);
+}
+
+export async function checkEraseAccountRateLimit(
+  userId: string,
+): Promise<RateLimitResult> {
+  return check(limiters.eraseUser, `erase-account:user:${userId}`);
 }
 
 export async function checkReportRateLimit(

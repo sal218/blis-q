@@ -2,10 +2,10 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-10 — `feat/auth-screens-mobile` implemented; awaiting Codex review before PR._
+_Last updated: 2026-06-10 — `feat/auth-screens-mobile` Codex-approved (2 rounds); PR open, awaiting GitHub CI before merge._
 
 ## Current phase
-**Sprint 1 — backend auth foundation complete (signup/login/google/reset); mobile auth UI built (awaiting review).**
+**Sprint 1 — backend auth foundation complete (signup/login/google/reset); mobile auth UI built and Codex-approved; PR in CI.**
 
 ## Merged to `main`
 | PR | What |
@@ -19,7 +19,7 @@ _Last updated: 2026-06-10 — `feat/auth-screens-mobile` implemented; awaiting C
 | #7 | `feat/auth-google` — Google sign-in (Supabase `signInWithIdToken`, Option A); consent on first sign-up, fail-closed cleanup; +`forceExit` CI fix |
 
 ## In progress
-- **`feat/auth-screens-mobile`** — the end-to-end mobile auth journey (Welcome → signup+consent → verify-email → login → forgot/reset → Google incl. `consent_required` retry → session persistence → polished error states). **Status: implemented + Codex round-1 fixes applied; 44 client tests green; types/lint clean; CI gains a `test:client` step. Awaiting Codex re-review before PR.**
+- **`feat/auth-screens-mobile`** — the end-to-end mobile auth journey (Welcome → signup+consent → verify-email → login → forgot/reset → Google incl. `consent_required` retry → session persistence → polished error states). **Status: implemented + Codex round-1 fixes applied; Codex-approved (round 2, no blocking issues at `5c5ff23`); 44 client tests green; types/lint clean; CI gains a `test:client` step. PR open — awaiting GitHub CI before merge.**
   - **Codex round-1 fixes:** (P1) logout now deregisters the **exact Expo push token** (registration/deregistration use the same token) **before** clearing the session, so a signed-out/shared device stops receiving the account's notifications; (P2) `loadSession` now treats missing/invalid/**expired** `expiresAt` as signed-out (clears + returns null) until refresh exists; (P2/P3) consent surfaces now render tappable **Terms/Privacy** links (or an honest "available before launch" note until the web URL is configured); plus the Google consent retry only re-acquires on `invalidCredentials` (token rejection), not on rate-limit/network/server.
   - **Decisions (Codex-approved):** Polish/LTR with an i18n-ready typed strings layer (no Arabic/RTL this branch); `@react-native-google-signin/google-signin` for the Google ID token; lightweight strings module (no i18next); session = AccountProfile + access + refresh tokens in **SecureStore** (profile is sensitive); logic + light component tests; Google consent retry reuses the in-memory credential (never persisted/logged), re-runs sign-in on token expiry.
   - **Structure:** `client/i18n`, `client/validation`, `client/lib/{api,session,googleAuth,googleFlow,messages}`, `client/hooks`, `client/components/{forms,…}`, `client/screens/auth`, `client/navigation`. `AuthContext` now holds the profile + drives the root navigator.
@@ -54,4 +54,4 @@ All infra is under the `blisqadmin@gmail.com` project account (PGC-owned) — **
 - **P-10** (before beta): mobile token refresh not wired (refresh token stored but unused).
 
 ## Next decision
-`feat/auth-screens-mobile` implementation done → Codex review → PR. After merge: `feat/admin-login`. Provisioning (Supabase Google provider, Google client IDs, app links, EAS dev client) tracked for when the live device flow is exercised.
+`feat/auth-screens-mobile` Codex-approved → PR open → **awaiting GitHub CI, then merge**. After merge: `feat/admin-login`. Provisioning (Supabase Google provider, Google client IDs, app links, EAS dev client) tracked for when the live device flow is exercised.

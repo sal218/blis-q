@@ -182,17 +182,19 @@ These are part of the **locked contract** (COMPLIANCE §5.2/§5.5) — not optio
 
 ## 7. Communities — `/api/v1/communities`
 
-| Method | Path                               | Class | Rate                | Body/Query               | Success                                                 |
-| ------ | ---------------------------------- | ----- | ------------------- | ------------------------ | ------------------------------------------------------- | ------ |
-| GET    | `/communities`                     | 🔑    | —                   | offset/page + `?search=` | `200 OffsetPage<CommunityDTO>`                          |
-| POST   | `/communities`                     | 🔑    | —                   | `CreateCommunityInput`   | `201 CommunityDTO`                                      |
-| GET    | `/communities/:id`                 | 🔑    | —                   | —                        | `200 CommunityDTO` (+ `membership: { role }             | null`) |
-| PATCH  | `/communities/:id`                 | 🔑    | —                   | `UpdateCommunityInput`   | `200 CommunityDTO` (community admin/mod only, else 403) |
-| DELETE | `/communities/:id`                 | 🔑    | —                   | —                        | `200 { ok: true }` (community admin only; soft delete)  |
-| POST   | `/communities/:id/join`            | 🔑    | `communityJoinUser` | —                        | `200 { role: "member" }` (409 if already a member)      |
-| DELETE | `/communities/:id/leave`           | 🔑    | —                   | —                        | `200 { ok: true }`                                      |
-| GET    | `/communities/:id/members`         | 🔑    | —                   | offset/page              | `200 OffsetPage<{ user: PublicUser, role, joinedAt }>`  |
-| PATCH  | `/communities/:id/members/:userId` | 🔑    | —                   | `{ role }`               | `200 { role }` (community admin only)                   |
+| Method | Path                               | Class | Rate                  | Body/Query               | Success                                                 |
+| ------ | ---------------------------------- | ----- | --------------------- | ------------------------ | ------------------------------------------------------- | ------ |
+| GET    | `/communities`                     | 🔑    | —                     | offset/page + `?search=` | `200 OffsetPage<CommunityDTO>`                          |
+| POST   | `/communities`                     | 🔑    | `communityCreateUser` | `CreateCommunityInput`   | `201 CommunityDTO` (creator becomes community admin)    |
+| GET    | `/communities/:id`                 | 🔑    | —                     | —                        | `200 CommunityDTO` (+ `membership: { role }             | null`) |
+| PATCH  | `/communities/:id`                 | 🔑    | —                     | `UpdateCommunityInput`   | `200 CommunityDTO` (community admin/mod only, else 403) |
+| DELETE | `/communities/:id`                 | 🔑    | —                     | —                        | `200 { ok: true }` (community admin only; soft delete)  |
+| POST   | `/communities/:id/join`            | 🔑    | `communityJoinUser`   | —                        | `200 { role: "member" }` (409 if already a member)      |
+| DELETE | `/communities/:id/leave`           | 🔑    | —                     | —                        | `200 { ok: true }`                                      |
+| GET    | `/communities/:id/members`         | 🔑    | —                     | offset/page              | `200 OffsetPage<{ user: PublicUser, role, joinedAt }>`  |
+| PATCH  | `/communities/:id/members/:userId` | 🔑    | —                     | `{ role }`               | `200 { role }` (community admin only)                   |
+
+**Implemented (Sprint-3 slice 1, `feat/communities`):** `POST /communities` (creator → admin, audited), `GET /communities` (offset + `?search=`, with `memberCount` + caller's `membership`), `GET /communities/:id`, `POST /:id/join` (idempotency-guarded; **`409`** if already a member; **`404`** for a missing/deleted community), `DELETE /:id/leave` (idempotent → `200`). Community creation + join/leave write `audit_log` (`community.created` / `community.member_joined` / `community.member_left`). **Not yet built** (later slices): `PATCH`/`DELETE /communities/:id`, `GET /:id/members`, member role management (`PATCH /:id/members/:userId`).
 
 `role ∈ {member, moderator, admin}` (community-level — distinct from platform `isAdmin`). Triggering events fire pushes (`new_member_joined`, `community_invite`).
 

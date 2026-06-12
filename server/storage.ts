@@ -1,4 +1,15 @@
-import { eq, and, inArray, gt, isNull, exists, desc } from "drizzle-orm";
+import {
+  eq,
+  and,
+  inArray,
+  gt,
+  isNull,
+  exists,
+  desc,
+  count,
+  ilike,
+} from "drizzle-orm";
+import type { MembershipRole } from "@shared/types";
 import { db } from "./db";
 import {
   users,
@@ -117,6 +128,19 @@ export type AccountExportData = {
     productId: string | null;
     expiresAt: Date | null;
   } | null;
+};
+
+// A community projected for the API, with the derived memberCount and the
+// caller's own role (null if not a member). The route serialises createdAt to
+// ISO → CommunityDTO.
+export type CommunityRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  createdAt: Date;
+  memberCount: number;
+  callerRole: MembershipRole | null;
 };
 
 // The boolean flags read by server/notifications.ts preferenceKey(). Returned
@@ -607,6 +631,233 @@ export class DatabaseStorage {
       .update(devicePushTokens)
       .set({ isActive: false })
       .where(inArray(devicePushTokens.token, tokens));
+  }
+
+  // ── Communities ───────────────────────────────────────────────────────────
+
+  // Create a community and make the creator its admin, atomically (COMPLIANCE:
+  // community creation is audited). Returns the new community projected for the
+  // API (memberCount = 1, caller is admin).
+  async createCommunity(input: {
+    name: string;
+    description?: string | null;
+    creatorId: string;
+    ipAddress?: string | null;
+  }): Promise<CommunityRow> {
+    const community = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(communities)
+        .values({
+          name: input.name,
+          description: input.description ?? null,
+          createdById: input.creatorId,
+        })
+        .returning();
+
+      await tx.insert(communityMemberships).values({
+        communityId: row.id,
+        userId: input.creatorId,
+        role: "admin",
+      });
+
+      await tx.insert(auditLog).values({
+        actorId: input.creatorId,
+        action: "community.created",
+        resourceType: "community",
+        resourceId: row.id,
+        ipAddress: input.ipAddress ?? null,
+      });
+
+      return row;
+    });
+
+    return {
+      id: community.id,
+      name: community.name,
+      description: community.description,
+      imageUrl: community.imageUrl,
+      createdAt: community.createdAt,
+      memberCount: 1,
+      callerRole: "admin",
+    };
+  }
+
+  // One page of non-deleted communities (newest first), optional name search,
+  // each with its memberCount and the caller's role (null if not a member).
+  async listCommunities(input: {
+    offset: number;
+    limit: number;
+    search?: string;
+    callerId: string;
+  }): Promise<{ rows: CommunityRow[]; total: number }> {
+    const where = and(
+      isNull(communities.deletedAt),
+      input.search ? ilike(communities.name, `%${input.search}%`) : undefined,
+    );
+
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(communities)
+      .where(where);
+
+    const page = await db
+      .select({
+        id: communities.id,
+        name: communities.name,
+        description: communities.description,
+        imageUrl: communities.imageUrl,
+        createdAt: communities.createdAt,
+      })
+      .from(communities)
+      .where(where)
+      .orderBy(desc(communities.createdAt))
+      .limit(input.limit)
+      .offset(input.offset);
+
+    if (page.length === 0) return { rows: [], total: Number(total) };
+
+    const ids = page.map((c) => c.id);
+    const counts = await db
+      .select({ communityId: communityMemberships.communityId, n: count() })
+      .from(communityMemberships)
+      .where(inArray(communityMemberships.communityId, ids))
+      .groupBy(communityMemberships.communityId);
+    const countMap = new Map(counts.map((c) => [c.communityId, Number(c.n)]));
+
+    const mine = await db
+      .select({
+        communityId: communityMemberships.communityId,
+        role: communityMemberships.role,
+      })
+      .from(communityMemberships)
+      .where(
+        and(
+          eq(communityMemberships.userId, input.callerId),
+          inArray(communityMemberships.communityId, ids),
+        ),
+      );
+    const roleMap = new Map(
+      mine.map((m) => [m.communityId, m.role as MembershipRole]),
+    );
+
+    const rows: CommunityRow[] = page.map((c) => ({
+      ...c,
+      memberCount: countMap.get(c.id) ?? 0,
+      callerRole: roleMap.get(c.id) ?? null,
+    }));
+    return { rows, total: Number(total) };
+  }
+
+  async getCommunity(
+    id: string,
+    callerId: string,
+  ): Promise<CommunityRow | null> {
+    const [community] = await db
+      .select({
+        id: communities.id,
+        name: communities.name,
+        description: communities.description,
+        imageUrl: communities.imageUrl,
+        createdAt: communities.createdAt,
+      })
+      .from(communities)
+      .where(and(eq(communities.id, id), isNull(communities.deletedAt)))
+      .limit(1);
+    if (!community) return null;
+
+    const [{ n }] = await db
+      .select({ n: count() })
+      .from(communityMemberships)
+      .where(eq(communityMemberships.communityId, id));
+    const [mine] = await db
+      .select({ role: communityMemberships.role })
+      .from(communityMemberships)
+      .where(
+        and(
+          eq(communityMemberships.communityId, id),
+          eq(communityMemberships.userId, callerId),
+        ),
+      )
+      .limit(1);
+
+    return {
+      ...community,
+      memberCount: Number(n),
+      callerRole: (mine?.role as MembershipRole) ?? null,
+    };
+  }
+
+  // Join: idempotent at the DB via onConflictDoNothing on the unique
+  // (communityId, userId) constraint. Returns "already" when the membership
+  // existed (route → 409), "not_found" for a missing/deleted community.
+  async joinCommunity(
+    communityId: string,
+    userId: string,
+    ipAddress?: string | null,
+  ): Promise<"joined" | "already" | "not_found"> {
+    const [community] = await db
+      .select({ id: communities.id })
+      .from(communities)
+      .where(
+        and(eq(communities.id, communityId), isNull(communities.deletedAt)),
+      )
+      .limit(1);
+    if (!community) return "not_found";
+
+    const [row] = await db
+      .insert(communityMemberships)
+      .values({ communityId, userId, role: "member" })
+      .onConflictDoNothing()
+      .returning({ id: communityMemberships.id });
+    if (!row) return "already";
+
+    await db.insert(auditLog).values({
+      actorId: userId,
+      action: "community.member_joined",
+      resourceType: "community",
+      resourceId: communityId,
+      ipAddress: ipAddress ?? null,
+    });
+    return "joined";
+  }
+
+  // Leave: removes the caller's membership. Idempotent ("not_member" when there
+  // was nothing to remove). NOTE: this slice does not protect the last admin —
+  // a sole admin can leave and orphan the community; role management lands in a
+  // later slice.
+  async leaveCommunity(
+    communityId: string,
+    userId: string,
+    ipAddress?: string | null,
+  ): Promise<"left" | "not_member" | "not_found"> {
+    const [community] = await db
+      .select({ id: communities.id })
+      .from(communities)
+      .where(
+        and(eq(communities.id, communityId), isNull(communities.deletedAt)),
+      )
+      .limit(1);
+    if (!community) return "not_found";
+
+    const removed = await db
+      .delete(communityMemberships)
+      .where(
+        and(
+          eq(communityMemberships.communityId, communityId),
+          eq(communityMemberships.userId, userId),
+        ),
+      )
+      .returning({ id: communityMemberships.id });
+    if (removed.length === 0) return "not_member";
+
+    await db.insert(auditLog).values({
+      actorId: userId,
+      action: "community.member_left",
+      resourceType: "community",
+      resourceId: communityId,
+      ipAddress: ipAddress ?? null,
+    });
+    return "left";
   }
 
   // ── Community membership ────────────────────────────────────────────────────

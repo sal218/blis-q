@@ -2,11 +2,11 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-11 — Sprint 2 slice 2 merged (#11); starting slice 3 (`feat/account-erasure`, Art. 17 / P-2)._
+_Last updated: 2026-06-11 — Sprint 2 complete (#12 merged, P-1/P-2 closed); starting Sprint 3 (`feat/communities`)._
 
 ## Current phase
 
-**Sprint 2 — Auth complete → Profiles + GDPR erasure/export (ROADMAP Sprint 2). Goal: close the P-1/P-2 compliance blockers; a user can fully manage and delete their account.**
+**Sprint 3 — Communities + membership + block/mute (ROADMAP Sprint 3). First feature pillar. Account/GDPR scope (Sprint 2) is done.**
 
 ## Merged to `main`
 
@@ -23,27 +23,30 @@ _Last updated: 2026-06-11 — Sprint 2 slice 2 merged (#11); starting slice 3 (`
 | #9  | `feat/admin-login` — real admin email/password sign-in (`POST /api/admin/login`, server-side `isAdmin` gate, generic 401, session revoke + sanitized logging, audit)                                           |
 | #10 | `feat/account-profile` — Sprint-2 slice 1: `GET/PATCH /api/v1/profile`, `POST /account/change-password` (verification-session revoked on every exit), `GET /account/consents`; closes the P-1 "no GET /me" gap |
 | #11 | `feat/account-export` — Sprint-2 slice 2: `GET /api/v1/account/export` (GDPR Art. 20); expanded shape (notif prefs, blocks, reports, subscription), soft-deleted incl., security exclusions documented         |
+| #12 | `feat/account-erasure` — Sprint-2 slice 3: `DELETE /api/v1/account` (GDPR Art. 17) anonymisation cascade across every table; **closes P-1/P-2**                                                                |
 
-**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9).
+**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed).
 
 ## In progress
 
-- **`feat/account-erasure`** — Sprint-2 account backend, **slice 3 of 3** (final GDPR blocker): `DELETE /api/v1/account` — transactional anonymisation cascade (GDPR Art. 17, **P-2**). **Status: implemented (Codex-approved plan + all required changes); 5 backend integration tests green; types/lint clean. Awaiting Codex review before PR.**
-  - **Ordering (Codex, DB-first — no drift):** capture bearer token → **one DB transaction** (the anonymisation cascade) → `invalidateProfileCache(userId)` → **best-effort** Supabase global sign-out + auth-user delete → generic `200`.
-  - **`users` row anonymised in place** (email `deleted-<uuid>@…`, displayName `[deleted]`, avatar/city null, isPremium/isAdmin false, `deletedAt` set) — not hard-deleted. Content → `[deleted]` + author/sender nulled; creator/reporter/reviewer FKs (communities, events, safe_places, **ad_campaigns** — Codex's catch, reports) nulled; relational/consent/token rows (memberships, RSVPs, blocks, consents, push tokens, notif prefs, **subscriptions**, reset tokens) deleted; `audit_log.actorId` → null (rows retained) + `user.deleted` with **no user identifier** anywhere.
-  - Post **media** (`posts.imageUrl`) cleared and scrubbed posts/messages get `deletedAt` set (consistent with the `deleted` contract). New `eraseUser` per-user rate limiter. Tested against **every** user-referencing table incl. `ad_campaigns`, plus anonymise-in-place, media/deletedAt scrub, audit no-leak, signOut+deleteUser best-effort, storage re-runnability, 401, 429. (Endpoint-level idempotency is intentionally NOT claimed — in production `isAuthenticated` rejects the deleted user's token with `401` on a repeat call.)
-  - **After merge: P-1/P-2 closed — account fully manageable, exportable, and erasable (Sprint-2 GDPR scope complete).**
-- **Backlog (Codex):** "Deactivate account" = a **reversible pause** (hide from public/community, block/limit login, retain data, keep audit) — a safety/account-control feature, **not** GDPR erasure. Parked in [ROADMAP](ROADMAP.md) **Sprint 4** so it can't delay export/erasure.
+- **`feat/communities`** — Sprint-3 **slice 1 of ~3**: the communities core. **Status: implemented (Codex-validated plan); 9 backend integration tests green; types/lint/prettier clean. Awaiting Codex review before PR.**
+  - Endpoints (🔑, docs/API.md §7): `POST /api/v1/communities` (201; creator becomes **admin** atomically), `GET /api/v1/communities` (offset page + `?search=`, with memberCount + caller role), `GET /api/v1/communities/:id` (404 missing, 400 bad uuid), `POST /:id/join` (**409 if already member**, 404 missing; rate-limited `communityJoinUser`), `DELETE /:id/leave` (idempotent).
+  - **User-created** communities (Codex-confirmed; creator → admin). No schema changes (existing `communities`/`community_memberships`). New `communityCreateUser` rate limiter. **Audit** on creation + join/leave (COMPLIANCE).
+  - Storage-owned (`createCommunity`/`listCommunities`/`getCommunity`/`joinCommunity`/`leaveCommunity`); creator-admin membership created in one transaction.
+  - Deferred to later slices: PATCH/DELETE community, member list, role management.
+- **Next Sprint-3 slices:** `feat/block-reports` (block/unblock/list + generic `POST /reports`) — **block only; mute is deferred** (the `blocks` table has no mute model; adding one is a schema change gated on DPIA). Then mobile (`feat/communities-mobile`) + admin (communities CRUD + reports read).
+- **Backlog (Codex):** "Deactivate account" = a **reversible pause** (not GDPR erasure) — parked in [ROADMAP](ROADMAP.md) **Sprint 4**.
 
 ## Auth endpoints live (`/api/v1/auth/*`)
 
 `signup` · `resend-verification` · `login` · `google` · `forgot-password` · `reset-password`. (All merged. `google` live flow still needs the Supabase Google-provider dashboard step before a real device can use it.) **No regular-user `GET /me`/`/account` endpoint yet** (P-1) — the mobile app persists the profile from the auth response.
-Account (🔑): `GET/PATCH /api/v1/profile` · `POST /api/v1/account/change-password` · `GET /api/v1/account/consents` (merged #10) · `GET /api/v1/account/export` (merged #11) · `DELETE /api/v1/account` (this branch, in review). **Account/GDPR surface complete.**
+Account (🔑): `GET/PATCH /api/v1/profile` · `POST /api/v1/account/change-password` · `GET /api/v1/account/consents` (merged #10) · `GET /api/v1/account/export` (merged #11) · `DELETE /api/v1/account` (merged #12). **Account/GDPR surface complete.**
+Communities (🔑, this branch): `POST /api/v1/communities` · `GET /api/v1/communities` · `GET /:id` · `POST /:id/join` · `DELETE /:id/leave`.
 Admin: **`POST /api/admin/login`** (#9, merged) + `GET /api/admin/me`.
 
-## Sprint 1 — status
+## Sprint status
 
-Backend auth (#4/#6/#7) ✅ · mobile auth UI (#8) ✅ · admin sign-in (#9) ✅. **Sprint-1 auth scope complete.** Now in Sprint 2 (account/GDPR backend → profiles) per [ROADMAP](ROADMAP.md).
+Sprint 1 (auth) ✅ · Sprint 2 (account/GDPR, P-1/P-2 closed) ✅. **Now in Sprint 3** (communities → block/reports → mobile/admin) per [ROADMAP](ROADMAP.md).
 
 ## Infrastructure
 
@@ -58,7 +61,7 @@ All infra is under the `blisqadmin@gmail.com` project account (PGC-owned) — **
 
 ## Known follow-ups (CLAUDE.md issue tracker)
 
-- **P-1/P-2** (🔴 blocker, before real users): GDPR registration consent ✅ done in #4; export ✅ merged (#11); erasure (`DELETE /api/account`) implemented, **in review** (this branch). Once erasure merges, P-1/P-2 close.
+- **P-1/P-2** ✅ **closed** (before real users): GDPR registration consent (#4), profile/`GET me` (#10), export (#11, Art. 20), erasure (#12, Art. 17). The account is fully manageable, exportable, and erasable.
 - **P-3** (🟠 blocker, before payments): RevenueCat webhook.
 - **P-6**: branded Resend email (currently Supabase built-in).
 - **P-7**: Drizzle `pgTable` extra-config deprecation sweep.
@@ -84,4 +87,4 @@ Tracked here so they stay explicit (per Codex), not just implied by the roadmap.
 
 ## Next decision
 
-**Slice 3 (`feat/account-erasure`) implemented** (Codex-approved plan + required fixes: post-media scrub, deletedAt on scrubbed content, idempotency claim corrected, docs/Prettier) → Codex review → PR. This is the **last Sprint-2 GDPR blocker** — once it merges, P-1/P-2 are closed and the account can be fully managed, exported, and erased. Next: Sprint 3 (communities/membership/block-mute). None of the mobile-provisioning steps are needed for this work.
+**Sprint 3 underway.** `feat/communities` (slice 1) implemented → Codex review → PR. Then `feat/block-reports` (**block only; mute deferred — DPIA-gated schema change**) + generic `POST /reports`. Then mobile community screens (mockups now in `assets/`) + admin communities CRUD / reports read. **Open product call settled by Codex:** communities are **user-created** (creator → admin), not admin-curated. None of the mobile-provisioning steps are needed for the backend slices.

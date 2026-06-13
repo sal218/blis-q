@@ -22,5 +22,6 @@
     }
   },
   "include": ["server", "shared", "client", "*.config.ts", "drizzle.config.ts"],
-  "exclude": ["node_modules", "admin", "dist", "static-build", ".expo"]
+  "exclude": ["node_modules", "admin", "dist", "static-build", ".expo"],
+  "extends": "expo/tsconfig.base"
 }

@@ -1,6 +1,9 @@
 import { strings, format } from "@/i18n";
 import type { FieldError } from "@/validation/auth";
+import type { CommunityFieldError } from "@/validation/communities";
 import type { ApiError } from "@/lib/api/auth";
+import type { CommunityApiError } from "@/lib/api/communities";
+import type { BlocksApiError } from "@/lib/api/safety";
 
 // The single place that turns locale-independent error codes (from validation +
 // the API client) into user-facing Polish copy. Centralised so every screen
@@ -30,6 +33,54 @@ export function apiErrorMessage(error: ApiError): string {
     case "network":
       return strings.errors.network;
     case "consentRequired":
+    case "validation":
+    case "server":
+      return strings.errors.generic;
+  }
+}
+
+// Create-community field errors → Polish copy.
+export function communityFieldErrorMessage(err: CommunityFieldError): string {
+  switch (err.code) {
+    case "nameRequired":
+      return strings.communities.nameRequired;
+    case "nameTooLong":
+      return format(strings.communities.nameTooLong, { max: err.max });
+    case "descriptionTooLong":
+      return format(strings.communities.descriptionTooLong, { max: err.max });
+  }
+}
+
+// Community API errors → copy. `conflict` (409) is context-dependent — join vs
+// leave have different meanings — so the call site passes the right message
+// rather than this function parsing the server's error string.
+export function communityApiErrorMessage(
+  error: CommunityApiError,
+  conflictMessage: string,
+): string {
+  switch (error.kind) {
+    case "rateLimited":
+      return format(strings.errors.rateLimited, { seconds: error.retryAfter });
+    case "network":
+      return strings.errors.network;
+    case "conflict":
+      return conflictMessage;
+    case "notFound":
+      return strings.communities.notFound;
+    case "forbidden":
+    case "validation":
+    case "server":
+      return strings.errors.generic;
+  }
+}
+
+// Block-list API errors → copy.
+export function blocksApiErrorMessage(error: BlocksApiError): string {
+  switch (error.kind) {
+    case "rateLimited":
+      return format(strings.errors.rateLimited, { seconds: error.retryAfter });
+    case "network":
+      return strings.errors.network;
     case "validation":
     case "server":
       return strings.errors.generic;

@@ -2,18 +2,33 @@ import { Text } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
-import { CommunitiesPlaceholderScreen } from "@/screens/CommunitiesPlaceholderScreen";
+import { HomeScreen } from "@/screens/HomeScreen";
+import { ChatScreen } from "@/screens/ChatScreen";
+import { EventsScreen } from "@/screens/events/EventsScreen";
+import { CommunityDetailScreen } from "@/screens/communities/CommunityDetailScreen";
+import { CreateCommunityScreen } from "@/screens/communities/CreateCommunityScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { BlockedUsersScreen } from "@/screens/BlockedUsersScreen";
 import { strings } from "@/i18n";
 
-// Authenticated app shell: bottom tabs (Communities + Profile). Community
-// browse/detail/create lands in PR 2 — the Communities tab is a placeholder for
-// now. The Profile tab is a stack so it can host the blocked-users screen.
+// Authenticated app shell. Post-login IA: bottom tabs Home · Events · Chat ·
+// Profile. Home/Chat are placeholders this slice. The Events tab is a stack:
+// its landing screen hosts a segmented control (Events / Safe places /
+// Communities) and pushes Community detail/create on top. Profile is a stack so
+// it can host the blocked-users screen. (There is intentionally no Communities
+// tab — communities live under Events → Communities.)
 
 export type AppTabsParamList = {
-  Communities: undefined;
+  Home: undefined;
+  Events: undefined;
+  Chat: undefined;
   ProfileTab: undefined;
+};
+
+export type EventsStackParamList = {
+  EventsHome: undefined;
+  CommunityDetail: { id: string };
+  CreateCommunity: undefined;
 };
 
 export type ProfileStackParamList = {
@@ -22,7 +37,37 @@ export type ProfileStackParamList = {
 };
 
 const Tabs = createBottomTabNavigator<AppTabsParamList>();
+const EventsStackNav = createNativeStackNavigator<EventsStackParamList>();
 const ProfileStackNav = createNativeStackNavigator<ProfileStackParamList>();
+
+function EventsStack() {
+  const { colors } = useTheme();
+  return (
+    <EventsStackNav.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.background },
+        headerTintColor: colors.text,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
+      <EventsStackNav.Screen
+        name="EventsHome"
+        component={EventsScreen}
+        options={{ headerShown: false }}
+      />
+      <EventsStackNav.Screen
+        name="CommunityDetail"
+        component={CommunityDetailScreen}
+        options={{ title: "" }}
+      />
+      <EventsStackNav.Screen
+        name="CreateCommunity"
+        component={CreateCommunityScreen}
+        options={{ title: strings.communities.createTitle }}
+      />
+    </EventsStackNav.Navigator>
+  );
+}
 
 function ProfileStack() {
   const { colors } = useTheme();
@@ -63,11 +108,27 @@ export function AppTabs() {
       }}
     >
       <Tabs.Screen
-        name="Communities"
-        component={CommunitiesPlaceholderScreen}
+        name="Home"
+        component={HomeScreen}
         options={{
-          title: strings.tabs.communities,
-          tabBarIcon: ({ color }) => <Text style={{ color }}>👥</Text>,
+          title: strings.tabs.home,
+          tabBarIcon: ({ color }) => <Text style={{ color }}>🏠</Text>,
+        }}
+      />
+      <Tabs.Screen
+        name="Events"
+        component={EventsStack}
+        options={{
+          title: strings.tabs.events,
+          tabBarIcon: ({ color }) => <Text style={{ color }}>📅</Text>,
+        }}
+      />
+      <Tabs.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{
+          title: strings.tabs.chat,
+          tabBarIcon: ({ color }) => <Text style={{ color }}>💬</Text>,
         }}
       />
       <Tabs.Screen

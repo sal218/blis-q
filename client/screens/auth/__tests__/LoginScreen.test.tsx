@@ -36,8 +36,14 @@ describe("LoginScreen — rate limit (429) messaging", () => {
     });
     renderScreen();
 
-    fireEvent.changeText(screen.getByLabelText(strings.common.email), "ola@example.pl");
-    fireEvent.changeText(screen.getByLabelText(strings.common.password), "supersecret");
+    fireEvent.changeText(
+      screen.getByLabelText(strings.common.email),
+      "ola@example.pl",
+    );
+    fireEvent.changeText(
+      screen.getByLabelText(strings.common.password),
+      "supersecret",
+    );
     fireEvent.press(screen.getByRole("button", { name: strings.login.submit }));
 
     const expected = format(strings.errors.rateLimited, { seconds: 30 });
@@ -51,14 +57,18 @@ describe("LoginScreen — rate limit (429) messaging", () => {
     });
     renderScreen();
 
-    fireEvent.changeText(screen.getByLabelText(strings.common.email), "ola@example.pl");
-    fireEvent.changeText(screen.getByLabelText(strings.common.password), "wrongpass");
+    fireEvent.changeText(
+      screen.getByLabelText(strings.common.email),
+      "ola@example.pl",
+    );
+    fireEvent.changeText(
+      screen.getByLabelText(strings.common.password),
+      "wrongpass",
+    );
     fireEvent.press(screen.getByRole("button", { name: strings.login.submit }));
 
     await waitFor(() =>
-      expect(
-        screen.getByText(strings.errors.invalidCredentials),
-      ).toBeTruthy(),
+      expect(screen.getByText(strings.errors.invalidCredentials)).toBeTruthy(),
     );
   });
 });

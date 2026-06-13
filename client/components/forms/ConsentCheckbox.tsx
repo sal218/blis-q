@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
+import { useTheme } from "@/contexts/ThemeContext";
 import { strings } from "@/i18n";
-import { colors, spacing, radius } from "@/constants/theme";
+import { spacing, radius, type ThemeColors } from "@/constants/theme";
 
 // A single consent row: a tappable checkbox + label. Consent must be explicit
 // and affirmative — these are NEVER pre-ticked by default (COMPLIANCE §5.1).
@@ -20,6 +22,8 @@ export function ConsentCheckbox({
   onToggle,
   required = false,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <Pressable
       accessibilityRole="checkbox"
@@ -42,48 +46,50 @@ export function ConsentCheckbox({
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: spacing.sm,
-  },
-  box: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.sm,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-  },
-  boxChecked: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  check: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "900",
-    lineHeight: 18,
-  },
-  labelWrap: {
-    flex: 1,
-    marginLeft: spacing.sm,
-  },
-  label: {
-    color: colors.text,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  badge: {
-    alignSelf: "flex-start",
-    marginTop: spacing.xs,
-    color: colors.accent,
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    row: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      paddingVertical: spacing.sm,
+    },
+    box: {
+      width: 24,
+      height: 24,
+      borderRadius: radius.sm,
+      borderWidth: 2,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 2,
+    },
+    boxChecked: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    check: {
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontWeight: "900",
+      lineHeight: 18,
+    },
+    labelWrap: {
+      flex: 1,
+      marginLeft: spacing.sm,
+    },
+    label: {
+      color: colors.text,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    badge: {
+      alignSelf: "flex-start",
+      marginTop: spacing.xs,
+      color: colors.accent,
+      fontSize: 11,
+      fontWeight: "700",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+  });
+}

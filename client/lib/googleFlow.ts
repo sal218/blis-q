@@ -1,16 +1,6 @@
-import type {
-  ConsentType,
-  SessionResponse,
-} from "@shared/types";
-import type {
-  ApiError,
-  ApiResult,
-  GoogleSignInInput,
-} from "@/lib/api/auth";
-import type {
-  GoogleCredential,
-  GoogleSignInOutcome,
-} from "@/lib/googleAuth";
+import type { ConsentType, SessionResponse } from "@shared/types";
+import type { ApiError, ApiResult, GoogleSignInInput } from "@/lib/api/auth";
+import type { GoogleCredential, GoogleSignInOutcome } from "@/lib/googleAuth";
 
 // Orchestrates the Google sign-in journey, including the first-time
 // consent_required retry (docs/API.md §4). The native acquisition and the API

@@ -1,12 +1,12 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { AuthStackParamList } from "@/navigation/types";
+import { useTheme } from "@/contexts/ThemeContext";
 import { WelcomeScreen } from "@/screens/auth/WelcomeScreen";
 import { SignUpScreen } from "@/screens/auth/SignUpScreen";
 import { CheckEmailScreen } from "@/screens/auth/CheckEmailScreen";
 import { LoginScreen } from "@/screens/auth/LoginScreen";
 import { ForgotPasswordScreen } from "@/screens/auth/ForgotPasswordScreen";
 import { ResetPasswordScreen } from "@/screens/auth/ResetPasswordScreen";
-import { colors } from "@/constants/theme";
 
 // The unauthenticated navigation stack. Headers are hidden — each screen renders
 // its own header via AuthScreen — and back navigation is via the in-screen links
@@ -15,6 +15,7 @@ import { colors } from "@/constants/theme";
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 export function AuthStack() {
+  const { colors } = useTheme();
   return (
     <Stack.Navigator
       screenOptions={{

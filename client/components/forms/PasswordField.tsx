@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, Text, StyleSheet, type TextInputProps } from "react-native";
 import { TextField } from "@/components/forms/TextField";
+import { useTheme } from "@/contexts/ThemeContext";
 import { strings } from "@/i18n";
-import { colors, spacing } from "@/constants/theme";
+import { spacing, type ThemeColors } from "@/constants/theme";
 
 // Password input with a show/hide toggle. Defaults to obscured. Built on
 // TextField so the label/error styling stays consistent.
@@ -26,6 +27,8 @@ export function PasswordField({
   onSubmitEditing,
   returnKeyType,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [visible, setVisible] = useState(false);
 
   return (
@@ -43,7 +46,9 @@ export function PasswordField({
       rightAccessory={
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={visible ? strings.common.hide : strings.common.show}
+          accessibilityLabel={
+            visible ? strings.common.hide : strings.common.show
+          }
           onPress={() => setVisible((v) => !v)}
           hitSlop={8}
           style={styles.toggle}
@@ -57,13 +62,15 @@ export function PasswordField({
   );
 }
 
-const styles = StyleSheet.create({
-  toggle: {
-    paddingLeft: spacing.sm,
-  },
-  toggleText: {
-    color: colors.primary,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    toggle: {
+      paddingLeft: spacing.sm,
+    },
+    toggleText: {
+      color: colors.primary,
+      fontSize: 13,
+      fontWeight: "600",
+    },
+  });
+}

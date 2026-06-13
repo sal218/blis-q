@@ -1,20 +1,26 @@
-import { NavigationContainer } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  DefaultTheme,
+  DarkTheme,
+  type Theme,
+} from "@react-navigation/native";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { usePushNotifications } from "@/notifications/usePushNotifications";
 import { AuthStack } from "@/navigation/AuthStack";
-import { HomePlaceholder } from "@/screens/HomePlaceholder";
+import { AppTabs } from "@/navigation/AppTabs";
 import { linking } from "@/navigation/linking";
-import { colors } from "@/constants/theme";
 
 // Root of the app's navigation. Bootstraps from the persisted session
 // (AuthContext) and swaps between the unauthenticated auth stack and the
-// authenticated app based on `isAuthenticated`. While the session is being
-// restored from SecureStore it shows a neutral splash.
+// authenticated tab shell based on `isAuthenticated`. The NavigationContainer is
+// handed a theme derived from the active palette so nav chrome follows the mode.
 
 function Splash() {
+  const { colors } = useTheme();
   return (
-    <View style={styles.splash}>
+    <View style={[styles.splash, { backgroundColor: colors.background }]}>
       <ActivityIndicator color={colors.primary} size="large" />
     </View>
   );
@@ -22,19 +28,31 @@ function Splash() {
 
 export function RootNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
+  const { colors, mode } = useTheme();
 
   // Register/refresh the push token once authenticated.
   usePushNotifications(isAuthenticated);
 
+  const navTheme: Theme = {
+    ...(mode === "dark" ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(mode === "dark" ? DarkTheme : DefaultTheme).colors,
+      primary: colors.primary,
+      background: colors.background,
+      card: colors.surface,
+      text: colors.text,
+      border: colors.border,
+      notification: colors.primary,
+    },
+  };
+
   return (
-    <NavigationContainer linking={linking} fallback={<Splash />}>
-      {isLoading ? (
-        <Splash />
-      ) : isAuthenticated ? (
-        <HomePlaceholder />
-      ) : (
-        <AuthStack />
-      )}
+    <NavigationContainer
+      theme={navTheme}
+      linking={linking}
+      fallback={<Splash />}
+    >
+      {isLoading ? <Splash /> : isAuthenticated ? <AppTabs /> : <AuthStack />}
     </NavigationContainer>
   );
 }
@@ -42,7 +60,6 @@ export function RootNavigator() {
 const styles = StyleSheet.create({
   splash: {
     flex: 1,
-    backgroundColor: colors.background,
     alignItems: "center",
     justifyContent: "center",
   },

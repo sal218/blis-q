@@ -2,7 +2,7 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-12 — `feat/block-reports` (Sprint 3 slice 2) implemented + Codex round-1 fixes; awaiting review before PR._
+_Last updated: 2026-06-12 — block/reports merged (#14); building `feat/theme-foundation` (Sprint-3 mobile, PR 1 of 2)._
 
 ## Current phase
 
@@ -25,16 +25,18 @@ _Last updated: 2026-06-12 — `feat/block-reports` (Sprint 3 slice 2) implemente
 | #11 | `feat/account-export` — Sprint-2 slice 2: `GET /api/v1/account/export` (GDPR Art. 20); expanded shape (notif prefs, blocks, reports, subscription), soft-deleted incl., security exclusions documented         |
 | #12 | `feat/account-erasure` — Sprint-2 slice 3: `DELETE /api/v1/account` (GDPR Art. 17) anonymisation cascade across every table; **closes P-1/P-2**                                                                |
 | #13 | `feat/communities` — Sprint-3 slice 1: communities create/browse/get/join/leave, creator→admin, last-admin-leave guard (409), audited                                                                          |
+| #14 | `feat/block-reports` — Sprint-3 slice 2: blocks (block/unblock/list, idempotent, soft-deleted unavailable) + `POST /reports`; block-only (mute deferred); audited                                              |
 
-**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed).
+**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed). **🎉 Sprint-3 backend complete** (communities #13, block/reports #14).
 
 ## In progress
 
-- **`feat/block-reports`** — Sprint-3 **slice 2**: user-facing safety primitives. **Status: implemented + Codex round-1 fixes; 15 backend integration tests green; types/lint/prettier clean. Awaiting review before PR.**
-  - Endpoints (🔑, docs/API.md §12): `POST /api/v1/blocks` (`201` new / `200` already / `400` self-block / `404` unknown **or soft-deleted** user; `blockUser` limiter), `DELETE /api/v1/blocks/:userId` (idempotent `200`), `GET /api/v1/blocks` (`PublicUser[]`, excludes soft-deleted), `POST /api/v1/reports` (thin queue insert, generic `201`; `reportUser` limiter).
-  - **Block only — mute deferred** (no mute schema/model; DPIA-gated). Block is one-directional. Self-block prevented; **soft-deleted users are unavailable** (not blockable, excluded from list); block/unblock idempotent. Audited `user.blocked` / `user.unblocked` / `report.submitted` (report audit references the **report record, not the free-text reason** — privacy-safe). Reports are submit-only here; moderation actions are admin/Sprint-4.
-  - Storage-owned (`blockUser`/`unblockUser`/`listBlocks`/`submitReport`); no route-side DB access. New `blockUser` rate limiter. (This branch also commits the recently-added community mockup PNGs under `assets/` so they're tracked for the mobile slice.)
-- **Next Sprint-3 slices:** mobile (`feat/communities-mobile`, against the new mockups) + admin (communities CRUD + reports queue read).
+- **`feat/theme-foundation`** — Sprint-3 mobile, **PR 1 of 2** (the cross-cutting theme + app shell; community screens are PR 2 `feat/communities-mobile`). **Status: implemented (Codex-approved split); client tests 49/49; types/lint/prettier clean. Awaiting review before PR.**
+  - **Light + dark theme** with explicit palettes in `constants/theme.ts` (light sampled from mockups: white surfaces, brand purple accents; dark = brand-purple-dark variant), identical token shape. `ThemeContext` exposes `mode` + active `colors` + `setMode`/`toggleMode`, **persisted in SecureStore** (`blis-q.theme-mode`), deterministic rehydration (`isReady`), default dark.
+  - **Migrated all ~20 static `colors` imports → `useTheme()`** (form primitives, AuthScreen, auth screens, overlays, App root). `NavigationContainer` + tab/stack chrome follow the active theme.
+  - **Authenticated tab shell** (`@react-navigation/bottom-tabs`): Communities (placeholder for PR 2) + **Profile** (account info, **light/dark toggle**, blocked-users entry point, sign-out moved from the old HomePlaceholder). `HomePlaceholder` removed.
+  - Tests: ThemeContext toggle/persist/rehydrate; ProfileScreen sign-out order (deregister push before clearing session); existing auth/component tests stay green via a global ThemeContext test mock.
+- **Next:** `feat/communities-mobile` (PR 2) — browse/detail/create/join-leave + blocked-users list/unblock, on this foundation. Then admin (communities CRUD + reports queue read).
 - **Backlog (Codex):** "Deactivate account" = a **reversible pause** (not GDPR erasure) — parked in [ROADMAP](ROADMAP.md) **Sprint 4**.
 
 ## Auth endpoints live (`/api/v1/auth/*`)
@@ -42,7 +44,7 @@ _Last updated: 2026-06-12 — `feat/block-reports` (Sprint 3 slice 2) implemente
 `signup` · `resend-verification` · `login` · `google` · `forgot-password` · `reset-password`. (All merged. `google` live flow still needs the Supabase Google-provider dashboard step before a real device can use it.) **No regular-user `GET /me`/`/account` endpoint yet** (P-1) — the mobile app persists the profile from the auth response.
 Account (🔑): `GET/PATCH /api/v1/profile` · `POST /api/v1/account/change-password` · `GET /api/v1/account/consents` (merged #10) · `GET /api/v1/account/export` (merged #11) · `DELETE /api/v1/account` (merged #12). **Account/GDPR surface complete.**
 Communities (🔑, merged #13): `POST /api/v1/communities` · `GET /api/v1/communities` · `GET /:id` · `POST /:id/join` · `DELETE /:id/leave`.
-Safety (🔑, this branch): `POST /api/v1/blocks` · `DELETE /api/v1/blocks/:userId` · `GET /api/v1/blocks` · `POST /api/v1/reports`.
+Safety (🔑, merged #14): `POST /api/v1/blocks` · `DELETE /api/v1/blocks/:userId` · `GET /api/v1/blocks` · `POST /api/v1/reports`.
 Admin: **`POST /api/admin/login`** (#9, merged) + `GET /api/admin/me`.
 
 ## Sprint status

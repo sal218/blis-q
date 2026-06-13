@@ -107,7 +107,7 @@ All EU-region, **regions are irreversible at creation** (TRANSFER §3.1):
 ## Sprint 3 — Communities + membership + block/mute (≈ Jul 7 – 18)
 
 - **Backend (👨‍💻):** 🧪 communities `create/browse/get/join/leave`, `community_memberships` (member/moderator/admin roles), **block** endpoints (build now — retrofitting touches every content query, TRANSFER §5.3), generic `POST /api/reports`. **Note:** only **block** ships in v1 — **mute is deferred** (no mute schema/model; adding one is a DPIA-gated schema change). The earlier "block/mute" wording is block-only until/unless mute is scoped post-DPIA.
-- **Mobile (👨‍💻):** community browse / detail / create / join-leave screens; block/mute UI.
+- **Mobile (👨‍💻):** community browse / detail / create / join-leave screens; block UI (mute deferred — no model, DPIA-gated).
 - **Admin (👨‍💻):** communities CRUD; reports queue (read).
 - **Design:** chat + events mockups.
 - **Blocker:** community-join rate limit (`checkCommunityJoinRateLimit`) wired.

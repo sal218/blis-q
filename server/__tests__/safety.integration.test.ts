@@ -157,6 +157,21 @@ describe("POST /api/v1/blocks", () => {
     expect(audits.filter((a) => a.action === "user.blocked")).toHaveLength(1);
   });
 
+  it("blocking a soft-deleted user → 404 (unavailable)", async () => {
+    const blocker = await seedUser();
+    const target = await seedUser();
+    await db
+      .update(users)
+      .set({ deletedAt: new Date() })
+      .where(eq(users.id, target));
+    mockUser = { id: blocker };
+
+    const res = await request(app)
+      .post("/api/v1/blocks")
+      .send({ blockedUserId: target });
+    expect(res.status).toBe(404);
+  });
+
   it("rate-limited → 429", async () => {
     const id = await seedUser();
     mockUser = { id };
@@ -181,6 +196,23 @@ describe("GET /api/v1/blocks", () => {
     expect(res.body[0].id).toBe(target);
     expect(res.body[0].displayName).toBe("Tester");
     expect(res.body[0].email).toBeUndefined();
+  });
+
+  it("excludes a blocked user who has since been soft-deleted", async () => {
+    const blocker = await seedUser();
+    const target = await seedUser();
+    mockUser = { id: blocker };
+    await request(app).post("/api/v1/blocks").send({ blockedUserId: target });
+
+    // Target gets erased/anonymised after being blocked.
+    await db
+      .update(users)
+      .set({ deletedAt: new Date() })
+      .where(eq(users.id, target));
+
+    const res = await request(app).get("/api/v1/blocks");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(0);
   });
 });
 

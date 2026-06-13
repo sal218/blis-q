@@ -2,7 +2,7 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-11 — communities merged (#13); building `feat/block-reports` (Sprint 3 slice 2)._
+_Last updated: 2026-06-12 — `feat/block-reports` (Sprint 3 slice 2) implemented + Codex round-1 fixes; awaiting review before PR._
 
 ## Current phase
 
@@ -30,10 +30,10 @@ _Last updated: 2026-06-11 — communities merged (#13); building `feat/block-rep
 
 ## In progress
 
-- **`feat/block-reports`** — Sprint-3 **slice 2**: user-facing safety primitives. **Status: implemented; 13 backend integration tests green; types/lint/prettier clean. Awaiting Codex review before PR.**
-  - Endpoints (🔑, docs/API.md §12): `POST /api/v1/blocks` (`201` new / `200` already / `400` self-block / `404` unknown user; `blockUser` limiter), `DELETE /api/v1/blocks/:userId` (idempotent `200`), `GET /api/v1/blocks` (`PublicUser[]`), `POST /api/v1/reports` (thin queue insert, generic `201`; `reportUser` limiter).
-  - **Block only — mute deferred** (no mute schema/model; DPIA-gated). Block is one-directional. Self-block prevented; block/unblock idempotent. Audited `user.blocked` / `user.unblocked` / `report.submitted` (report audit references the **report record, not the free-text reason** — privacy-safe). Reports are submit-only here; moderation actions are admin/Sprint-4.
-  - Storage-owned (`blockUser`/`unblockUser`/`listBlocks`/`submitReport`); no route-side DB access. New `blockUser` rate limiter.
+- **`feat/block-reports`** — Sprint-3 **slice 2**: user-facing safety primitives. **Status: implemented + Codex round-1 fixes; 15 backend integration tests green; types/lint/prettier clean. Awaiting review before PR.**
+  - Endpoints (🔑, docs/API.md §12): `POST /api/v1/blocks` (`201` new / `200` already / `400` self-block / `404` unknown **or soft-deleted** user; `blockUser` limiter), `DELETE /api/v1/blocks/:userId` (idempotent `200`), `GET /api/v1/blocks` (`PublicUser[]`, excludes soft-deleted), `POST /api/v1/reports` (thin queue insert, generic `201`; `reportUser` limiter).
+  - **Block only — mute deferred** (no mute schema/model; DPIA-gated). Block is one-directional. Self-block prevented; **soft-deleted users are unavailable** (not blockable, excluded from list); block/unblock idempotent. Audited `user.blocked` / `user.unblocked` / `report.submitted` (report audit references the **report record, not the free-text reason** — privacy-safe). Reports are submit-only here; moderation actions are admin/Sprint-4.
+  - Storage-owned (`blockUser`/`unblockUser`/`listBlocks`/`submitReport`); no route-side DB access. New `blockUser` rate limiter. (This branch also commits the recently-added community mockup PNGs under `assets/` so they're tracked for the mobile slice.)
 - **Next Sprint-3 slices:** mobile (`feat/communities-mobile`, against the new mockups) + admin (communities CRUD + reports queue read).
 - **Backlog (Codex):** "Deactivate account" = a **reversible pause** (not GDPR erasure) — parked in [ROADMAP](ROADMAP.md) **Sprint 4**.
 

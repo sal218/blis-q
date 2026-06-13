@@ -898,10 +898,11 @@ export class DatabaseStorage {
     blockedId: string,
     ipAddress?: string | null,
   ): Promise<"created" | "already" | "not_found"> {
+    // A soft-deleted / anonymised user is unavailable — not blockable (404).
     const [target] = await db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.id, blockedId))
+      .where(and(eq(users.id, blockedId), isNull(users.deletedAt)))
       .limit(1);
     if (!target) return "not_found";
 
@@ -948,6 +949,7 @@ export class DatabaseStorage {
   }
 
   // The users the caller has blocked, as PublicUser (never emails), newest first.
+  // Soft-deleted/anonymised users are excluded.
   async listBlocks(blockerId: string): Promise<PublicUser[]> {
     return db
       .select({
@@ -957,7 +959,7 @@ export class DatabaseStorage {
       })
       .from(blocks)
       .innerJoin(users, eq(users.id, blocks.blockedId))
-      .where(eq(blocks.blockerId, blockerId))
+      .where(and(eq(blocks.blockerId, blockerId), isNull(users.deletedAt)))
       .orderBy(desc(blocks.createdAt));
   }
 

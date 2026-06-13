@@ -79,7 +79,7 @@ Response: { "data": T[], "page": number, "pageSize": number, "total": number, "t
 
 ### Rate limiting
 
-Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in prod). Auth flows use **dual buckets** (IP **and** email/userId — both must pass). Limiter names referenced per-endpoint below: `loginIp`/`loginEmail`, `signupIp`, `googleAuthIp`, `passwordResetIp`/`passwordResetEmail`, `contentCreateUser`, `reportUser`, `communityCreateUser`, `communityJoinUser`, `pushTokenUser`, `accountUpdateUser`, `changePasswordUser`, `exportUser`, `eraseUser`, `revenuecatWebhookIp`.
+Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in prod). Auth flows use **dual buckets** (IP **and** email/userId — both must pass). Limiter names referenced per-endpoint below: `loginIp`/`loginEmail`, `signupIp`, `googleAuthIp`, `passwordResetIp`/`passwordResetEmail`, `contentCreateUser`, `reportUser`, `blockUser`, `communityCreateUser`, `communityJoinUser`, `pushTokenUser`, `accountUpdateUser`, `changePasswordUser`, `exportUser`, `eraseUser`, `revenuecatWebhookIp`.
 
 ---
 
@@ -264,18 +264,18 @@ User writes to safe places are **admin-only** (§14). 🚧 whether `/safe-places
 
 ## 12. Reporting, blocking & notifications — `/api/v1`
 
-| Method | Path                        | Class | Rate            | Body                                  | Success                                   |
-| ------ | --------------------------- | ----- | --------------- | ------------------------------------- | ----------------------------------------- |
-| POST   | `/reports`                  | 🔑    | `reportUser`    | `CreateReportInput`                   | `201 { ok: true }`                        |
-| POST   | `/blocks`                   | 🔑    | —               | `{ blockedUserId }`                   | `201 { ok: true }`                        |
-| DELETE | `/blocks/:userId`           | 🔑    | —               | —                                     | `200 { ok: true }`                        |
-| GET    | `/blocks`                   | 🔑    | —               | —                                     | `200 PublicUser[]`                        |
-| GET    | `/notification-preferences` | 🔑    | —               | —                                     | `200 NotificationPreferencesDTO`          |
-| PATCH  | `/notification-preferences` | 🔑    | —               | `Partial<NotificationPreferencesDTO>` | `200 NotificationPreferencesDTO`          |
-| POST   | `/push-tokens`              | 🔑    | `pushTokenUser` | `{ token, platform }`                 | `201 { ok: true }`                        |
-| PATCH  | `/push-tokens`              | 🔑    | `pushTokenUser` | `{ token }`                           | `200 { ok: true }` (deactivate on logout) |
+| Method | Path                        | Class | Rate            | Body                                  | Success                                                                                              |
+| ------ | --------------------------- | ----- | --------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| POST   | `/reports`                  | 🔑    | `reportUser`    | `CreateReportInput`                   | `201 { ok: true }`                                                                                   |
+| POST   | `/blocks`                   | 🔑    | `blockUser`     | `{ blockedUserId }`                   | `201 { ok: true }` new / `200` if already blocked (idempotent); `400` self-block; `404` unknown user |
+| DELETE | `/blocks/:userId`           | 🔑    | `blockUser`     | —                                     | `200 { ok: true }` (idempotent — also `200` if not blocked)                                          |
+| GET    | `/blocks`                   | 🔑    | —               | —                                     | `200 PublicUser[]` (users the caller has blocked)                                                    |
+| GET    | `/notification-preferences` | 🔑    | —               | —                                     | `200 NotificationPreferencesDTO`                                                                     |
+| PATCH  | `/notification-preferences` | 🔑    | —               | `Partial<NotificationPreferencesDTO>` | `200 NotificationPreferencesDTO`                                                                     |
+| POST   | `/push-tokens`              | 🔑    | `pushTokenUser` | `{ token, platform }`                 | `201 { ok: true }`                                                                                   |
+| PATCH  | `/push-tokens`              | 🔑    | `pushTokenUser` | `{ token }`                           | `200 { ok: true }` (deactivate on logout)                                                            |
 
-`CreateReportInput = { resourceType: post|message|user|event|community, resourceId, reason }`. Block/mute is enforced server-side in content queries (built from the start — TRANSFER §5.3). Notification-pref keys: `communityPosts, events, eventReminders, communityInvites, memberJoins` (matches `notification_preferences`; `moderation_action` is always-on with no toggle). `platform ∈ {ios, android, web}`.
+`CreateReportInput = { resourceType: post|message|user|event|community, resourceId, reason }`. **Implemented (Sprint-3 slice 2, `feat/block-reports`):** `POST /reports` (thin insert into the moderation queue; generic `201` ack — never echoes queue/moderation internals; audited `report.submitted` referencing the report record, **not** the free-text reason), `POST /blocks` / `DELETE /blocks/:userId` / `GET /blocks` (block is **one-directional**: the caller stops seeing the blocked user; audited `user.blocked` / `user.unblocked`). **Mute is DEFERRED** — there is no mute schema/model and adding one is a DPIA-gated schema change; only **block** ships. Block is enforced server-side in content queries as those land (built from the start — TRANSFER §5.3). Moderation _actions_ (resolve/dismiss/ban/remove) are admin-only (§14), not here. Notification-pref keys: `communityPosts, events, eventReminders, communityInvites, memberJoins` (matches `notification_preferences`; `moderation_action` is always-on with no toggle). `platform ∈ {ios, android, web}`.
 
 ---
 

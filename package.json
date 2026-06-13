@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Blis-Q — community platform for Poland's LGBT+ community (Expo client + Express API).",
-  "main": "node_modules/expo/AppEntry.js",
+  "main": "index.js",
   "scripts": {
     "all:dev": "concurrently -n expo,server -c cyan,magenta \"npm:expo:dev\" \"npm:server:dev\"",
     "expo:dev": "expo start",

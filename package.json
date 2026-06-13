@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Blis-Q — community platform for Poland's LGBT+ community (Expo client + Express API).",
-  "main": "index.js",
+  "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "all:dev": "concurrently -n expo,server -c cyan,magenta \"npm:expo:dev\" \"npm:server:dev\"",
     "expo:dev": "expo start",
@@ -46,9 +46,9 @@
     "pg": "^8.13.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-native": "0.81.4",
-    "react-native-safe-area-context": "^5.0.0",
-    "react-native-screens": "^4.0.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
     "resend": "^4.0.0",
     "zod": "^3.23.8"
   },

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Text, StyleSheet } from "react-native";
 import type { AuthScreenProps } from "@/navigation/types";
 import { AuthScreen } from "@/components/AuthScreen";
@@ -6,11 +6,12 @@ import { TextField } from "@/components/forms/TextField";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { TextLink } from "@/components/forms/TextLink";
 import { FormError } from "@/components/forms/FormError";
+import { useTheme } from "@/contexts/ThemeContext";
 import { forgotPassword } from "@/lib/api/auth";
 import { validateEmail } from "@/validation/auth";
 import { fieldErrorMessage, apiErrorMessage } from "@/lib/messages";
 import { strings } from "@/i18n";
-import { colors, spacing } from "@/constants/theme";
+import { spacing, type ThemeColors } from "@/constants/theme";
 
 // Enumeration-resistant: any valid email yields the same "if an account exists…"
 // confirmation. We never reveal whether the address is registered.
@@ -18,6 +19,8 @@ import { colors, spacing } from "@/constants/theme";
 export function ForgotPasswordScreen({
   navigation,
 }: AuthScreenProps<"ForgotPassword">) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -78,11 +81,13 @@ export function ForgotPasswordScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  done: {
-    color: colors.success,
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: spacing.lg,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    done: {
+      color: colors.success,
+      fontSize: 15,
+      lineHeight: 22,
+      marginBottom: spacing.lg,
+    },
+  });
+}

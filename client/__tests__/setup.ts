@@ -38,6 +38,37 @@ jest.mock("react-native-safe-area-context", () => {
   };
 });
 
+// Theme context: components read colours via useTheme(), which throws outside a
+// ThemeProvider. Globally mock it so every component test gets a working theme
+// without wrapping in a provider (behaviour tests don't assert colours). The
+// REAL ThemeContext (toggle/persist/rehydrate) is exercised via requireActual in
+// its own unit test. Palette is inlined here (the factory can't reference outer
+// scope or require()).
+jest.mock("@/contexts/ThemeContext", () => {
+  const colors = {
+    primary: "#8B73FF",
+    primaryDark: "#6D4AFF",
+    accent: "#A78BFA",
+    background: "#16122E",
+    surface: "#221B42",
+    text: "#F5F5F7",
+    textMuted: "#A9A4C0",
+    border: "#332A55",
+    danger: "#F87171",
+    success: "#34D399",
+  };
+  return {
+    useTheme: () => ({
+      colors,
+      mode: "dark",
+      isReady: true,
+      setMode: jest.fn(),
+      toggleMode: jest.fn(),
+    }),
+    ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
+  };
+});
+
 // The native Google Sign-In module has no JS fallback under jest. Tests that
 // exercise the Google flow mock our wrapper (@/lib/googleAuth) instead; this
 // just keeps imports resolvable.

@@ -1,9 +1,4 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-} from "react";
+import React, { createContext, useContext, useState, useCallback } from "react";
 import { Linking } from "react-native";
 
 // Quick-exit is a first-class SAFETY feature, not an afterthought — it must be
@@ -27,11 +22,7 @@ const QuickExitContext = createContext<QuickExitContextValue | null>(null);
 
 const NEUTRAL_URL = "https://www.google.com";
 
-export function QuickExitProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function QuickExitProvider({ children }: { children: React.ReactNode }) {
   const [isExitActive, setIsExitActive] = useState(false);
 
   const triggerQuickExit = useCallback(() => {

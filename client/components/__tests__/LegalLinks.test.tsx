@@ -1,9 +1,5 @@
 import { Linking } from "react-native";
-import {
-  render,
-  screen,
-  fireEvent,
-} from "@testing-library/react-native";
+import { render, screen, fireEvent } from "@testing-library/react-native";
 import { LegalLinks } from "@/components/LegalLinks";
 import { strings } from "@/i18n";
 
@@ -22,7 +18,9 @@ describe("LegalLinks", () => {
     fireEvent.press(screen.getByRole("link", { name: strings.consent.terms }));
     expect(openSpy).toHaveBeenCalledWith(urls.terms);
 
-    fireEvent.press(screen.getByRole("link", { name: strings.consent.privacy }));
+    fireEvent.press(
+      screen.getByRole("link", { name: strings.consent.privacy }),
+    );
     expect(openSpy).toHaveBeenCalledWith(urls.privacy);
 
     openSpy.mockRestore();
@@ -32,6 +30,8 @@ describe("LegalLinks", () => {
     render(<LegalLinks configured={false} />);
 
     expect(screen.getByText(strings.consent.legalUnavailable)).toBeTruthy();
-    expect(screen.queryByRole("link", { name: strings.consent.terms })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: strings.consent.terms }),
+    ).toBeNull();
   });
 });

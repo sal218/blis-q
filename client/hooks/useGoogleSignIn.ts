@@ -74,7 +74,11 @@ export function useGoogleSignIn({ onSignedIn }: Props) {
       setError(null);
       setLoading(true);
       try {
-        let result = await submitGoogleConsent(credential, consent, googleSignIn);
+        let result = await submitGoogleConsent(
+          credential,
+          consent,
+          googleSignIn,
+        );
 
         // ONLY a rejected token (401 → invalidCredentials, e.g. the ID token
         // expired between the first exchange and consent) warrants re-acquiring

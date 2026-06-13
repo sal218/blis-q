@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { Modal, View, Text, StyleSheet } from "react-native";
 import { useConsent } from "@/hooks/useConsent";
+import { useTheme } from "@/contexts/ThemeContext";
 import { ConsentList } from "@/components/ConsentList";
 import { LegalLinks } from "@/components/LegalLinks";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
@@ -8,7 +10,7 @@ import { FormError } from "@/components/forms/FormError";
 import type { GoogleConsent } from "@/lib/googleFlow";
 import { POLICY_VERSION } from "@/constants/legal";
 import { strings } from "@/i18n";
-import { colors, spacing, radius } from "@/constants/theme";
+import { spacing, radius, type ThemeColors } from "@/constants/theme";
 
 // Shown when a first-time Google user must give consent before the account is
 // created (backend returned consent_required). Collects the same consent set as
@@ -31,6 +33,8 @@ export function GoogleConsentModal({
   onSubmit,
   onCancel,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { selected, toggle, isValid } = useConsent();
 
   return (
@@ -52,7 +56,12 @@ export function GoogleConsentModal({
 
           <PrimaryButton
             label={strings.consent.confirm}
-            onPress={() => onSubmit({ consentedTypes: selected, policyVersion: POLICY_VERSION })}
+            onPress={() =>
+              onSubmit({
+                consentedTypes: selected,
+                policyVersion: POLICY_VERSION,
+              })
+            }
             loading={loading}
             disabled={!isValid}
           />
@@ -63,29 +72,31 @@ export function GoogleConsentModal({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    padding: spacing.lg,
-    borderTopWidth: 1,
-    borderColor: colors.border,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  intro: {
-    color: colors.textMuted,
-    fontSize: 14,
-    marginTop: spacing.sm,
-    marginBottom: spacing.md,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.6)",
+      justifyContent: "flex-end",
+    },
+    sheet: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: radius.lg,
+      borderTopRightRadius: radius.lg,
+      padding: spacing.lg,
+      borderTopWidth: 1,
+      borderColor: colors.border,
+    },
+    title: {
+      color: colors.text,
+      fontSize: 22,
+      fontWeight: "800",
+    },
+    intro: {
+      color: colors.textMuted,
+      fontSize: 14,
+      marginTop: spacing.sm,
+      marginBottom: spacing.md,
+    },
+  });
+}

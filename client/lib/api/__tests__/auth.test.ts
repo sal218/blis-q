@@ -2,12 +2,7 @@
 jest.mock("@/lib/auth", () => ({ fetchWithAuth: jest.fn() }));
 
 import { fetchWithAuth } from "@/lib/auth";
-import {
-  signUp,
-  login,
-  resetPassword,
-  googleSignIn,
-} from "@/lib/api/auth";
+import { signUp, login, resetPassword, googleSignIn } from "@/lib/api/auth";
 
 const fetchMock = fetchWithAuth as unknown as jest.Mock;
 
@@ -52,7 +47,10 @@ describe("auth API client mapping", () => {
   it("login 401 → invalidCredentials", async () => {
     fetchMock.mockResolvedValue(res(401, { error: "Invalid credentials" }));
     const result = await login("a@b.pl", "x");
-    expect(result).toEqual({ ok: false, error: { kind: "invalidCredentials" } });
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "invalidCredentials" },
+    });
   });
 
   it("429 → rateLimited carrying retryAfter", async () => {

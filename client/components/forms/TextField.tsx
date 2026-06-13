@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
   type KeyboardTypeOptions,
   type TextInputProps,
 } from "react-native";
-import { colors, spacing, radius } from "@/constants/theme";
+import { useTheme } from "@/contexts/ThemeContext";
+import { spacing, radius, type ThemeColors } from "@/constants/theme";
 
 // Labelled text input with an inline error slot. `error` is already-localized
 // copy (resolve codes via @/lib/messages before passing). The border turns red
@@ -47,6 +48,8 @@ export function TextField({
   returnKeyType,
   rightAccessory,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [focused, setFocused] = useState(false);
 
   return (
@@ -89,43 +92,45 @@ export function TextField({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    color: colors.textMuted,
-    fontSize: 13,
-    fontWeight: "600",
-    marginBottom: spacing.xs,
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-  },
-  inputFocused: {
-    borderColor: colors.primary,
-  },
-  inputError: {
-    borderColor: colors.danger,
-  },
-  inputDisabled: {
-    opacity: 0.6,
-  },
-  input: {
-    flex: 1,
-    height: 50,
-    color: colors.text,
-    fontSize: 16,
-  },
-  errorText: {
-    color: colors.danger,
-    fontSize: 13,
-    marginTop: spacing.xs,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    wrap: {
+      marginBottom: spacing.md,
+    },
+    label: {
+      color: colors.textMuted,
+      fontSize: 13,
+      fontWeight: "600",
+      marginBottom: spacing.xs,
+    },
+    inputRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+    },
+    inputFocused: {
+      borderColor: colors.primary,
+    },
+    inputError: {
+      borderColor: colors.danger,
+    },
+    inputDisabled: {
+      opacity: 0.6,
+    },
+    input: {
+      flex: 1,
+      height: 50,
+      color: colors.text,
+      fontSize: 16,
+    },
+    errorText: {
+      color: colors.danger,
+      fontSize: 13,
+      marginTop: spacing.xs,
+    },
+  });
+}

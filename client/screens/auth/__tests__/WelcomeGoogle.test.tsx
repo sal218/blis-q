@@ -66,7 +66,9 @@ describe("WelcomeScreen — Google consent_required → consent → retry", () =
     fireEvent.press(
       screen.getByRole("checkbox", { name: strings.consent.accountCreation }),
     );
-    fireEvent.press(screen.getByRole("button", { name: strings.consent.confirm }));
+    fireEvent.press(
+      screen.getByRole("button", { name: strings.consent.confirm }),
+    );
 
     // The token was exchanged twice; the second call carried consent.
     await waitFor(() => expect(exchangeMock).toHaveBeenCalledTimes(2));

@@ -1,0 +1,73 @@
+// Session storage + native helpers mocked so we can assert call ORDER on
+// sign-out: push deregistration MUST run before the session is cleared (P1).
+jest.mock("@/lib/session", () => ({
+  loadSession: jest.fn().mockResolvedValue(null),
+  saveSession: jest.fn(),
+  clearSession: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock("@/notifications/usePushNotifications", () => ({
+  usePushNotifications: jest.fn(),
+  deregisterPushToken: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock("@/lib/googleAuth", () => ({
+  signOutGoogle: jest.fn().mockResolvedValue(undefined),
+}));
+
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react-native";
+import { ProfileScreen } from "@/screens/ProfileScreen";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { clearSession } from "@/lib/session";
+import { deregisterPushToken } from "@/notifications/usePushNotifications";
+import { strings } from "@/i18n";
+
+const deregisterMock = deregisterPushToken as unknown as jest.Mock;
+const clearSessionMock = clearSession as unknown as jest.Mock;
+
+function renderScreen() {
+  const navigation = { navigate: jest.fn() };
+  render(
+    <AuthProvider>
+      <ProfileScreen
+        navigation={navigation as never}
+        route={{ key: "p", name: "ProfileHome", params: undefined } as never}
+      />
+    </AuthProvider>,
+  );
+  return { navigation };
+}
+
+describe("ProfileScreen", () => {
+  it("renders the theme toggle + blocked-users entry", () => {
+    renderScreen();
+    expect(screen.getByText(strings.profile.appearance)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: strings.profile.blockedUsers }),
+    ).toBeTruthy();
+  });
+
+  it("blocked-users entry navigates to the BlockedUsers screen", () => {
+    const { navigation } = renderScreen();
+    fireEvent.press(
+      screen.getByRole("button", { name: strings.profile.blockedUsers }),
+    );
+    expect(navigation.navigate).toHaveBeenCalledWith("BlockedUsers");
+  });
+
+  it("sign out deregisters the push token BEFORE clearing the session", async () => {
+    renderScreen();
+    fireEvent.press(
+      screen.getByRole("button", { name: strings.common.signOut }),
+    );
+
+    await waitFor(() => expect(clearSessionMock).toHaveBeenCalled());
+    expect(deregisterMock).toHaveBeenCalled();
+    expect(deregisterMock.mock.invocationCallOrder[0]).toBeLessThan(
+      clearSessionMock.mock.invocationCallOrder[0],
+    );
+  });
+});

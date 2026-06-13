@@ -24,6 +24,25 @@ export const pl = {
     signOut: "Wyloguj się",
   },
 
+  tabs: {
+    communities: "Społeczności",
+    profile: "Profil",
+  },
+
+  profile: {
+    title: "Profil",
+    appearance: "Wygląd",
+    theme: "Motyw",
+    themeDark: "Ciemny",
+    themeLight: "Jasny",
+    blockedUsers: "Blokowani użytkownicy",
+  },
+
+  communities: {
+    tabTitle: "Społeczności",
+    comingSoon: "Społeczności pojawią się wkrótce.",
+  },
+
   welcome: {
     tagline: "Bezpieczna przestrzeń dla osób LGBT+ w Polsce",
     signIn: "Zaloguj się",

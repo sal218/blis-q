@@ -1,6 +1,11 @@
 jest.mock("@/lib/api/auth", () => ({ signUp: jest.fn() }));
 
-import { render, screen, fireEvent, waitFor } from "@testing-library/react-native";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react-native";
 import { SignUpScreen } from "@/screens/auth/SignUpScreen";
 import { signUp } from "@/lib/api/auth";
 import { strings } from "@/i18n";
@@ -40,12 +45,20 @@ describe("SignUpScreen — consent gating", () => {
       screen.getByLabelText(strings.common.displayName),
       "Ola",
     );
-    fireEvent.changeText(screen.getByLabelText(strings.common.email), "ola@example.pl");
-    fireEvent.changeText(screen.getByLabelText(strings.common.password), "supersecret");
+    fireEvent.changeText(
+      screen.getByLabelText(strings.common.email),
+      "ola@example.pl",
+    );
+    fireEvent.changeText(
+      screen.getByLabelText(strings.common.password),
+      "supersecret",
+    );
     fireEvent.press(
       screen.getByRole("checkbox", { name: strings.consent.accountCreation }),
     );
-    fireEvent.press(screen.getByRole("button", { name: strings.signUp.submit }));
+    fireEvent.press(
+      screen.getByRole("button", { name: strings.signUp.submit }),
+    );
 
     await waitFor(() => expect(signUpMock).toHaveBeenCalledTimes(1));
     expect(signUpMock.mock.calls[0][0].consentedTypes).toContain(

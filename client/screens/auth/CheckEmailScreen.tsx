@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Text, StyleSheet } from "react-native";
 import type { AuthScreenProps } from "@/navigation/types";
 import { AuthScreen } from "@/components/AuthScreen";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { TextLink } from "@/components/forms/TextLink";
 import { FormError } from "@/components/forms/FormError";
+import { useTheme } from "@/contexts/ThemeContext";
 import { resendVerification } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/messages";
 import { strings, format } from "@/i18n";
-import { colors, spacing } from "@/constants/theme";
+import { spacing, type ThemeColors } from "@/constants/theme";
 
 // Post-signup: tells the user to verify by email, with a rate-limit-aware resend.
 // Verification-first — there is no session yet; the user logs in after verifying.
@@ -17,6 +18,8 @@ export function CheckEmailScreen({
   navigation,
   route,
 }: AuthScreenProps<"CheckEmail">) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { email } = route.params;
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
@@ -58,16 +61,18 @@ export function CheckEmailScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  body: {
-    color: colors.textMuted,
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: spacing.lg,
-  },
-  resent: {
-    color: colors.success,
-    fontSize: 14,
-    marginBottom: spacing.md,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    body: {
+      color: colors.textMuted,
+      fontSize: 15,
+      lineHeight: 22,
+      marginBottom: spacing.lg,
+    },
+    resent: {
+      color: colors.success,
+      fontSize: 14,
+      marginBottom: spacing.md,
+    },
+  });
+}

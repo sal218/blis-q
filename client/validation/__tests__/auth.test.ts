@@ -12,12 +12,17 @@ describe("validateEmail", () => {
     expect(validateEmail("user@example.pl")).toBeNull();
   });
 
-  it.each(["", "nope", "a@b", "a@b.", "@example.pl", "user@@x.pl", "spa ce@x.pl"])(
-    "rejects %p",
-    (value) => {
-      expect(validateEmail(value)).toEqual({ code: "emailInvalid" });
-    },
-  );
+  it.each([
+    "",
+    "nope",
+    "a@b",
+    "a@b.",
+    "@example.pl",
+    "user@@x.pl",
+    "spa ce@x.pl",
+  ])("rejects %p", (value) => {
+    expect(validateEmail(value)).toEqual({ code: "emailInvalid" });
+  });
 });
 
 describe("validateNewPassword", () => {

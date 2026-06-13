@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Text, Platform, StyleSheet } from "react-native";
 import type { AuthScreenProps } from "@/navigation/types";
 import { AuthScreen } from "@/components/AuthScreen";
@@ -6,11 +6,12 @@ import { PasswordField } from "@/components/forms/PasswordField";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { TextLink } from "@/components/forms/TextLink";
 import { FormError } from "@/components/forms/FormError";
+import { useTheme } from "@/contexts/ThemeContext";
 import { resetPassword } from "@/lib/api/auth";
 import { validateNewPassword } from "@/validation/auth";
 import { fieldErrorMessage, apiErrorMessage } from "@/lib/messages";
 import { strings } from "@/i18n";
-import { colors, spacing } from "@/constants/theme";
+import { spacing, type ThemeColors } from "@/constants/theme";
 
 // Reached via the reset deep link (blisq://reset-password?token=…). P-9: the
 // token is captured ONCE into a ref and immediately scrubbed from the navigation
@@ -21,6 +22,8 @@ export function ResetPasswordScreen({
   navigation,
   route,
 }: AuthScreenProps<"ResetPassword">) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const tokenRef = useRef<string | null>(route.params?.token ?? null);
   const [hasToken] = useState(() => !!route.params?.token);
 
@@ -112,17 +115,19 @@ export function ResetPasswordScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  success: {
-    color: colors.success,
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: spacing.lg,
-  },
-  invalid: {
-    color: colors.danger,
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: spacing.lg,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    success: {
+      color: colors.success,
+      fontSize: 15,
+      lineHeight: 22,
+      marginBottom: spacing.lg,
+    },
+    invalid: {
+      color: colors.danger,
+      fontSize: 15,
+      lineHeight: 22,
+      marginBottom: spacing.lg,
+    },
+  });
+}

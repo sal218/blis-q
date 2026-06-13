@@ -36,6 +36,8 @@ export const pl = {
     themeDark: "Ciemny",
     themeLight: "Jasny",
     blockedUsers: "Blokowani użytkownicy",
+    blockedUsersComingSoon:
+      "Lista zablokowanych użytkowników pojawi się wkrótce.",
   },
 
   communities: {

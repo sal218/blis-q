@@ -14,6 +14,7 @@ jest.mock("@/lib/googleAuth", () => ({
 }));
 
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -28,7 +29,10 @@ import { strings } from "@/i18n";
 const deregisterMock = deregisterPushToken as unknown as jest.Mock;
 const clearSessionMock = clearSession as unknown as jest.Mock;
 
-function renderScreen() {
+// Render, then flush AuthProvider's async session-bootstrap effect with an
+// empty act() so its state updates are wrapped and no warnings leak. (render is
+// already act-wrapped internally, so it must not be nested inside another act.)
+async function renderScreen() {
   const navigation = { navigate: jest.fn() };
   render(
     <AuthProvider>
@@ -38,20 +42,21 @@ function renderScreen() {
       />
     </AuthProvider>,
   );
+  await act(async () => {});
   return { navigation };
 }
 
 describe("ProfileScreen", () => {
-  it("renders the theme toggle + blocked-users entry", () => {
-    renderScreen();
+  it("renders the theme toggle + blocked-users entry", async () => {
+    await renderScreen();
     expect(screen.getByText(strings.profile.appearance)).toBeTruthy();
     expect(
       screen.getByRole("button", { name: strings.profile.blockedUsers }),
     ).toBeTruthy();
   });
 
-  it("blocked-users entry navigates to the BlockedUsers screen", () => {
-    const { navigation } = renderScreen();
+  it("blocked-users entry navigates to the BlockedUsers screen", async () => {
+    const { navigation } = await renderScreen();
     fireEvent.press(
       screen.getByRole("button", { name: strings.profile.blockedUsers }),
     );
@@ -59,7 +64,7 @@ describe("ProfileScreen", () => {
   });
 
   it("sign out deregisters the push token BEFORE clearing the session", async () => {
-    renderScreen();
+    await renderScreen();
     fireEvent.press(
       screen.getByRole("button", { name: strings.common.signOut }),
     );

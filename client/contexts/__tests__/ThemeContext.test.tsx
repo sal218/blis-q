@@ -1,5 +1,6 @@
 import { Text, Pressable } from "react-native";
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -18,11 +19,12 @@ const { ThemeProvider, useTheme } = jest.requireActual(
 const THEME_KEY = "blis-q.theme-mode";
 
 function Probe() {
-  const { mode, colors, toggleMode } = useTheme();
+  const { mode, colors, toggleMode, isReady } = useTheme();
   return (
     <>
       <Text testID="mode">{mode}</Text>
       <Text testID="bg">{colors.background}</Text>
+      <Text testID="ready">{String(isReady)}</Text>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="t"
@@ -34,27 +36,34 @@ function Probe() {
   );
 }
 
+// Render, then flush the async rehydrate effect with an empty act() so its
+// state updates are wrapped and no warnings leak. (render is already
+// act-wrapped internally, so it must not be nested inside another act.)
+async function mount() {
+  render(
+    <ThemeProvider>
+      <Probe />
+    </ThemeProvider>,
+  );
+  await act(async () => {});
+  await waitFor(() =>
+    expect(screen.getByTestId("ready").props.children).toBe("true"),
+  );
+}
+
 beforeEach(async () => {
   await SecureStore.deleteItemAsync(THEME_KEY);
 });
 
 describe("ThemeContext", () => {
-  it("defaults to dark and exposes the dark palette", () => {
-    render(
-      <ThemeProvider>
-        <Probe />
-      </ThemeProvider>,
-    );
+  it("defaults to dark and exposes the dark palette", async () => {
+    await mount();
     expect(screen.getByTestId("mode").props.children).toBe("dark");
     expect(screen.getByTestId("bg").props.children).toBe(darkColors.background);
   });
 
   it("toggle switches the palette and persists the choice", async () => {
-    render(
-      <ThemeProvider>
-        <Probe />
-      </ThemeProvider>,
-    );
+    await mount();
 
     fireEvent.press(screen.getByLabelText("t"));
 
@@ -70,15 +79,9 @@ describe("ThemeContext", () => {
   it("rehydrates the persisted mode on mount", async () => {
     await SecureStore.setItemAsync(THEME_KEY, "light");
 
-    render(
-      <ThemeProvider>
-        <Probe />
-      </ThemeProvider>,
-    );
+    await mount();
 
-    await waitFor(() =>
-      expect(screen.getByTestId("mode").props.children).toBe("light"),
-    );
+    expect(screen.getByTestId("mode").props.children).toBe("light");
     expect(screen.getByTestId("bg").props.children).toBe(
       lightColors.background,
     );

@@ -13,7 +13,7 @@ export function BlockedUsersScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.root}>
-      <Text style={styles.body}>{strings.communities.comingSoon}</Text>
+      <Text style={styles.body}>{strings.profile.blockedUsersComingSoon}</Text>
     </View>
   );
 }

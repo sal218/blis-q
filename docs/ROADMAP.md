@@ -15,13 +15,13 @@
 
 ## Legend
 
-| Tag | Meaning |
-|---|---|
-| 👨‍💻 PGC | Pretty Good Company (the developers / data processor) does it |
-| 🏢 Client | The client (data controller) does it — PGC cannot do these |
-| 🔒 | External blocker — depends on a third party / lead time outside our control |
-| ⛔ | Hard gate — downstream work cannot start until this is done |
-| 🧪 | Ships with an integration test on the same branch (ENGINEERING_STANDARDS §11) |
+| Tag       | Meaning                                                                       |
+| --------- | ----------------------------------------------------------------------------- |
+| 👨‍💻 PGC    | Pretty Good Company (the developers / data processor) does it                 |
+| 🏢 Client | The client (data controller) does it — PGC cannot do these                    |
+| 🔒        | External blocker — depends on a third party / lead time outside our control   |
+| ⛔        | Hard gate — downstream work cannot start until this is done                   |
+| 🧪        | Ships with an integration test on the same branch (ENGINEERING_STANDARDS §11) |
 
 **Owner reality:** legal, store-account ownership, and the DPIA are **client obligations** — PGC builds the systems but cannot sign the DPA, author the privacy policy, or enrol the Apple account on the client's behalf. Chase these early; they have multi-day-to-multi-week lead times.
 
@@ -44,13 +44,16 @@
 These have lead times and **block** later work. Kick all of them off in the first days.
 
 ### Developer accounts — 🏢 Client (start day 1; some take days)
+
 - ⛔🔒 **Apple Developer Program** — $99/yr, enrolment + identity verification can take **several days to 2 weeks**. Blocks TestFlight, App Store. **Start now.**
 - 🔒 **Google Play Developer** — $25 one-time, ~1–2 days. Blocks Play testing/submission.
 - **App Store Connect** app record + **Play Console** app record (after accounts exist).
-- *Why client:* store accounts and their banking/tax agreements belong to the business entity that publishes the app.
+- _Why client:_ store accounts and their banking/tax agreements belong to the business entity that publishes the app.
 
 ### Infrastructure provisioning — 👨‍💻 PGC (Sprint 0–1)
+
 All EU-region, **regions are irreversible at creation** (TRANSFER §3.1):
+
 - ⛔ **Supabase** project — **Frankfurt (eu-central-1)**. Configure GoTrue auth (email/password + Google). Apply `supabase/rls.sql`. `npm run db:push`.
 - ⛔ **Separate Supabase TEST project** + set `BLISQ_TEST_DATABASE_URL` / `BLISQ_TEST_SUPABASE_URL` / `BLISQ_TEST_SUPABASE_SERVICE_ROLE_KEY` as GitHub secrets → flips the gated integration CI job live.
 - ⛔ **Upstash Redis** — **Frankfurt** (default is US East — **select EU manually**).
@@ -61,6 +64,7 @@ All EU-region, **regions are irreversible at creation** (TRANSFER §3.1):
 - **Sentry** — EU data region.
 
 ### Legal / compliance kickoff — 🏢 Client (start day 1; long lead times)
+
 - ⛔🔒 **DPA** signed between the client (controller) and PGC (processor) — GDPR Art. 28. **Required before PGC handles any real user data.** Sign before beta.
 - ⛔🔒 **DPIA** with a lawyer — Art. 35 (Article 9 data, large-scale, vulnerable persons, location). **Schema must not be finalised until DPIA outputs are known** (COMPLIANCE §4). Target completion by end of Sprint 2.
 - 🔒 Engage counsel for **Privacy Policy** + **Terms of Service** (Polish) — must be **live at a URL before App Store submission and before any real users**.
@@ -68,6 +72,7 @@ All EU-region, **regions are irreversible at creation** (TRANSFER §3.1):
 - **Map provider DPA** (Mapbox / OSM preferred; Google needs a DPA) for safe places.
 
 ### Design kickoff — 👨‍💻 PGC + designer
+
 - Brand kit (indigo/violet, minimal), **app icon** (iOS/Android/notification), Figma **component library**.
 - Begin rolling **screen mockups** (auth + onboarding first) — mockups must lead screen build by ~1 sprint.
 
@@ -92,8 +97,8 @@ All EU-region, **regions are irreversible at creation** (TRANSFER §3.1):
 
 - **Backend (👨‍💻):**
   - 🧪 `GET/PATCH /api/profile` (displayName, avatar via R2 presigned upload + `confirmUpload`), `POST /api/account/change-password`.
-  - 🧪 ⛔ **`DELETE /api/account`** — full transactional anonymisation cascade (COMPLIANCE §5.2): clear PII, content → `[deleted]`, drop memberships/RSVPs/tokens/consents, revoke Supabase sessions, **`invalidateProfileCache`**, write `audit_log`. *(tracker P-2)*
-  - 🧪 **`GET /api/account/export`** — portable JSON of all user data (Art. 20). *(tracker P-1)*
+  - 🧪 ⛔ **`DELETE /api/account`** — full transactional anonymisation cascade (COMPLIANCE §5.2): clear PII, content → `[deleted]`, drop memberships/RSVPs/tokens/consents, revoke Supabase sessions, **`invalidateProfileCache`**, write `audit_log`. _(tracker P-2)_
+  - 🧪 **`GET /api/account/export`** — portable JSON of all user data (Art. 20). _(tracker P-1)_
 - **Mobile (👨‍💻):** complete auth flow wired to API; **consent UI at signup** (explicit, no pre-tick); profile view/edit/avatar; account settings (change password, delete account, export).
 - **Admin (👨‍💻):** users list + detail (read).
 - **Legal/Design:** ⛔🔒 **DPIA completed** → lock schema. Privacy Policy / ToS first draft → legal review. Community/profile mockups.
@@ -101,7 +106,7 @@ All EU-region, **regions are irreversible at creation** (TRANSFER §3.1):
 
 ## Sprint 3 — Communities + membership + block/mute (≈ Jul 7 – 18)
 
-- **Backend (👨‍💻):** 🧪 communities `create/browse/get/join/leave`, `community_memberships` (member/moderator/admin roles), **block/mute** endpoints (build now — retrofitting touches every content query, TRANSFER §5.3), generic `POST /api/reports`.
+- **Backend (👨‍💻):** 🧪 communities `create/browse/get/join/leave`, `community_memberships` (member/moderator/admin roles), **block** endpoints (build now — retrofitting touches every content query, TRANSFER §5.3), generic `POST /api/reports`. **Note:** only **block** ships in v1 — **mute is deferred** (no mute schema/model; adding one is a DPIA-gated schema change). The earlier "block/mute" wording is block-only until/unless mute is scoped post-DPIA.
 - **Mobile (👨‍💻):** community browse / detail / create / join-leave screens; block/mute UI.
 - **Admin (👨‍💻):** communities CRUD; reports queue (read).
 - **Design:** chat + events mockups.
@@ -137,7 +142,7 @@ All EU-region, **regions are irreversible at creation** (TRANSFER §3.1):
 **Goal:** content features done; **store pipeline starts now, not at the end.**
 
 - **Backend (👨‍💻):** 🧪 `GET /api/safe-places` (filter by category, **city-level only, ephemeral query coords — no GPS persistence**, COMPLIANCE §5.8); resources/support content API; emergency-contacts content.
-- **Mobile (👨‍💻):** **map view** (🔒 Mapbox/OSM with GDPR terms — *not* Google unless DPA), category filter, safe-place detail; resources/support screens; emergency contacts.
+- **Mobile (👨‍💻):** **map view** (🔒 Mapbox/OSM with GDPR terms — _not_ Google unless DPA), category filter, safe-place detail; resources/support screens; emergency contacts.
 - **Admin (👨‍💻):** safe-places CRUD, resources CRUD.
 - **Store (👨‍💻 + 🏢):** ⛔ **EAS production profile** with the Fly.io API URL; first **TestFlight internal** build; **Android internal testing** track; 🔒 **Apple content-policy review** for LGBT+ content (know the rules before submission); **age-rating** questionnaires.
 - **Legal (🏢🔒):** ⛔ **Privacy Policy + ToS LIVE at a URL** (required for store listings + first real testers); **map provider DPA** documented.
@@ -187,18 +192,18 @@ All EU-region, **regions are irreversible at creation** (TRANSFER §3.1):
 
 ## Critical path & external blockers (book these early)
 
-| Item | Owner | Lead time | Blocks | Start by |
-|---|---|---|---|---|
-| Apple Developer enrolment | 🏢 | days–2 wks | TestFlight, App Store | Week 0 |
-| DPA signed | 🏢 | days–weeks | PGC handling real user data, beta | Week 0 |
-| DPIA (lawyer) | 🏢 | weeks | **Schema lock**, location/chat finalisation | by end S2 |
-| Privacy Policy + ToS live (PL) | 🏢 | weeks | Store submission, real users | by S7 |
-| Resend domain verification | 👨‍💻 | hours–days | Real transactional email | Week 0 |
-| Map provider DPA | 🏢 | days | Safe places launch | by S7 |
-| IAP store agreements (banking/tax) | 🏢 | days–weeks | RevenueCat products | by S8 |
-| App Store review | 🔒 | 2–3 wks (+ rejections) | Launch | submit S10 |
-| Play review | 🔒 | ~1 wk | Launch | submit S10 |
-| Third-party security audit | 🔒 | book ahead | Launch sign-off | book by S9, run S11 |
+| Item                               | Owner | Lead time              | Blocks                                      | Start by            |
+| ---------------------------------- | ----- | ---------------------- | ------------------------------------------- | ------------------- |
+| Apple Developer enrolment          | 🏢    | days–2 wks             | TestFlight, App Store                       | Week 0              |
+| DPA signed                         | 🏢    | days–weeks             | PGC handling real user data, beta           | Week 0              |
+| DPIA (lawyer)                      | 🏢    | weeks                  | **Schema lock**, location/chat finalisation | by end S2           |
+| Privacy Policy + ToS live (PL)     | 🏢    | weeks                  | Store submission, real users                | by S7               |
+| Resend domain verification         | 👨‍💻    | hours–days             | Real transactional email                    | Week 0              |
+| Map provider DPA                   | 🏢    | days                   | Safe places launch                          | by S7               |
+| IAP store agreements (banking/tax) | 🏢    | days–weeks             | RevenueCat products                         | by S8               |
+| App Store review                   | 🔒    | 2–3 wks (+ rejections) | Launch                                      | submit S10          |
+| Play review                        | 🔒    | ~1 wk                  | Launch                                      | submit S10          |
+| Third-party security audit         | 🔒    | book ahead             | Launch sign-off                             | book by S9, run S11 |
 
 ## Client (🏢) vs PGC (👨‍💻) responsibilities
 
@@ -227,4 +232,4 @@ This is **aggressive for two developers** even with AI. If a sprint slips, prote
 
 ---
 
-*Living document — update at each sprint boundary. Pair with `CLAUDE.md`'s Issue Tracker (P-1..P-5 blockers, accepted risks AR-1/AR-2) and the four context docs.*
+_Living document — update at each sprint boundary. Pair with `CLAUDE.md`'s Issue Tracker (P-1..P-5 blockers, accepted risks AR-1/AR-2) and the four context docs._

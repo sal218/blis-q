@@ -9,7 +9,7 @@ import {
   count,
   ilike,
 } from "drizzle-orm";
-import type { MembershipRole } from "@shared/types";
+import type { MembershipRole, PublicUser } from "@shared/types";
 import { db } from "./db";
 import {
   users,
@@ -883,6 +883,110 @@ export class DatabaseStorage {
       ipAddress: ipAddress ?? null,
     });
     return "left";
+  }
+
+  // ── Blocks & reports (user-facing safety primitives) ─────────────────────────
+
+  // Block another user. Idempotent at the DB via onConflictDoNothing on the
+  // unique (blockerId, blockedId) constraint: "created" on a fresh block (route
+  // 201, audited), "already" when it existed (route 200, no new audit),
+  // "not_found" when the target user doesn't exist. Self-block is rejected by
+  // the route before this is called. Block is one-directional by the contract —
+  // there is NO mute model (deferred, DPIA-gated schema change).
+  async blockUser(
+    blockerId: string,
+    blockedId: string,
+    ipAddress?: string | null,
+  ): Promise<"created" | "already" | "not_found"> {
+    const [target] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, blockedId))
+      .limit(1);
+    if (!target) return "not_found";
+
+    const [row] = await db
+      .insert(blocks)
+      .values({ blockerId, blockedId })
+      .onConflictDoNothing()
+      .returning({ id: blocks.id });
+    if (!row) return "already";
+
+    await db.insert(auditLog).values({
+      actorId: blockerId,
+      action: "user.blocked",
+      resourceType: "user",
+      resourceId: blockedId,
+      ipAddress: ipAddress ?? null,
+    });
+    return "created";
+  }
+
+  // Unblock. Idempotent: "removed" when a block existed (audited), "not_blocked"
+  // otherwise. Both map to 200 in the route.
+  async unblockUser(
+    blockerId: string,
+    blockedId: string,
+    ipAddress?: string | null,
+  ): Promise<"removed" | "not_blocked"> {
+    const removed = await db
+      .delete(blocks)
+      .where(
+        and(eq(blocks.blockerId, blockerId), eq(blocks.blockedId, blockedId)),
+      )
+      .returning({ id: blocks.id });
+    if (removed.length === 0) return "not_blocked";
+
+    await db.insert(auditLog).values({
+      actorId: blockerId,
+      action: "user.unblocked",
+      resourceType: "user",
+      resourceId: blockedId,
+      ipAddress: ipAddress ?? null,
+    });
+    return "removed";
+  }
+
+  // The users the caller has blocked, as PublicUser (never emails), newest first.
+  async listBlocks(blockerId: string): Promise<PublicUser[]> {
+    return db
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(blocks)
+      .innerJoin(users, eq(users.id, blocks.blockedId))
+      .where(eq(blocks.blockerId, blockerId))
+      .orderBy(desc(blocks.createdAt));
+  }
+
+  // Insert a user-submitted report into the moderation queue (status defaults to
+  // "pending"). The audit entry references the report record only — never the
+  // free-text reason (which may contain PII) — so it can't leak content.
+  // Moderation actions (resolve/dismiss/ban/remove) are a separate admin path.
+  async submitReport(
+    reporterId: string,
+    input: { resourceType: string; resourceId: string; reason: string },
+    ipAddress?: string | null,
+  ): Promise<void> {
+    const [row] = await db
+      .insert(reports)
+      .values({
+        reporterId,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+        reason: input.reason,
+      })
+      .returning({ id: reports.id });
+
+    await db.insert(auditLog).values({
+      actorId: reporterId,
+      action: "report.submitted",
+      resourceType: "report",
+      resourceId: row.id,
+      ipAddress: ipAddress ?? null,
+    });
   }
 
   // ── Community membership ────────────────────────────────────────────────────

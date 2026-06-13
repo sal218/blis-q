@@ -2,11 +2,11 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-11 — Sprint 2 complete (#12 merged, P-1/P-2 closed); starting Sprint 3 (`feat/communities`)._
+_Last updated: 2026-06-11 — communities merged (#13); building `feat/block-reports` (Sprint 3 slice 2)._
 
 ## Current phase
 
-**Sprint 3 — Communities + membership + block/mute (ROADMAP Sprint 3). First feature pillar. Account/GDPR scope (Sprint 2) is done.**
+**Sprint 3 — Communities + block + reports (ROADMAP Sprint 3). First feature pillar. Account/GDPR scope (Sprint 2) is done. NB: only block ships — mute is deferred (DPIA-gated schema change).**
 
 ## Merged to `main`
 
@@ -24,24 +24,25 @@ _Last updated: 2026-06-11 — Sprint 2 complete (#12 merged, P-1/P-2 closed); st
 | #10 | `feat/account-profile` — Sprint-2 slice 1: `GET/PATCH /api/v1/profile`, `POST /account/change-password` (verification-session revoked on every exit), `GET /account/consents`; closes the P-1 "no GET /me" gap |
 | #11 | `feat/account-export` — Sprint-2 slice 2: `GET /api/v1/account/export` (GDPR Art. 20); expanded shape (notif prefs, blocks, reports, subscription), soft-deleted incl., security exclusions documented         |
 | #12 | `feat/account-erasure` — Sprint-2 slice 3: `DELETE /api/v1/account` (GDPR Art. 17) anonymisation cascade across every table; **closes P-1/P-2**                                                                |
+| #13 | `feat/communities` — Sprint-3 slice 1: communities create/browse/get/join/leave, creator→admin, last-admin-leave guard (409), audited                                                                          |
 
 **🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed).
 
 ## In progress
 
-- **`feat/communities`** — Sprint-3 **slice 1 of ~3**: the communities core. **Status: implemented (Codex-validated plan); 9 backend integration tests green; types/lint/prettier clean. Awaiting Codex review before PR.**
-  - Endpoints (🔑, docs/API.md §7): `POST /api/v1/communities` (201; creator becomes **admin** atomically), `GET /api/v1/communities` (offset page + `?search=`, with memberCount + caller role), `GET /api/v1/communities/:id` (404 missing, 400 bad uuid), `POST /:id/join` (**409 if already member**, 404 missing; rate-limited `communityJoinUser`), `DELETE /:id/leave` (idempotent).
-  - **User-created** communities (Codex-confirmed; creator → admin). No schema changes (existing `communities`/`community_memberships`). New `communityCreateUser` rate limiter. **Audit** on creation + join/leave (COMPLIANCE).
-  - Storage-owned (`createCommunity`/`listCommunities`/`getCommunity`/`joinCommunity`/`leaveCommunity`); creator-admin membership created in one transaction.
-  - Deferred to later slices: PATCH/DELETE community, member list, role management.
-- **Next Sprint-3 slices:** `feat/block-reports` (block/unblock/list + generic `POST /reports`) — **block only; mute is deferred** (the `blocks` table has no mute model; adding one is a schema change gated on DPIA). Then mobile (`feat/communities-mobile`) + admin (communities CRUD + reports read).
+- **`feat/block-reports`** — Sprint-3 **slice 2**: user-facing safety primitives. **Status: implemented; 13 backend integration tests green; types/lint/prettier clean. Awaiting Codex review before PR.**
+  - Endpoints (🔑, docs/API.md §12): `POST /api/v1/blocks` (`201` new / `200` already / `400` self-block / `404` unknown user; `blockUser` limiter), `DELETE /api/v1/blocks/:userId` (idempotent `200`), `GET /api/v1/blocks` (`PublicUser[]`), `POST /api/v1/reports` (thin queue insert, generic `201`; `reportUser` limiter).
+  - **Block only — mute deferred** (no mute schema/model; DPIA-gated). Block is one-directional. Self-block prevented; block/unblock idempotent. Audited `user.blocked` / `user.unblocked` / `report.submitted` (report audit references the **report record, not the free-text reason** — privacy-safe). Reports are submit-only here; moderation actions are admin/Sprint-4.
+  - Storage-owned (`blockUser`/`unblockUser`/`listBlocks`/`submitReport`); no route-side DB access. New `blockUser` rate limiter.
+- **Next Sprint-3 slices:** mobile (`feat/communities-mobile`, against the new mockups) + admin (communities CRUD + reports queue read).
 - **Backlog (Codex):** "Deactivate account" = a **reversible pause** (not GDPR erasure) — parked in [ROADMAP](ROADMAP.md) **Sprint 4**.
 
 ## Auth endpoints live (`/api/v1/auth/*`)
 
 `signup` · `resend-verification` · `login` · `google` · `forgot-password` · `reset-password`. (All merged. `google` live flow still needs the Supabase Google-provider dashboard step before a real device can use it.) **No regular-user `GET /me`/`/account` endpoint yet** (P-1) — the mobile app persists the profile from the auth response.
 Account (🔑): `GET/PATCH /api/v1/profile` · `POST /api/v1/account/change-password` · `GET /api/v1/account/consents` (merged #10) · `GET /api/v1/account/export` (merged #11) · `DELETE /api/v1/account` (merged #12). **Account/GDPR surface complete.**
-Communities (🔑, this branch): `POST /api/v1/communities` · `GET /api/v1/communities` · `GET /:id` · `POST /:id/join` · `DELETE /:id/leave`.
+Communities (🔑, merged #13): `POST /api/v1/communities` · `GET /api/v1/communities` · `GET /:id` · `POST /:id/join` · `DELETE /:id/leave`.
+Safety (🔑, this branch): `POST /api/v1/blocks` · `DELETE /api/v1/blocks/:userId` · `GET /api/v1/blocks` · `POST /api/v1/reports`.
 Admin: **`POST /api/admin/login`** (#9, merged) + `GET /api/admin/me`.
 
 ## Sprint status

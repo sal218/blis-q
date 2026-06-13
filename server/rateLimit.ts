@@ -60,6 +60,7 @@ const limiters = {
   // Content & community — keyed by user ID
   contentCreateUser: makeLimiter(60, "1 m"), // community posts + chat messages
   reportUser: makeLimiter(10, "1 h"),
+  blockUser: makeLimiter(30, "1 h"), // block/unblock mutations
   communityCreateUser: makeLimiter(10, "1 h"), // creating communities
   communityJoinUser: makeLimiter(20, "1 h"),
   pushTokenUser: makeLimiter(20, "1 h"), // register/deregister on launch + logout
@@ -229,6 +230,12 @@ export async function checkReportRateLimit(
   userId: string,
 ): Promise<RateLimitResult> {
   return check(limiters.reportUser, `report:user:${userId}`);
+}
+
+export async function checkBlockRateLimit(
+  userId: string,
+): Promise<RateLimitResult> {
+  return check(limiters.blockUser, `block:user:${userId}`);
 }
 
 export async function checkCommunityCreateRateLimit(

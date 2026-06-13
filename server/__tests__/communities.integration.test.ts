@@ -282,4 +282,43 @@ describe("DELETE /api/v1/communities/:id/leave", () => {
       .where(eq(auditLog.actorId, joiner));
     expect(audits.some((a) => a.action === "community.member_left")).toBe(true);
   });
+
+  it("sole admin cannot leave → 409 (community keeps ≥1 admin)", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner, "Sam Admin");
+    mockUser = { id: owner };
+
+    const res = await request(app).delete(`/api/v1/communities/${cid}/leave`);
+    expect(res.status).toBe(409);
+
+    // Still a member (admin) — nothing removed.
+    const rows = await db
+      .select()
+      .from(communityMemberships)
+      .where(eq(communityMemberships.communityId, cid));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].role).toBe("admin");
+  });
+
+  it("an admin CAN leave when another admin remains → 200", async () => {
+    const owner = await seedUser();
+    const second = await seedUser();
+    const cid = await seedCommunity(owner, "Dwóch Adminów");
+    // Promote the second user to admin directly (role management is a later slice).
+    await db
+      .insert(communityMemberships)
+      .values({ communityId: cid, userId: second, role: "admin" });
+
+    mockUser = { id: owner };
+    const res = await request(app).delete(`/api/v1/communities/${cid}/leave`);
+    expect(res.status).toBe(200);
+
+    // Owner gone; the second admin remains.
+    const remaining = await db
+      .select()
+      .from(communityMemberships)
+      .where(eq(communityMemberships.communityId, cid));
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].userId).toBe(second);
+  });
 });

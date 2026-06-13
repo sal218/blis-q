@@ -822,14 +822,16 @@ export class DatabaseStorage {
   }
 
   // Leave: removes the caller's membership. Idempotent ("not_member" when there
-  // was nothing to remove). NOTE: this slice does not protect the last admin —
-  // a sole admin can leave and orphan the community; role management lands in a
-  // later slice.
+  // was nothing to remove). INVARIANT: a community must always keep at least one
+  // admin — the sole admin cannot leave ("last_admin" → route 409); they must
+  // hand off the role first (role management lands in a later slice). (A rare
+  // race where two admins leave simultaneously could still drop the count to 0;
+  // stronger row-locking is deferred with role management.)
   async leaveCommunity(
     communityId: string,
     userId: string,
     ipAddress?: string | null,
-  ): Promise<"left" | "not_member" | "not_found"> {
+  ): Promise<"left" | "not_member" | "not_found" | "last_admin"> {
     const [community] = await db
       .select({ id: communities.id })
       .from(communities)
@@ -839,16 +841,39 @@ export class DatabaseStorage {
       .limit(1);
     if (!community) return "not_found";
 
-    const removed = await db
-      .delete(communityMemberships)
+    const [membership] = await db
+      .select({ role: communityMemberships.role })
+      .from(communityMemberships)
       .where(
         and(
           eq(communityMemberships.communityId, communityId),
           eq(communityMemberships.userId, userId),
         ),
       )
-      .returning({ id: communityMemberships.id });
-    if (removed.length === 0) return "not_member";
+      .limit(1);
+    if (!membership) return "not_member";
+
+    if (membership.role === "admin") {
+      const [{ admins }] = await db
+        .select({ admins: count() })
+        .from(communityMemberships)
+        .where(
+          and(
+            eq(communityMemberships.communityId, communityId),
+            eq(communityMemberships.role, "admin"),
+          ),
+        );
+      if (Number(admins) <= 1) return "last_admin";
+    }
+
+    await db
+      .delete(communityMemberships)
+      .where(
+        and(
+          eq(communityMemberships.communityId, communityId),
+          eq(communityMemberships.userId, userId),
+        ),
+      );
 
     await db.insert(auditLog).values({
       actorId: userId,

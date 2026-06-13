@@ -164,6 +164,12 @@ async function handleLeave(req: Request, res: Response): Promise<Response> {
     if (result === "not_found") {
       return res.status(404).json({ error: "Not found" });
     }
+    if (result === "last_admin") {
+      // The sole admin can't orphan the community — hand off the role first.
+      return res
+        .status(409)
+        .json({ error: "Community must have at least one admin" });
+    }
     // "left" and "not_member" both succeed — leaving is idempotent.
     return res.status(200).json({ ok: true });
   } catch (err) {

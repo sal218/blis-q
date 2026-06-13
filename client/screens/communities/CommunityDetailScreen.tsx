@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import {
   View,
   Text,
-  Image,
   ScrollView,
   ActivityIndicator,
   StyleSheet,
@@ -11,84 +10,39 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { FormError } from "@/components/forms/FormError";
-import {
-  getCommunity,
-  joinCommunity,
-  leaveCommunity,
-} from "@/lib/api/communities";
-import { communityApiErrorMessage } from "@/lib/messages";
+import { Avatar } from "@/components/Avatar";
+import { useCommunityDetail } from "@/hooks/useCommunityDetail";
 import { strings, format } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
-import type { CommunityDTO } from "@shared/types";
 import type { EventsStackParamList } from "@/navigation/AppTabs";
 
 // Community detail — join/leave. Design ref:
 // assets/event-communities-details-screen.png (we render only what the API
-// provides this slice: name, member count, description, join/leave; the
-// feed/members/resources tabs in the mockup are later slices).
-//
-// Both 409s map to `conflict`; the call site picks the copy — join → "already a
-// member", leave → "sole admin must hand off the role first" (Codex refinement).
+// provides this slice: name, member count, description, join/leave). Data lives
+// in useCommunityDetail; this screen is composition only.
 
 type Props = NativeStackScreenProps<EventsStackParamList, "CommunityDetail">;
-
-type Status = "loading" | "ready" | "error";
 
 export function CommunityDetailScreen({ route, navigation }: Props) {
   const { id } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const {
+    community,
+    status,
+    loadError,
+    actionLoading,
+    actionError,
+    reload,
+    join,
+    leave,
+  } = useCommunityDetail(id);
 
-  const [community, setCommunity] = useState<CommunityDTO | null>(null);
-  const [status, setStatus] = useState<Status>("loading");
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setStatus("loading");
-    const res = await getCommunity(id);
-    if (res.ok) {
-      setCommunity(res.data);
-      navigation.setOptions({ title: res.data.name });
-      setStatus("ready");
-    } else {
-      setLoadError(communityApiErrorMessage(res.error, strings.errors.generic));
-      setStatus("error");
-    }
-  }, [id, navigation]);
-
+  // Title the native header with the community name once it loads (view-only
+  // side effect — no data fetching here).
   useEffect(() => {
-    load();
-  }, [load]);
-
-  const onJoin = async () => {
-    setActionLoading(true);
-    setActionError(null);
-    const res = await joinCommunity(id);
-    setActionLoading(false);
-    if (res.ok) {
-      await load();
-    } else {
-      setActionError(
-        communityApiErrorMessage(res.error, strings.communities.alreadyMember),
-      );
-    }
-  };
-
-  const onLeave = async () => {
-    setActionLoading(true);
-    setActionError(null);
-    const res = await leaveCommunity(id);
-    setActionLoading(false);
-    if (res.ok) {
-      await load();
-    } else {
-      setActionError(
-        communityApiErrorMessage(res.error, strings.communities.leaveSoleAdmin),
-      );
-    }
-  };
+    if (community) navigation.setOptions({ title: community.name });
+  }, [community, navigation]);
 
   if (status === "loading") {
     return (
@@ -103,7 +57,7 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
       <View style={[styles.root, styles.centered]}>
         <Text style={styles.errorText}>{loadError}</Text>
         <View style={styles.fullWidth}>
-          <PrimaryButton label={strings.communities.retry} onPress={load} />
+          <PrimaryButton label={strings.communities.retry} onPress={reload} />
         </View>
       </View>
     );
@@ -114,15 +68,12 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        {community.imageUrl ? (
-          <Image source={{ uri: community.imageUrl }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatar, styles.avatarFallback]}>
-            <Text style={styles.avatarLetter}>
-              {community.name.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-        )}
+        <Avatar
+          uri={community.imageUrl}
+          name={community.name}
+          size={88}
+          borderRadius={radius.lg}
+        />
         <Text style={styles.name}>{community.name}</Text>
         <Text style={styles.meta}>
           {format(strings.communities.members, {
@@ -142,7 +93,7 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
 
       <PrimaryButton
         label={isMember ? strings.communities.leave : strings.communities.join}
-        onPress={isMember ? onLeave : onJoin}
+        onPress={isMember ? leave : join}
         loading={actionLoading}
         variant={isMember ? "secondary" : "primary"}
       />
@@ -177,27 +128,12 @@ function createStyles(colors: ThemeColors) {
       alignItems: "center",
       marginBottom: spacing.lg,
     },
-    avatar: {
-      width: 88,
-      height: 88,
-      borderRadius: radius.lg,
-      marginBottom: spacing.md,
-    },
-    avatarFallback: {
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.primary,
-    },
-    avatarLetter: {
-      color: "#FFFFFF",
-      fontSize: 36,
-      fontWeight: "700",
-    },
     name: {
       color: colors.text,
       fontSize: 24,
       fontWeight: "800",
       textAlign: "center",
+      marginTop: spacing.md,
     },
     meta: {
       color: colors.textMuted,

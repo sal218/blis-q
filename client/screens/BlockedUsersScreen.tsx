@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   View,
   Text,
-  Image,
   FlatList,
   Pressable,
   ActivityIndicator,
@@ -10,56 +9,21 @@ import {
 } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
-import { listBlocks, unblockUser } from "@/lib/api/safety";
-import { blocksApiErrorMessage } from "@/lib/messages";
+import { Avatar } from "@/components/Avatar";
+import { useBlockedUsers } from "@/hooks/useBlockedUsers";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type { PublicUser } from "@shared/types";
 
-// Blocked-users list (Profile → Blocked users). Loads the caller's blocks and
-// unblocks a user (removing the row on success). Block *initiation* is not here
-// — it's deferred to where content surfaces a user (later slice). All network
-// access goes through @/lib/api/safety (this screen never calls fetch).
-
-type Status = "loading" | "ready" | "error";
+// Blocked-users list (Profile → Blocked users). Data lives in useBlockedUsers;
+// this screen is composition only. Block *initiation* is not here — it's
+// deferred to where content surfaces a user (later slice).
 
 export function BlockedUsersScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-
-  const [blocks, setBlocks] = useState<PublicUser[]>([]);
-  const [status, setStatus] = useState<Status>("loading");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // Ids currently being unblocked (so we can disable just that row's button).
-  const [pending, setPending] = useState<string[]>([]);
-
-  const load = useCallback(async () => {
-    setStatus("loading");
-    const res = await listBlocks();
-    if (res.ok) {
-      setBlocks(res.data);
-      setStatus("ready");
-    } else {
-      setErrorMessage(blocksApiErrorMessage(res.error));
-      setStatus("error");
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const onUnblock = async (userId: string) => {
-    setPending((p) => [...p, userId]);
-    setErrorMessage(null);
-    const res = await unblockUser(userId);
-    setPending((p) => p.filter((id) => id !== userId));
-    if (res.ok) {
-      setBlocks((prev) => prev.filter((u) => u.id !== userId));
-    } else {
-      setErrorMessage(blocksApiErrorMessage(res.error));
-    }
-  };
+  const { blocks, status, errorMessage, pendingIds, reload, unblock } =
+    useBlockedUsers();
 
   if (status === "loading") {
     return (
@@ -76,7 +40,7 @@ export function BlockedUsersScreen() {
           {errorMessage ?? strings.profile.blockedLoadError}
         </Text>
         <View style={styles.fullWidth}>
-          <PrimaryButton label={strings.communities.retry} onPress={load} />
+          <PrimaryButton label={strings.communities.retry} onPress={reload} />
         </View>
       </View>
     );
@@ -86,36 +50,35 @@ export function BlockedUsersScreen() {
     <View style={styles.root}>
       <FlatList
         data={blocks}
-        keyExtractor={(u) => u.id}
+        keyExtractor={(user) => user.id}
         contentContainerStyle={
           blocks.length === 0 ? styles.listEmpty : styles.listContent
         }
         ListEmptyComponent={
           <Text style={styles.message}>{strings.profile.blockedEmpty}</Text>
         }
-        renderItem={({ item }) => (
+        renderItem={({ item }: { item: PublicUser }) => (
           <View style={styles.row}>
-            {item.avatarUrl ? (
-              <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarFallback]}>
-                <Text style={styles.avatarLetter}>
-                  {item.displayName.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
+            <View style={styles.avatar}>
+              <Avatar
+                uri={item.avatarUrl}
+                name={item.displayName}
+                size={40}
+                borderRadius={radius.full}
+              />
+            </View>
             <Text style={styles.name} numberOfLines={1}>
               {item.displayName}
             </Text>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${strings.profile.unblock} ${item.displayName}`}
-              disabled={pending.includes(item.id)}
-              onPress={() => onUnblock(item.id)}
+              disabled={pendingIds.includes(item.id)}
+              onPress={() => unblock(item.id)}
               style={({ pressed }) => [
                 styles.unblockButton,
                 pressed && styles.unblockPressed,
-                pending.includes(item.id) && styles.unblockDisabled,
+                pendingIds.includes(item.id) && styles.unblockDisabled,
               ]}
             >
               <Text style={styles.unblockLabel}>{strings.profile.unblock}</Text>
@@ -172,20 +135,7 @@ function createStyles(colors: ThemeColors) {
       marginBottom: spacing.sm,
     },
     avatar: {
-      width: 40,
-      height: 40,
-      borderRadius: radius.full,
       marginRight: spacing.md,
-    },
-    avatarFallback: {
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.primary,
-    },
-    avatarLetter: {
-      color: "#FFFFFF",
-      fontSize: 18,
-      fontWeight: "700",
     },
     name: {
       flex: 1,

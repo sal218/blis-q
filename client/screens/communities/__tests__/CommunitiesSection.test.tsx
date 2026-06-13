@@ -140,4 +140,46 @@ describe("CommunitiesSection", () => {
     );
     expect(onCreate).toHaveBeenCalled();
   });
+
+  // Regression: an older search response that resolves AFTER a newer one must
+  // not overwrite the newer results (stale-response guard).
+  it("drops a stale response that resolves after a newer one", async () => {
+    const deferred: { resolveOld?: (value: unknown) => void } = {};
+    listMock.mockImplementation(({ search }: { search?: string }) => {
+      if (search === "old") {
+        return new Promise((resolve) => {
+          deferred.resolveOld = resolve;
+        });
+      }
+      if (search === "new") {
+        return Promise.resolve(page([community("n", "NEW")]));
+      }
+      return Promise.resolve(page([community("i", "INIT")]));
+    });
+
+    renderSection();
+    await screen.findByText("INIT");
+
+    const input = screen.getByLabelText(strings.communities.searchPlaceholder);
+
+    // Older search fires and stays in flight (unresolved).
+    fireEvent.changeText(input, "old");
+    await waitFor(() =>
+      expect(listMock).toHaveBeenCalledWith(
+        expect.objectContaining({ search: "old" }),
+      ),
+    );
+
+    // Newer search fires and resolves first.
+    fireEvent.changeText(input, "new");
+    await screen.findByText("NEW");
+
+    // The stale "old" response now resolves — it must NOT replace "NEW".
+    await act(async () => {
+      deferred.resolveOld?.(page([community("o", "OLD")]));
+    });
+
+    expect(screen.queryByText("OLD")).toBeNull();
+    expect(screen.getByText("NEW")).toBeTruthy();
+  });
 });

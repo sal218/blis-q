@@ -21,7 +21,14 @@
       "@assets/*": ["./assets/*"]
     }
   },
-  "include": ["server", "shared", "client", "*.config.ts", "drizzle.config.ts"],
+  "include": [
+    "App.tsx",
+    "server",
+    "shared",
+    "client",
+    "*.config.ts",
+    "drizzle.config.ts"
+  ],
   "exclude": ["node_modules", "admin", "dist", "static-build", ".expo"],
   "extends": "expo/tsconfig.base"
 }

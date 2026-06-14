@@ -21,17 +21,18 @@ These rules override convenience, speed, and shortcuts. If a change violates any
 
 ### 1. ARCHITECTURE: BACKEND-ONLY DATA ACCESS
 
-- **NEVER** write business logic in Client Components.
-- **NEVER** use database client SDKs directly in the frontend (e.g. `supabase-js` methods like `.select`, `.insert`, `.update`, `.delete`).
-- **ALWAYS** access data through **Backend APIs only**:
-  - Server Actions
-  - API Routes
-  - Edge Functions
+* **NEVER** write business logic in Client Components.
+* **NEVER** use database client SDKs directly in the frontend (e.g. `supabase-js` methods like `.select`, `.insert`, `.update`, `.delete`).
+* **ALWAYS** access data through **Backend APIs only**:
 
-- The **Frontend is a View Layer only**.
-  - It renders UI
-  - It calls APIs
-  - It does **NOT** talk to the database
+  * Server Actions
+  * API Routes
+  * Edge Functions
+* The **Frontend is a View Layer only**.
+
+  * It renders UI
+  * It calls APIs
+  * It does **NOT** talk to the database
 
 If the frontend needs data → create or use a backend endpoint.
 
@@ -39,66 +40,63 @@ If the frontend needs data → create or use a backend endpoint.
 
 ### 2. DATABASE & RLS — THE "ZERO POLICY" RULE
 
-- **RLS IS MANDATORY** on every table.
-- **NO RLS POLICIES ARE ALLOWED**.
-  - Do **NOT** create policies using `create policy ...`
+* **RLS IS MANDATORY** on every table.
+* **NO RLS POLICIES ARE ALLOWED**.
 
-- RLS enabled **without policies** acts as a **Deny-All firewall**.
-- The `anon` key must have **ZERO database access**.
-  - **Exception:** The anon key is used client-side to connect to Supabase Realtime Broadcast. Broadcast bypasses the database entirely (it is a pub/sub layer, not a DB operation). This is the only permitted client-side use of the anon key and does not violate this rule.
+  * Do **NOT** create policies using `create policy ...`
+* RLS enabled **without policies** acts as a **Deny-All firewall**.
+* The `anon` key must have **ZERO database access**.
 
-- **SERVICE ROLE ONLY**:
-  - All database access must occur via `service_role`
-  - Only inside Backend APIs / Server Actions / Edge Functions
-  - Service role bypasses RLS by design
+  * **Exception:** The anon key is used client-side to connect to Supabase Realtime Broadcast. Broadcast bypasses the database entirely (it is a pub/sub layer, not a DB operation). This is the only permitted client-side use of the anon key and does not violate this rule.
+* **SERVICE ROLE ONLY**:
+
+  * All database access must occur via `service_role`
+  * Only inside Backend APIs / Server Actions / Edge Functions
+  * Service role bypasses RLS by design
 
 This guarantees:
 
-- No accidental data exposure
-- No client-side privilege escalation
-- No silent auth bugs
+* No accidental data exposure
+* No client-side privilege escalation
+* No silent auth bugs
 
 ---
 
 ### 3. STORAGE SECURITY
 
-- **NO PUBLIC BUCKETS**
-  - Never set public access on R2 buckets
+* **NO PUBLIC BUCKETS**
 
-- **UUID FILENAMES ONLY**
-  - Rename all uploaded files to `crypto.randomUUID()`
-  - Prevents file enumeration and guessing attacks
+  * Never set public access on R2 buckets
+* **UUID FILENAMES ONLY**
 
-- **SIGNED URLS ONLY**
-  - Always retrieve files using presigned R2 URLs
-  - Never expose raw storage paths to clients
+  * Rename all uploaded files to `crypto.randomUUID()`
+  * Prevents file enumeration and guessing attacks
+* **SIGNED URLS ONLY**
 
-- **REDIS-BACKED UPLOAD CLAIMS**
-  - Pending upload claims must be stored in Redis, not in process memory
-  - In-memory claims break silently on multi-instance Fly.io deployments
-  - In-memory fallback is acceptable for local dev only
+  * Always retrieve files using presigned R2 URLs
+  * Never expose raw storage paths to clients
+* **REDIS-BACKED UPLOAD CLAIMS**
+
+  * Pending upload claims must be stored in Redis, not in process memory
+  * In-memory claims break silently on multi-instance Fly.io deployments
+  * In-memory fallback is acceptable for local dev only
 
 ---
 
 ### 4. PAYMENTS & WEBHOOKS
 
-- **VERIFY SIGNATURES — ALWAYS**
-- **NEVER** trust `req.body` directly for webhook payloads
-- **ALWAYS** use `req.rawBody` for signature verification — Express re-serializes the body, changing the bytes. Signature verification requires the exact original bytes.
-- Configure Express body parser to capture raw body:
+* **VERIFY SIGNATURES — ALWAYS**
+* **NEVER** trust `req.body` directly for webhook payloads
+* **ALWAYS** use `req.rawBody` for signature verification — Express re-serializes the body, changing the bytes. Signature verification requires the exact original bytes.
+* Configure Express body parser to capture raw body:
 
   ```typescript
-  app.use(
-    express.json({
-      verify: (req: any, _res, buf) => {
-        req.rawBody = buf;
-      },
-    }),
-  );
+  app.use(express.json({
+    verify: (req: any, _res, buf) => { req.rawBody = buf; }
+  }));
   ```
-
-- RevenueCat webhooks → verify using the `Authorization` header secret against `req.rawBody`
-- If verification fails → **IMMEDIATELY return `400`**
+* RevenueCat webhooks → verify using the `Authorization` header secret against `req.rawBody`
+* If verification fails → **IMMEDIATELY return `400`**
 
 No verification = invalid webhook.
 
@@ -106,34 +104,37 @@ No verification = invalid webhook.
 
 ### 5. ENVIRONMENT VARIABLES
 
-- **STRICT SECRET HYGIENE**
-  - Never hardcode secrets
-  - Never log secrets
+* **STRICT SECRET HYGIENE**
 
-- **NO COMMITS WITH SECRETS**
-  - If a secret appears in code:
-    - Replace it with `process.env.VAR_NAME`
-    - Warn the user
+  * Never hardcode secrets
+  * Never log secrets
+* **NO COMMITS WITH SECRETS**
 
-- **VALIDATION REQUIRED — CALL ORDER IS NON-NEGOTIABLE**
-  - `validateEnv()` must be the **very first statement** in `server/index.ts`
-  - `validateAuthConfig()` must be called immediately after, before any routes register
-  - Fail fast if required variables are missing
-  - In production, missing Redis credentials must crash the server — do not fail open
+  * If a secret appears in code:
+
+    * Replace it with `process.env.VAR_NAME`
+    * Warn the user
+* **VALIDATION REQUIRED — CALL ORDER IS NON-NEGOTIABLE**
+
+  * `validateEnv()` must be the **very first statement** in `server/index.ts`
+  * `validateAuthConfig()` must be called immediately after, before any routes register
+  * Fail fast if required variables are missing
+  * In production, missing Redis credentials must crash the server — do not fail open
 
 ---
 
 ### 6. INPUT VALIDATION & RATE LIMITING
 
-- **TRUST NO ONE**
-  - Validate **ALL** inputs at the backend boundary
-  - Use Zod schemas for all API routes
+* **TRUST NO ONE**
 
-- **RATE LIMIT ALL MUTATIONS**
-  - Auth endpoints: use **dual buckets** — both IP and email/userId buckets must pass
-  - Content creation endpoints: keyed by user ID, not IP
-  - Use `@upstash/ratelimit` — credentials required in production (fail fast if missing)
-  - Rate limiter must **FAIL CLOSED** — Redis outage returns 429, never allow-all
+  * Validate **ALL** inputs at the backend boundary
+  * Use Zod schemas for all API routes
+* **RATE LIMIT ALL MUTATIONS**
+
+  * Auth endpoints: use **dual buckets** — both IP and email/userId buckets must pass
+  * Content creation endpoints: keyed by user ID, not IP
+  * Use `@upstash/ratelimit` — credentials required in production (fail fast if missing)
+  * Rate limiter must **FAIL CLOSED** — Redis outage returns 429, never allow-all
 
 No validation = rejected change.
 
@@ -148,8 +149,8 @@ REVOKE EXECUTE ON FUNCTION function_name FROM public;
 REVOKE EXECUTE ON FUNCTION function_name FROM anon;
 ```
 
-- Explicitly grant execution **ONLY** to `service_role`
-- Never leave functions executable by default roles
+* Explicitly grant execution **ONLY** to `service_role`
+* Never leave functions executable by default roles
 
 ---
 
@@ -179,8 +180,8 @@ Before generating or accepting any code, ask:
 
 > **"Is this code asking the Frontend to talk to the Database?"**
 
-- If **YES** → ❌ **REJECT IT**
-- Rewrite as a Backend API / Action instead
+* If **YES** → ❌ **REJECT IT**
+* Rewrite as a Backend API / Action instead
 
 Also ask: **"Does this feature touch user data?"** If yes, consult `COMPLIANCE_AND_PRIVACY.md` before writing any schema or API code.
 
@@ -192,12 +193,12 @@ No exceptions.
 
 ## Testing Rules
 
-- **Every bug fix ships with a regression test.** When fixing a bug or security issue, write an integration test (in `server/__tests__/`) on the same branch that would have caught it. This is non-negotiable.
-- **Tests live next to fixes.** No separate test branches. The test and the fix are one atomic commit.
-- **Integration tests use the real test DB** (Blisko test Supabase project). Credentials in `.env.test` (gitignored) and GitHub Actions secrets.
-- **Run before reporting done:** Always run `npm run test:integration` before telling the user a fix is complete.
-- **Test runner:** `npm test` (server unit, node:test) + `npm run test:integration` (Jest, real DB) + `npm run test:client` (Jest + `jest-expo`, React Native client logic + light component tests) + `npm run test:all` (all three).
-- **Client (mobile) tests** live in `client/**/__tests__/` and run under the `jest-expo` preset (`jest.client.config.ts`). They mock the network/native boundary and cover pure logic (validation, API mapping, the Google consent/retry flow) plus light component behaviour (consent gating, error states). No real device or backend needed.
+* **Every bug fix ships with a regression test.** When fixing a bug or security issue, write an integration test (in `server/__tests__/`) on the same branch that would have caught it. This is non-negotiable.
+* **Tests live next to fixes.** No separate test branches. The test and the fix are one atomic commit.
+* **Integration tests use the real test DB** (Blisko test Supabase project). Credentials in `.env.test` (gitignored) and GitHub Actions secrets.
+* **Run before reporting done:** Always run `npm run test:integration` before telling the user a fix is complete.
+* **Test runner:** `npm test` (server unit, node:test) + `npm run test:integration` (Jest, real DB) + `npm run test:client` (Jest + `jest-expo`, React Native client logic + light component tests) + `npm run test:all` (all three).
+* **Client (mobile) tests** live in `client/**/__tests__/` and run under the `jest-expo` preset (`jest.client.config.ts`). They mock the network/native boundary and cover pure logic (validation, API mapping, the Google consent/retry flow) plus light component behaviour (consent gating, error states). No real device or backend needed.
 
 ---
 
@@ -205,12 +206,11 @@ No exceptions.
 
 **Target deployment: Fly.io (Warsaw, `waw` region).**
 
-- Local dev uses ngrok tunnels for external access, Expo dev server for hot reload
-- Production target is Fly.io (Express server, `fly.toml` with `primary_region = "waw"`) + Expo EAS (mobile builds)
-- No Replit-specific code. No Railway-specific code. This project starts clean on Fly.io.
+* Local dev uses ngrok tunnels for external access, Expo dev server for hot reload
+* Production target is Fly.io (Express server, `fly.toml` with `primary_region = "waw"`) + Expo EAS (mobile builds)
+* No Replit-specific code. No Railway-specific code. This project starts clean on Fly.io.
 
 **Blocking dependencies before launch:**
-
 1. **Resend verified domain** — switch sender from `onboarding@resend.dev` to a verified custom domain before any real users receive email.
 2. **EAS production build** — configure `eas.json` production profile with the Fly.io API URL.
 3. **DPIA completed** — schema must not be finalised until the client (Pretty Good Company) has completed their Data Protection Impact Assessment. See `COMPLIANCE_AND_PRIVACY.md` Section 4.
@@ -225,7 +225,6 @@ No exceptions.
 **Launch target: ~December 2026** (≈6-month build from the June 2026 scaffold; ~12 two-week sprints — see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 **Four feature pillars:**
-
 1. **Community & Networking** — community groups, group chat, profiles
 2. **Events & Safe Places** — event discovery, RSVP, curated map of LGBT-friendly locations
 3. **Support & Education** — resources, news, emergency contacts
@@ -280,54 +279,54 @@ npm run server:prod         # Run production server
 
 ### Monorepo Structure
 
-- `client/` — React Native (Expo) frontend
-- `server/` — Express.js backend
-- `shared/` — Shared types and Drizzle schema
+* `client/` — React Native (Expo) frontend
+* `server/` — Express.js backend
+* `shared/` — Shared types and Drizzle schema
 
 ### Path Aliases
 
 Configured in `babel.config.js` and `tsconfig.json`:
 
-- `@/*` → `./client/*`
-- `@shared/*` → `./shared/*`
-- `@assets/*` → `./assets/*`
+* `@/*` → `./client/*`
+* `@shared/*` → `./shared/*`
+* `@assets/*` → `./assets/*`
 
 ### Frontend (client/)
 
-- **Navigation**: React Navigation with tab + stack navigators
-- **State**: React Context (auth, theme) + TanStack Query (server state)
-- **Entry**: `App.tsx` handles auth state routing and deep linking
-- **Contexts**: `AuthContext` (user/token), `ThemeContext` (dark mode)
+* **Navigation**: React Navigation with tab + stack navigators
+* **State**: React Context (auth, theme) + TanStack Query (server state)
+* **Entry**: `App.tsx` handles auth state routing and deep linking
+* **Contexts**: `AuthContext` (user/token), `ThemeContext` (dark mode)
 
 ### Backend (server/)
 
-- **Entry**: `index.ts` — Express setup. Startup order is non-negotiable: `validateEnv()` → `validateAuthConfig()` → CORS → Helmet → `rawBody` capture → logging → `%3F` fix → routes → error handler
-- **Routes**: `routes.ts` — all API endpoints
-- **Auth**: `auth.ts` — Supabase GoTrue (email/password + Google Sign-In via Supabase `signInWithIdToken`, Option A — firebase-admin is FCM-only). Two-tier cache: JWKS local JWT verification + Redis profile cache (60s TTL, key: `profile:{userId}`)
-- **Database**: `storage.ts` — repository pattern via `DatabaseStorage` class
-- **Object storage**: `objectStorage.ts` — Cloudflare R2 (private, presigned URLs only, Redis-backed upload claims)
-- **Notifications**: `notifications.ts` — Firebase Cloud Messaging via firebase-admin
-- **Rate limiting**: `rateLimit.ts` — Upstash Redis, fail-closed on error, dual buckets on auth flows
-- **Real-time**: handled client-side via Supabase Realtime Broadcast — no server-side socket code
+* **Entry**: `index.ts` — Express setup. Startup order is non-negotiable: `validateEnv()` → `validateAuthConfig()` → CORS → Helmet → `rawBody` capture → logging → `%3F` fix → routes → error handler
+* **Routes**: `routes.ts` — all API endpoints
+* **Auth**: `auth.ts` — Supabase GoTrue (email/password + Google Sign-In via Supabase `signInWithIdToken`, Option A — firebase-admin is FCM-only). Two-tier cache: JWKS local JWT verification + Redis profile cache (60s TTL, key: `profile:{userId}`)
+* **Database**: `storage.ts` — repository pattern via `DatabaseStorage` class
+* **Object storage**: `objectStorage.ts` — Cloudflare R2 (private, presigned URLs only, Redis-backed upload claims)
+* **Notifications**: `notifications.ts` — Firebase Cloud Messaging via firebase-admin
+* **Rate limiting**: `rateLimit.ts` — Upstash Redis, fail-closed on error, dual buckets on auth flows
+* **Real-time**: handled client-side via Supabase Realtime Broadcast — no server-side socket code
 
 ### Database (shared/schema.ts)
 
 PostgreSQL with Drizzle ORM. Key tables:
 
-- `users` — accounts, preferences, `displayName` (public alias)
-- `communities` — community groups
-- `community_memberships` — user-community many-to-many (role: member / moderator / admin)
-- `messages` — community chat (plaintext, moderation-accessible — see COMPLIANCE_AND_PRIVACY.md Section 5.6)
-- `events` — community events
-- `event_rsvps` — event attendance
-- `safe_places` — map locations (LGBT-friendly venues, services, resources)
-- `reports` — content moderation queue
-- `consent_records` — GDPR explicit consent per user per purpose (**mandatory — see COMPLIANCE_AND_PRIVACY.md**)
-- `audit_log` — security and compliance log (**mandatory — see COMPLIANCE_AND_PRIVACY.md**)
-- `device_push_tokens` — FCM tokens per device
-- `notification_preferences` — per-user notification settings
-- `subscriptions` — premium membership state (synced from RevenueCat webhooks)
-- `password_reset_tokens` — custom password-reset flow: SHA-256 token hash, expiry, single-use marker (never the raw token)
+* `users` — accounts, preferences, `displayName` (public alias)
+* `communities` — community groups
+* `community_memberships` — user-community many-to-many (role: member / moderator / admin)
+* `messages` — community chat (plaintext, moderation-accessible — see COMPLIANCE_AND_PRIVACY.md Section 5.6)
+* `events` — community events
+* `event_rsvps` — event attendance
+* `safe_places` — map locations (LGBT-friendly venues, services, resources)
+* `reports` — content moderation queue
+* `consent_records` — GDPR explicit consent per user per purpose (**mandatory — see COMPLIANCE_AND_PRIVACY.md**)
+* `audit_log` — security and compliance log (**mandatory — see COMPLIANCE_AND_PRIVACY.md**)
+* `device_push_tokens` — FCM tokens per device
+* `notification_preferences` — per-user notification settings
+* `subscriptions` — premium membership state (synced from RevenueCat webhooks)
+* `password_reset_tokens` — custom password-reset flow: SHA-256 token hash, expiry, single-use marker (never the raw token)
 
 **Every table must have explicit `ON DELETE` behaviour defined in its migration. No implicit defaults. See COMPLIANCE_AND_PRIVACY.md Section 5.2.**
 
@@ -335,10 +334,10 @@ PostgreSQL with Drizzle ORM. Key tables:
 
 ### Authentication
 
-- **Email/Password**: Supabase GoTrue
-- **Google Sign-In** (Option A): native Google SDK (`@react-native-google-signin/google-signin`) → Google OIDC ID token → backend `supabaseClient.auth.signInWithIdToken` (Supabase verifies the token) → session. firebase-admin is **not** used for auth (FCM only). Consent is enforced on first sign-up (422 `consent_required` → retry with consent).
-- **Token storage**: SecureStore (native) — Supabase session tokens **and** the profile (sensitive in this app). See `client/lib/session.ts`. Token refresh is not yet wired (tracker **P-10**).
-- **Middleware**: `isAuthenticated` in `auth.ts` — local JWKS JWT verification + Redis profile cache + `deletedAt` check
+* **Email/Password**: Supabase GoTrue
+* **Google Sign-In** (Option A): native Google SDK (`@react-native-google-signin/google-signin`) → Google OIDC ID token → backend `supabaseClient.auth.signInWithIdToken` (Supabase verifies the token) → session. firebase-admin is **not** used for auth (FCM only). Consent is enforced on first sign-up (422 `consent_required` → retry with consent).
+* **Token storage**: SecureStore (native) — Supabase session tokens **and** the profile (sensitive in this app). See `client/lib/session.ts`. Token refresh is not yet wired (tracker **P-10**).
+* **Middleware**: `isAuthenticated` in `auth.ts` — local JWKS JWT verification + Redis profile cache + `deletedAt` check
 
 ### Real-Time Chat
 
@@ -485,7 +484,6 @@ RevenueCat (and any future payment provider) webhook signature verification requ
 ### Google Sign-In — Dev Client Required (not Expo Go) + Provisioning
 
 `@react-native-google-signin/google-signin` is a native module: it does **not** run in Expo Go — use a custom **EAS dev client** / build. Three provisioning steps must be done before the live Google flow works (mocks keep CI green without them):
-
 1. **Supabase**: enable the Google provider (prod + test) with the Google OAuth client IDs (audience must match `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`).
 2. **Client env**: set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` + `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`.
 3. **app.json**: replace the `iosUrlScheme` placeholder (`com.googleusercontent.apps.REPLACE_WITH_IOS_CLIENT_ID`) in the google-signin plugin with the real reversed iOS client ID.
@@ -509,57 +507,56 @@ The reset-password deep link carries the raw token. `client/screens/auth/ResetPa
 Single source of truth for all bugs, security findings, and pre-release checklist items.
 
 Categories: 🐛 Bug · 🔒 Security · ⚡ Perf · 🔧 Stability · 🏗️ Infra · 📬 Ops
-Severity: 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
+Severity:   🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
 ### Completed
 
-| #   | Item | Cat | Sev | Branch |
-| --- | ---- | --- | --- | ------ |
-| —   | —    | —   | —   | —      |
+| # | Item | Cat | Sev | Branch |
+|---|---|---|---|---|
+| — | — | — | — | — |
 
 ### Pending
 
 Surfaced in the 2026-06-02 scaffold review. **P-1 and P-2 are hard blockers before this branch onboards any real user; P-3 is a hard blocker before it processes any payment.** Deferral is valid only because the scaffold currently has no registration route and no webhook route — it physically cannot onboard users or take payments yet. P-4/P-5 are genuine low-priority cleanups.
 
-| #    | Item                                                                                                                        | Cat | Pri | Notes                                                                                                                                                                                                                                                                                                                       |
-| ---- | --------------------------------------------------------------------------------------------------------------------------- | --- | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P-1  | GDPR routes not implemented: consent-backed registration, `DELETE /api/account` (erasure), `GET /api/account/export`        | 🔒  | 🔴  | **BLOCKER — no real users until done.** Scaffold mounts `/api/health` + admin only. COMPLIANCE §5.1 / §5.2 / §5.5                                                                                                                                                                                                           |
-| P-2  | Erasure/anonymisation cascade not implemented (no generic soft-delete method is exposed; see `storage.ts` note)             | 🔒  | 🔴  | **BLOCKER — no real users until done.** Transactional: clear PII, content→`[deleted]`, drop memberships/RSVPs/tokens/consents, audit entry, call `invalidateProfileCache`. Lives in the `DELETE /api/account` handler. COMPLIANCE §5.2                                                                                      |
-| P-3  | RevenueCat webhook route not implemented (env var + `revenuecatWebhookIp` limiter already scaffolded)                       | 🔒  | 🟠  | **BLOCKER — no payments until done.** Verify `Authorization` against `req.rawBody`, 400 on failure, then process. CLAUDE.md §4                                                                                                                                                                                              |
-| P-4  | Functions exceeding ~40 lines: `setupCors`, `setupHelmet` (index.ts), `buildMessage` (notifications.ts)                     | 🔧  | 🟢  | Extract helpers/constants. ENGINEERING_STANDARDS §2                                                                                                                                                                                                                                                                         |
-| P-5  | `routes.ts` doc comment lists domain route modules not yet mounted                                                          | 📬  | 🟢  | Keep accurate as modules land                                                                                                                                                                                                                                                                                               |
-| P-6  | Auth/verification emails use Supabase's built-in sender; switch to branded Resend on the verified domain before launch      | 📬  | 🟡  | Sprint-1 stand-in (does not change the verification-first auth model). `POST /api/v1/auth/resend-verification` already exists.                                                                                                                                                                                              |
-| P-7  | Migrate `shared/schema.ts` `pgTable` extra-config callbacks from the deprecated object-return form to the array-return form | 🔧  | 🟢  | Drizzle deprecation hints (not errors); whole-schema sweep, do in one pass.                                                                                                                                                                                                                                                 |
-| P-8  | Password reset does not force-logout the user's other Supabase sessions                                                     | 🔒  | 🟡  | **Before beta.** Supabase admin lacks a clean bulk "revoke all sessions by userId" (needs a JWT). Revisit when sessions/refresh-token revocation is wired. After reset, old refresh tokens may remain valid.                                                                                                                |
-| P-9  | Reset/verification deep-link UI must not leak the token                                                                     | 🔒  | 🟡  | **Addressed in `feat/auth-screens-mobile`:** `ResetPasswordScreen` captures the token once, scrubs it from navigation state via `setParams({ token: undefined })` and from the web URL via `history.replaceState`, and never logs it. **Re-verify** when universal/App Links replace the `blisq://` scheme at provisioning. |
-| P-10 | Mobile session-token refresh not implemented                                                                                | 🔒  | 🟡  | **Before beta / before real usage.** `client/lib/session.ts` persists the Supabase `refreshToken` in SecureStore but nothing exchanges it — an expired access token currently means a silent 401 until re-login. Wire a refresh path (and pair with P-8 session revocation).                                                |
-| P-11 | Bottom-tab icons are emoji `Text` placeholders (`client/navigation/AppTabs.tsx`)                                            | 🔧  | 🟢  | **Before serious UI polish / app-store quality** (Codex P3 on `feat/communities-mobile`). Replace with a real icon set / established icon component (e.g. `@expo/vector-icons`). Not a launch blocker.                                                                                                                      |
+| # | Item | Cat | Pri | Notes |
+|---|---|---|---|---|
+| P-1 | GDPR routes not implemented: consent-backed registration, `DELETE /api/account` (erasure), `GET /api/account/export` | 🔒 | 🔴 | **BLOCKER — no real users until done.** Scaffold mounts `/api/health` + admin only. COMPLIANCE §5.1 / §5.2 / §5.5 |
+| P-2 | Erasure/anonymisation cascade not implemented (no generic soft-delete method is exposed; see `storage.ts` note) | 🔒 | 🔴 | **BLOCKER — no real users until done.** Transactional: clear PII, content→`[deleted]`, drop memberships/RSVPs/tokens/consents, audit entry, call `invalidateProfileCache`. Lives in the `DELETE /api/account` handler. COMPLIANCE §5.2 |
+| P-3 | RevenueCat webhook route not implemented (env var + `revenuecatWebhookIp` limiter already scaffolded) | 🔒 | 🟠 | **BLOCKER — no payments until done.** Verify `Authorization` against `req.rawBody`, 400 on failure, then process. CLAUDE.md §4 |
+| P-4 | Functions exceeding ~40 lines: `setupCors`, `setupHelmet` (index.ts), `buildMessage` (notifications.ts) | 🔧 | 🟢 | Extract helpers/constants. ENGINEERING_STANDARDS §2 |
+| P-5 | `routes.ts` doc comment lists domain route modules not yet mounted | 📬 | 🟢 | Keep accurate as modules land |
+| P-6 | Auth/verification emails use Supabase's built-in sender; switch to branded Resend on the verified domain before launch | 📬 | 🟡 | Sprint-1 stand-in (does not change the verification-first auth model). `POST /api/v1/auth/resend-verification` already exists. |
+| P-7 | Migrate `shared/schema.ts` `pgTable` extra-config callbacks from the deprecated object-return form to the array-return form | 🔧 | 🟢 | Drizzle deprecation hints (not errors); whole-schema sweep, do in one pass. |
+| P-8 | Password reset does not force-logout the user's other Supabase sessions | 🔒 | 🟡 | **Before beta.** Supabase admin lacks a clean bulk "revoke all sessions by userId" (needs a JWT). Revisit when sessions/refresh-token revocation is wired. After reset, old refresh tokens may remain valid. |
+| P-9 | Reset/verification deep-link UI must not leak the token | 🔒 | 🟡 | **Addressed in `feat/auth-screens-mobile`:** `ResetPasswordScreen` captures the token once, scrubs it from navigation state via `setParams({ token: undefined })` and from the web URL via `history.replaceState`, and never logs it. **Re-verify** when universal/App Links replace the `blisq://` scheme at provisioning. |
+| P-10 | Mobile session-token refresh not implemented | 🔒 | 🟡 | **Before beta / before real usage.** `client/lib/session.ts` persists the Supabase `refreshToken` in SecureStore but nothing exchanges it — an expired access token currently means a silent 401 until re-login. Wire a refresh path (and pair with P-8 session revocation). |
+| P-11 | Bottom-tab icons are emoji `Text` placeholders (`client/navigation/AppTabs.tsx`) | 🔧 | 🟢 | **Before serious UI polish / app-store quality** (Codex P3 on `feat/communities-mobile`). Replace with a real icon set / established icon component (e.g. `@expo/vector-icons`). Not a launch blocker. |
 
 ### Accepted Risks
 
-| #    | Item                                                                        | Cat          | Notes                                                                                                                                                                                                                                                                               |
-| ---- | --------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AR-1 | Admin dashboard stores the session token in `localStorage`                  | 🔒 Security  | Accepted for the internal, owner-operated admin web app (`admin/`). `localStorage` is XSS-exposed; mitigated by the app being owner-only and the Helmet CSP. Revisit if the dashboard is opened to multiple staff or should move to an httpOnly-cookie session. Decided 2026-06-02. |
-| AR-2 | Integration tests access the DB directly (`db`/`pool`) outside `storage.ts` | 🔧 Stability | Test-harness exception to the "all DB access via storage" rule (ENGINEERING_STANDARDS §7). `health.integration.test.ts` runs a raw `SELECT 1` to verify connectivity. Accepted for test code only; feature tests should prefer storage methods. Decided 2026-06-02.                 |
+| # | Item | Cat | Notes |
+|---|---|---|---|
+| AR-1 | Admin dashboard stores the session token in `localStorage` | 🔒 Security | Accepted for the internal, owner-operated admin web app (`admin/`). `localStorage` is XSS-exposed; mitigated by the app being owner-only and the Helmet CSP. Revisit if the dashboard is opened to multiple staff or should move to an httpOnly-cookie session. Decided 2026-06-02. |
+| AR-2 | Integration tests access the DB directly (`db`/`pool`) outside `storage.ts` | 🔧 Stability | Test-harness exception to the "all DB access via storage" rule (ENGINEERING_STANDARDS §7). `health.integration.test.ts` runs a raw `SELECT 1` to verify connectivity. Accepted for test code only; feature tests should prefer storage methods. Decided 2026-06-02. |
 
 ---
 
 ## 🚀 Production Infrastructure
 
-| Service       | Purpose                      | Region                   | Status                                                                  |
-| ------------- | ---------------------------- | ------------------------ | ----------------------------------------------------------------------- |
-| Fly.io        | Express API server           | Warsaw (waw)             | Provision at project start                                              |
-| Supabase      | PostgreSQL + Auth + Realtime | Frankfurt (eu-central-1) | Provision at project start                                              |
-| Cloudflare R2 | File storage                 | EU jurisdiction          | Provision at project start                                              |
-| Upstash Redis | Rate limiting + auth cache   | Frankfurt (eu-central-1) | Provision at project start                                              |
-| Firebase      | Google Sign-In + FCM push    | —                        | Provision at project start                                              |
-| Resend        | Transactional email          | —                        | Provision at project start — verify sender domain before any real users |
-| Sentry        | Error monitoring             | EU data region           | Provision at project start                                              |
-| RevenueCat    | In-app subscriptions         | —                        | Provision before premium feature goes live                              |
-| Expo EAS      | Mobile builds + OTA updates  | —                        | Configure before first TestFlight/Play Store submission                 |
+| Service | Purpose | Region | Status |
+|---|---|---|---|
+| Fly.io | Express API server | Warsaw (waw) | Provision at project start |
+| Supabase | PostgreSQL + Auth + Realtime | Frankfurt (eu-central-1) | Provision at project start |
+| Cloudflare R2 | File storage | EU jurisdiction | Provision at project start |
+| Upstash Redis | Rate limiting + auth cache | Frankfurt (eu-central-1) | Provision at project start |
+| Firebase | Google Sign-In + FCM push | — | Provision at project start |
+| Resend | Transactional email | — | Provision at project start — verify sender domain before any real users |
+| Sentry | Error monitoring | EU data region | Provision at project start |
+| RevenueCat | In-app subscriptions | — | Provision before premium feature goes live |
+| Expo EAS | Mobile builds + OTA updates | — | Configure before first TestFlight/Play Store submission |
 
 **Non-negotiable regions — set at creation, cannot be changed:**
-
 - Supabase: Frankfurt (eu-central-1)
 - Upstash: Frankfurt (eu-central-1)
 - R2: EU jurisdiction bucket
@@ -576,7 +573,6 @@ Blisko handles Article 9 special category data (sexual orientation) under GDPR. 
 **Before writing any feature that touches user data, read `COMPLIANCE_AND_PRIVACY.md`.**
 
 Key obligations that affect engineering:
-
 - `consent_records` table required from migration 1
 - `audit_log` table required from migration 1
 - Every table needs explicit `ON DELETE` behaviour

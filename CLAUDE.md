@@ -204,6 +204,8 @@ No exceptions.
 
 ## Development Philosophy
 
+**UI is built from the design mockups in `assets/*.png`.** Every screen starts from its mockup and is modified from there — do not invent layouts. **Light mode follows the mockups** (they are the light-mode reference: white surfaces, brand-purple accents); **dark mode is the brand purple** palette. Bare "coming soon" placeholders are temporary: each must be replaced with its mockup design when its feature sprint lands (tracked as **P-13**). Both modes ship for every screen.
+
 **Target deployment: Fly.io (Warsaw, `waw` region).**
 
 * Local dev uses ngrok tunnels for external access, Expo dev server for hot reload
@@ -533,6 +535,7 @@ Surfaced in the 2026-06-02 scaffold review. **P-1 and P-2 are hard blockers befo
 | P-10 | Mobile session-token refresh not implemented | 🔒 | 🟡 | **Before beta / before real usage.** `client/lib/session.ts` persists the Supabase `refreshToken` in SecureStore but nothing exchanges it — an expired access token currently means a silent 401 until re-login. Wire a refresh path (and pair with P-8 session revocation). |
 | P-11 | Bottom-tab icons are emoji `Text` placeholders (`client/navigation/AppTabs.tsx`) | 🔧 | 🟢 | **Before serious UI polish / app-store quality** (Codex P3 on `feat/communities-mobile`). Replace with a real icon set / established icon component (e.g. `@expo/vector-icons`). Not a launch blocker. |
 | P-12 | "Continue with Apple" on the login screen is a visual placeholder (no handler) | 🔒 | 🟡 | **Before launch.** `LoginScreen` renders the Apple button per the design, but Sign in with Apple isn't implemented (needs `expo-apple-authentication` + the backend exchange). App Store Guideline 4.8 **requires** Apple sign-in once Google is offered, so this must ship before iOS release. |
+| P-13 | Placeholder tab screens must be rebuilt from their mockups when their sprint lands | 🎨 | 🟡 | **Do not forget — sprint-aligned by decision (2026-06-14).** `HomeScreen`, `ChatScreen`, and the Events-tab Events/Safe-places segments are bare `ComingSoon` stubs. Build each from its `assets/*.png` mockup **with its backend**, replacing the stub: **Chat** (`chat-screen.png`, Sprint 5), **Events** (`events-screen.png`, Sprint 6), **Safe places** (`event-safeplace-screen.png`, Sprint 7), **Home** feed (`home-screen.png`, aggregates the above — schedule once its inputs exist). Light mode must match the mockups (mockups are light; dark = brand purple). |
 
 ### Accepted Risks
 

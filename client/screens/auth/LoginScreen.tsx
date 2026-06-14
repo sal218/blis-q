@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useGoogleSignIn } from "@/hooks/useGoogleSignIn";
 import { useEmailLogin } from "@/hooks/useEmailLogin";
 import { BrandMark } from "@/components/BrandMark";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { IconInput } from "@/components/forms/IconInput";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { FormError } from "@/components/forms/FormError";
@@ -151,6 +152,10 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
         </View>
       </ScrollView>
 
+      <View style={[styles.themeToggle, { top: insets.top + spacing.sm }]}>
+        <ThemeToggle />
+      </View>
+
       <GoogleConsentModal
         visible={google.needsConsent}
         loading={google.loading}
@@ -167,6 +172,11 @@ function createStyles(colors: ThemeColors) {
     flex: {
       flex: 1,
       backgroundColor: colors.background,
+    },
+    themeToggle: {
+      position: "absolute",
+      right: spacing.lg,
+      zIndex: 10,
     },
     content: {
       flexGrow: 1,

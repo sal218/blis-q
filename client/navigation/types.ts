@@ -7,10 +7,9 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 // immediately on mount and then stripped from the navigation state (P-9 — the
 // token must not linger in retained nav/link state); see ResetPasswordScreen.
 export type AuthStackParamList = {
-  Welcome: undefined;
+  Login: undefined;
   SignUp: undefined;
   CheckEmail: { email: string };
-  Login: undefined;
   ForgotPassword: undefined;
   ResetPassword: { token?: string };
 };

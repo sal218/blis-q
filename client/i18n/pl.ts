@@ -97,13 +97,6 @@ export const pl = {
     descriptionTooLong: "Opis może mieć maksymalnie {max} znaków.",
   },
 
-  welcome: {
-    tagline: "Bezpieczna przestrzeń dla osób LGBT+ w Polsce",
-    signIn: "Zaloguj się",
-    createAccount: "Załóż konto",
-    continueWithGoogle: "Kontynuuj z Google",
-  },
-
   signUp: {
     title: "Załóż konto",
     subtitle: "Dołącz do społeczności Blis-Q",
@@ -120,12 +113,17 @@ export const pl = {
   },
 
   login: {
-    title: "Zaloguj się",
-    subtitle: "Witaj ponownie",
+    taglinePrimary: "Społeczność. Wydarzenia. Wsparcie. Bezpieczeństwo.",
+    taglineAccent: "Razem jest nam bliżej.",
+    emailPlaceholder: "E-mail",
+    passwordPlaceholder: "Hasło",
     submit: "Zaloguj się",
     forgotPassword: "Nie pamiętasz hasła?",
-    noAccount: "Nie masz konta? Załóż je",
-    needVerify: "Nie otrzymałeś linku weryfikacyjnego?",
+    orContinue: "lub kontynuuj przez",
+    continueWithApple: "Kontynuuj z Apple",
+    continueWithGoogle: "Kontynuuj z Google",
+    noAccountPrompt: "Nie masz konta?",
+    signUpLink: "Załóż konto",
   },
 
   forgotPassword: {

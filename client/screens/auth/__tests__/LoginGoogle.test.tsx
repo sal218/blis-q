@@ -2,7 +2,10 @@ jest.mock("@/lib/googleAuth", () => ({
   signInWithGoogle: jest.fn(),
   signOutGoogle: jest.fn(),
 }));
-jest.mock("@/lib/api/auth", () => ({ googleSignIn: jest.fn() }));
+jest.mock("@/lib/api/auth", () => ({
+  googleSignIn: jest.fn(),
+  login: jest.fn(),
+}));
 
 import {
   render,
@@ -10,7 +13,7 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react-native";
-import { WelcomeScreen } from "@/screens/auth/WelcomeScreen";
+import { LoginScreen } from "@/screens/auth/LoginScreen";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { signInWithGoogle } from "@/lib/googleAuth";
 import { googleSignIn } from "@/lib/api/auth";
@@ -28,9 +31,9 @@ function renderScreen() {
   const navigation = { navigate: jest.fn() };
   render(
     <AuthProvider>
-      <WelcomeScreen
+      <LoginScreen
         navigation={navigation as never}
-        route={{ key: "w", name: "Welcome", params: undefined } as never}
+        route={{ key: "l", name: "Login", params: undefined } as never}
       />
     </AuthProvider>,
   );
@@ -42,7 +45,7 @@ beforeEach(() => {
   exchangeMock.mockReset();
 });
 
-describe("WelcomeScreen — Google consent_required → consent → retry", () => {
+describe("LoginScreen — Google consent_required → consent → retry", () => {
   it("first sign-in asks for consent, then retries the SAME token with consent and signs in", async () => {
     acquireMock.mockResolvedValue({
       status: "success",
@@ -56,7 +59,7 @@ describe("WelcomeScreen — Google consent_required → consent → retry", () =
     renderScreen();
 
     fireEvent.press(
-      screen.getByRole("button", { name: strings.welcome.continueWithGoogle }),
+      screen.getByRole("button", { name: strings.login.continueWithGoogle }),
     );
 
     // Consent sheet appears for the first-time user.
@@ -93,7 +96,7 @@ describe("WelcomeScreen — Google consent_required → consent → retry", () =
     renderScreen();
 
     fireEvent.press(
-      screen.getByRole("button", { name: strings.welcome.continueWithGoogle }),
+      screen.getByRole("button", { name: strings.login.continueWithGoogle }),
     );
 
     await waitFor(() => expect(acquireMock).toHaveBeenCalledTimes(1));

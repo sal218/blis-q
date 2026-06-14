@@ -532,6 +532,7 @@ Surfaced in the 2026-06-02 scaffold review. **P-1 and P-2 are hard blockers befo
 | P-9 | Reset/verification deep-link UI must not leak the token | 🔒 | 🟡 | **Addressed in `feat/auth-screens-mobile`:** `ResetPasswordScreen` captures the token once, scrubs it from navigation state via `setParams({ token: undefined })` and from the web URL via `history.replaceState`, and never logs it. **Re-verify** when universal/App Links replace the `blisq://` scheme at provisioning. |
 | P-10 | Mobile session-token refresh not implemented | 🔒 | 🟡 | **Before beta / before real usage.** `client/lib/session.ts` persists the Supabase `refreshToken` in SecureStore but nothing exchanges it — an expired access token currently means a silent 401 until re-login. Wire a refresh path (and pair with P-8 session revocation). |
 | P-11 | Bottom-tab icons are emoji `Text` placeholders (`client/navigation/AppTabs.tsx`) | 🔧 | 🟢 | **Before serious UI polish / app-store quality** (Codex P3 on `feat/communities-mobile`). Replace with a real icon set / established icon component (e.g. `@expo/vector-icons`). Not a launch blocker. |
+| P-12 | "Continue with Apple" on the login screen is a visual placeholder (no handler) | 🔒 | 🟡 | **Before launch.** `LoginScreen` renders the Apple button per the design, but Sign in with Apple isn't implemented (needs `expo-apple-authentication` + the backend exchange). App Store Guideline 4.8 **requires** Apple sign-in once Google is offered, so this must ship before iOS release. |
 
 ### Accepted Risks
 

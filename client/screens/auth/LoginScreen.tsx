@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   View,
   Text,
@@ -14,22 +14,20 @@ import type { AuthScreenProps } from "@/navigation/types";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGoogleSignIn } from "@/hooks/useGoogleSignIn";
+import { useEmailLogin } from "@/hooks/useEmailLogin";
 import { BrandMark } from "@/components/BrandMark";
 import { IconInput } from "@/components/forms/IconInput";
-import { SocialButton } from "@/components/forms/SocialButton";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { FormError } from "@/components/forms/FormError";
+import { LoginSocialButtons } from "@/components/LoginSocialButtons";
 import { GoogleConsentModal } from "@/components/GoogleConsentModal";
-import { login } from "@/lib/api/auth";
-import { validateEmail, isNonEmpty } from "@/validation/auth";
-import { fieldErrorMessage, apiErrorMessage } from "@/lib/messages";
 import { strings } from "@/i18n";
 import { spacing, type ThemeColors } from "@/constants/theme";
 
 // Login-first entry screen (design ref: assets/login-screen.png): brand, email +
-// password, social sign-in, and a link to sign up. Quick-exit is intentionally
-// not mounted here (paused — see App.tsx). Apple sign-in is a visual placeholder
-// for now (tracker P-12); Google uses the real flow via useGoogleSignIn.
+// password, social sign-in, and a link to sign up. Composition only — form state
+// lives in useEmailLogin, the social row in LoginSocialButtons, the Google flow
+// in useGoogleSignIn. Quick-exit is intentionally not mounted (paused — App.tsx).
 
 export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
   const insets = useSafeAreaInsets();
@@ -37,38 +35,7 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { signIn } = useAuth();
   const google = useGoogleSignIn({ onSignedIn: signIn });
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function onSubmit() {
-    setFormError(null);
-    // This design has no inline field-error slots — surface validation through
-    // the single form-error banner. Login never hints the password policy, so an
-    // empty password reads as generic invalid credentials.
-    const em = validateEmail(email);
-    if (em) {
-      setFormError(fieldErrorMessage(em));
-      return;
-    }
-    if (!isNonEmpty(password)) {
-      setFormError(strings.errors.invalidCredentials);
-      return;
-    }
-
-    setSubmitting(true);
-    const res = await login(email.trim().toLowerCase(), password);
-    setSubmitting(false);
-
-    if (res.ok) {
-      await signIn(res.data);
-    } else {
-      setFormError(apiErrorMessage(res.error));
-    }
-  }
+  const form = useEmailLogin();
 
   return (
     <KeyboardAvoidingView
@@ -95,7 +62,7 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
           </Text>
         </View>
 
-        <FormError message={formError} />
+        <FormError message={form.formError} />
 
         <IconInput
           icon={
@@ -105,8 +72,8 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
               color={colors.textMuted}
             />
           }
-          value={email}
-          onChangeText={setEmail}
+          value={form.email}
+          onChangeText={form.setEmail}
           placeholder={strings.login.emailPlaceholder}
           accessibilityLabel={strings.common.email}
           keyboardType="email-address"
@@ -121,26 +88,26 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
               color={colors.textMuted}
             />
           }
-          value={password}
-          onChangeText={setPassword}
+          value={form.password}
+          onChangeText={form.setPassword}
           placeholder={strings.login.passwordPlaceholder}
           accessibilityLabel={strings.common.password}
-          secureTextEntry={!showPassword}
+          secureTextEntry={!form.showPassword}
           autoComplete="off"
           textContentType="password"
-          onSubmitEditing={onSubmit}
+          onSubmitEditing={form.submit}
           returnKeyType="go"
           rightAccessory={
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
-                showPassword ? strings.common.hide : strings.common.show
+                form.showPassword ? strings.common.hide : strings.common.show
               }
-              onPress={() => setShowPassword((v) => !v)}
+              onPress={form.toggleShowPassword}
               hitSlop={8}
             >
               <Ionicons
-                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                name={form.showPassword ? "eye-off-outline" : "eye-outline"}
                 size={20}
                 color={colors.textMuted}
               />
@@ -160,33 +127,14 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
 
         <PrimaryButton
           label={strings.login.submit}
-          onPress={onSubmit}
-          loading={submitting}
+          onPress={form.submit}
+          loading={form.submitting}
         />
 
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>{strings.login.orContinue}</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        <View style={styles.socialRow}>
-          {/* Apple sign-in is not implemented yet — visual placeholder per the
-              mockup (tracker P-12). App Store rules will require it once Google
-              ships, so the button stays. */}
-          <SocialButton
-            provider="apple"
-            label={strings.login.continueWithApple}
-            onPress={() => {}}
-          />
-          <View style={styles.socialGap} />
-          <SocialButton
-            provider="google"
-            label={strings.login.continueWithGoogle}
-            onPress={google.start}
-            loading={google.loading}
-          />
-        </View>
+        <LoginSocialButtons
+          onGoogle={google.start}
+          googleLoading={google.loading}
+        />
 
         <View style={styles.signupRow}>
           <Text style={styles.signupPrompt}>
@@ -256,28 +204,6 @@ function createStyles(colors: ThemeColors) {
       color: colors.primary,
       fontSize: 14,
       fontWeight: "600",
-    },
-    dividerRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      marginVertical: spacing.lg,
-    },
-    dividerLine: {
-      flex: 1,
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: colors.border,
-    },
-    dividerText: {
-      color: colors.textMuted,
-      fontSize: 13,
-      marginHorizontal: spacing.md,
-    },
-    socialRow: {
-      flexDirection: "row",
-      alignItems: "center",
-    },
-    socialGap: {
-      width: spacing.md,
     },
     signupRow: {
       flexDirection: "row",

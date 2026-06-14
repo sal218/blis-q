@@ -122,6 +122,7 @@ export const pl = {
     orContinue: "lub kontynuuj przez",
     continueWithApple: "Kontynuuj z Apple",
     continueWithGoogle: "Kontynuuj z Google",
+    appleUnavailable: "Logowanie przez Apple będzie dostępne wkrótce.",
     noAccountPrompt: "Nie masz konta?",
     signUpLink: "Załóż konto",
   },

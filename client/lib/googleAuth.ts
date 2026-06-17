@@ -10,16 +10,26 @@
 // flows need it). nonce is reserved/passed through if ever generated; v1 does
 // not mint one here.
 //
-// ⚠️ The native module ONLY works in a custom dev client / EAS build. To keep
-// the app bootable in Expo Go (for fast UI iteration), it is NOT imported at
-// module load — it is lazily `import()`-ed the first time a Google action runs.
-// In Expo Go that dynamic import fails; we degrade gracefully (sign-in →
-// { status: "error" }, sign-out → no-op) instead of redboxing at startup.
+// ⚠️ The native module ONLY works in a custom dev client / EAS build — Expo Go
+// does not bundle it, and evaluating it there throws "RNGoogleSignin could not
+// be found" (TurboModule). So we detect the runtime and NEVER load the module in
+// Expo Go (or on web): sign-in returns { status: "error" }, sign-out is a no-op.
+// Native behavior is unchanged in dev-client / EAS builds.
+import Constants, { ExecutionEnvironment } from "expo-constants";
+import { Platform } from "react-native";
 
 // Type-only import (erased at compile time) — does not pull the native module
-// into the boot bundle. The runtime module is loaded lazily below.
+// into the boot bundle. It is loaded lazily, and ONLY when the guard below says
+// the native module is actually present.
 type GoogleSigninModule =
   typeof import("@react-native-google-signin/google-signin");
+
+// True only in a dev-client / EAS build (not Expo Go, not web). When false we
+// must not touch @react-native-google-signin/google-signin at all — not even a
+// lazy import() — or it throws on evaluation.
+const isNativeGoogleAvailable =
+  Platform.OS !== "web" &&
+  Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 
 export type GoogleCredential = {
   idToken: string;
@@ -68,11 +78,14 @@ function isCancellation(
 }
 
 export async function signInWithGoogle(): Promise<GoogleSignInOutcome> {
+  // Expo Go / web: the native module isn't present — never load it.
+  if (!isNativeGoogleAvailable) return { status: "error" };
+
   let mod: GoogleSigninModule;
   try {
     mod = await loadGoogleModule();
   } catch {
-    // Native module unavailable (e.g. Expo Go) — fail gracefully, no details.
+    // Defensive: a dev/EAS build where the module still failed to load.
     return { status: "error" };
   }
 
@@ -116,6 +129,8 @@ export async function signInWithGoogle(): Promise<GoogleSignInOutcome> {
 // errors (there may be no active Google session, or — in Expo Go — no native
 // module at all), so it's a safe no-op everywhere.
 export async function signOutGoogle(): Promise<void> {
+  // Expo Go / web: no native module to sign out of — no-op (never load it).
+  if (!isNativeGoogleAvailable) return;
   try {
     const { GoogleSignin } = await loadGoogleModule();
     await GoogleSignin.signOut();

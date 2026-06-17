@@ -1,21 +1,28 @@
-// Regression for the Expo Go boot bug: the native Google Sign-In module is not
-// bundled in Expo Go, so importing it at module load crashed the app before the
-// email/password UI was usable. googleAuth now lazy-imports it, so the module
-// must be importable WITHOUT the native dependency, and the Google actions must
-// degrade gracefully instead of throwing.
+// Regression for the Expo Go crash: the native Google Sign-In module isn't
+// bundled in Expo Go, and evaluating it there throws "RNGoogleSignin could not
+// be found" (it surfaced on logout, which calls signOutGoogle). googleAuth now
+// detects Expo Go via Constants.executionEnvironment and NEVER loads the native
+// module there — sign-in returns { status: "error" }, sign-out is a no-op.
 //
-// We simulate "native module unavailable / throws on load" by making the module
-// throw when required. This jest.mock overrides the working mock in
-// client/__tests__/setup.ts for this file only. Because googleAuth only does a
-// dynamic import(), the throw happens when a Google action runs — not at import
-// of googleAuth itself, which is exactly the boot guarantee we need.
+// Simulate Expo Go (executionEnvironment === "storeClient"). The native module
+// is additionally mocked to throw if it were ever required, proving the guard
+// short-circuits before any load is attempted.
+jest.mock("expo-constants", () => ({
+  __esModule: true,
+  default: { executionEnvironment: "storeClient" },
+  ExecutionEnvironment: {
+    StoreClient: "storeClient",
+    Standalone: "standalone",
+    Bare: "bare",
+  },
+}));
 jest.mock("@react-native-google-signin/google-signin", () => {
   throw new Error("Native module RNGoogleSignin is not available (Expo Go)");
 });
 
 import { signInWithGoogle, signOutGoogle } from "@/lib/googleAuth";
 
-describe("googleAuth with the native module unavailable (Expo Go)", () => {
+describe("googleAuth in Expo Go (native module not bundled)", () => {
   it("imports without crashing", () => {
     expect(typeof signInWithGoogle).toBe("function");
     expect(typeof signOutGoogle).toBe("function");

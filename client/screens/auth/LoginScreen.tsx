@@ -1,5 +1,13 @@
 import { useMemo } from "react";
-import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  Animated,
+  Keyboard,
+  TouchableWithoutFeedback,
+  StyleSheet,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import type { AuthScreenProps } from "@/navigation/types";
@@ -7,7 +15,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGoogleSignIn } from "@/hooks/useGoogleSignIn";
 import { useEmailLogin } from "@/hooks/useEmailLogin";
-import { useKeyboardFormLift } from "@/hooks/useKeyboardFormLift";
+import { useKeyboardLift } from "@/hooks/useKeyboardLift";
 import { BrandMark } from "@/components/BrandMark";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { IconInput } from "@/components/forms/IconInput";
@@ -30,46 +38,34 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
   const { signIn } = useAuth();
   const google = useGoogleSignIn({ onSignedIn: signIn });
   const form = useEmailLogin();
-  // Lift the form (header scrolls away) so the Log in button stays visible above
-  // the keyboard; the form's top Y is captured via onLayout into formTopRef.
-  const { scrollRef, formTopRef } = useKeyboardFormLift(
-    insets.top + spacing.md,
-  );
+  // Lift the form just enough to keep the Log in button (ctaRef) above the
+  // keyboard — minimal, so the logo barely moves rather than jumping to the top.
+  const { ctaRef, liftStyle } = useKeyboardLift();
 
   return (
     <View style={styles.flex}>
-      <ScrollView
-        ref={scrollRef}
-        style={styles.flex}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: insets.top + spacing.xl,
-            paddingBottom: insets.bottom + spacing.lg,
-          },
-        ]}
-        keyboardShouldPersistTaps="handled"
-        // Let the OS inset the scroll view in sync with the keyboard animation,
-        // instead of KeyboardAvoidingView's JS-driven padding (which lags behind
-        // the keyboard and makes the centered form visibly chase it on iOS).
-        // useKeyboardFormLift then scrolls the form up so the button stays visible.
-        automaticallyAdjustKeyboardInsets
-        keyboardDismissMode="interactive"
-      >
-        <View style={styles.header}>
-          <BrandMark size={68} />
-          <Text style={styles.brand}>{strings.common.appName}</Text>
-          <Text style={styles.tagline}>{strings.login.taglinePrimary}</Text>
-          <Text style={styles.taglineAccent}>
-            {strings.login.taglineAccent}
-          </Text>
-        </View>
-
-        <View
-          onLayout={(e) => {
-            formTopRef.current = e.nativeEvent.layout.y;
-          }}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              paddingTop: insets.top + spacing.xl,
+              paddingBottom: insets.bottom + spacing.lg,
+            },
+            // Lifts just enough to keep the Log in button above the keyboard
+            // (synced to the keyboard animation; built-in, Expo-Go-safe).
+            liftStyle,
+          ]}
         >
+          <View style={styles.header}>
+            <BrandMark size={68} />
+            <Text style={styles.brand}>{strings.common.appName}</Text>
+            <Text style={styles.tagline}>{strings.login.taglinePrimary}</Text>
+            <Text style={styles.taglineAccent}>
+              {strings.login.taglineAccent}
+            </Text>
+          </View>
+
           <FormError message={form.formError} />
 
           <IconInput
@@ -135,11 +131,14 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
             </Text>
           </Pressable>
 
-          <PrimaryButton
-            label={strings.login.submit}
-            onPress={form.submit}
-            loading={form.submitting}
-          />
+          {/* ctaRef marks the element that must stay above the keyboard. */}
+          <View ref={ctaRef} collapsable={false}>
+            <PrimaryButton
+              label={strings.login.submit}
+              onPress={form.submit}
+              loading={form.submitting}
+            />
+          </View>
 
           <LoginSocialButtons
             onGoogle={google.start}
@@ -159,8 +158,8 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
               <Text style={styles.signupLink}>{strings.login.signUpLink}</Text>
             </Pressable>
           </View>
-        </View>
-      </ScrollView>
+        </Animated.View>
+      </TouchableWithoutFeedback>
 
       <View style={[styles.themeToggle, { top: insets.top + spacing.sm }]}>
         <ThemeToggle />
@@ -189,7 +188,7 @@ function createStyles(colors: ThemeColors) {
       zIndex: 10,
     },
     content: {
-      flexGrow: 1,
+      flex: 1,
       justifyContent: "center",
       paddingHorizontal: spacing.lg,
     },

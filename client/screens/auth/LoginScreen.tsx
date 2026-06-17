@@ -1,13 +1,5 @@
 import { useMemo } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-} from "react-native";
+import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import type { AuthScreenProps } from "@/navigation/types";
@@ -39,10 +31,7 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
   const form = useEmailLogin();
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={styles.flex}>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={[
@@ -53,6 +42,11 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
           },
         ]}
         keyboardShouldPersistTaps="handled"
+        // Let the OS inset the scroll view in sync with the keyboard animation,
+        // instead of KeyboardAvoidingView's JS-driven padding (which lags behind
+        // the keyboard and makes the centered form visibly chase it on iOS).
+        automaticallyAdjustKeyboardInsets
+        keyboardDismissMode="interactive"
       >
         <View style={styles.header}>
           <BrandMark size={68} />
@@ -163,7 +157,7 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
         onSubmit={google.submitConsent}
         onCancel={google.cancelConsent}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

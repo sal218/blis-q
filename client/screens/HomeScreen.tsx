@@ -2,21 +2,22 @@ import { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/contexts/ThemeContext";
+import { ComingSoon } from "@/components/ComingSoon";
 import { strings } from "@/i18n";
 import { spacing, type ThemeColors } from "@/constants/theme";
 
-// Placeholder for the Communities tab. The real browse/detail/create screens
-// land in feat/communities-mobile (PR 2); this PR only establishes the themed
-// tab shell, so the tab has a destination.
+// Home tab — placeholder this slice. Design target: assets/home-screen.png
+// (greeting + "your communities" + upcoming events + nearby safe places feed).
+// The real feed lands in a later slice; this keeps the IA tab in place.
 
-export function CommunitiesPlaceholderScreen() {
+export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
-    <View style={[styles.root, { paddingTop: insets.top + spacing.xl }]}>
-      <Text style={styles.title}>{strings.communities.tabTitle}</Text>
-      <Text style={styles.body}>{strings.communities.comingSoon}</Text>
+    <View style={[styles.root, { paddingTop: insets.top + spacing.lg }]}>
+      <Text style={styles.title}>{strings.home.title}</Text>
+      <ComingSoon message={strings.home.comingSoon} />
     </View>
   );
 }
@@ -32,11 +33,6 @@ function createStyles(colors: ThemeColors) {
       color: colors.text,
       fontSize: 28,
       fontWeight: "800",
-    },
-    body: {
-      color: colors.textMuted,
-      fontSize: 15,
-      marginTop: spacing.sm,
     },
   });
 }

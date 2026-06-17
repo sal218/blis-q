@@ -2,7 +2,7 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-12 — block/reports merged (#14); building `feat/theme-foundation` (Sprint-3 mobile, PR 1 of 2)._
+_Last updated: 2026-06-13 — theme foundation merged (#15); building `feat/communities-mobile` (Sprint-3 mobile, PR 2 of 2)._
 
 ## Current phase
 
@@ -26,17 +26,21 @@ _Last updated: 2026-06-12 — block/reports merged (#14); building `feat/theme-f
 | #12 | `feat/account-erasure` — Sprint-2 slice 3: `DELETE /api/v1/account` (GDPR Art. 17) anonymisation cascade across every table; **closes P-1/P-2**                                                                |
 | #13 | `feat/communities` — Sprint-3 slice 1: communities create/browse/get/join/leave, creator→admin, last-admin-leave guard (409), audited                                                                          |
 | #14 | `feat/block-reports` — Sprint-3 slice 2: blocks (block/unblock/list, idempotent, soft-deleted unavailable) + `POST /reports`; block-only (mute deferred); audited                                              |
+| #15 | `feat/theme-foundation` — Sprint-3 mobile PR 1: light/dark theme (`ThemeContext`, SecureStore-persisted, default dark) + ~20-file `useTheme()` migration + authenticated tab shell; `HomePlaceholder` removed  |
 
-**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed). **🎉 Sprint-3 backend complete** (communities #13, block/reports #14).
+**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed). **🎉 Sprint-3 backend complete** (communities #13, block/reports #14). **Sprint-3 mobile: theme foundation merged (#15); community screens in `feat/communities-mobile`.**
 
 ## In progress
 
-- **`feat/theme-foundation`** — Sprint-3 mobile, **PR 1 of 2** (the cross-cutting theme + app shell; community screens are PR 2 `feat/communities-mobile`). **Status: implemented (Codex-approved split); client tests 49/49; types/lint/prettier clean. Awaiting review before PR.**
-  - **Light + dark theme** with explicit palettes in `constants/theme.ts` (light sampled from mockups: white surfaces, brand purple accents; dark = brand-purple-dark variant), identical token shape. `ThemeContext` exposes `mode` + active `colors` + `setMode`/`toggleMode`, **persisted in SecureStore** (`blis-q.theme-mode`), deterministic rehydration (`isReady`), default dark.
-  - **Migrated all ~20 static `colors` imports → `useTheme()`** (form primitives, AuthScreen, auth screens, overlays, App root). `NavigationContainer` + tab/stack chrome follow the active theme.
-  - **Authenticated tab shell** (`@react-navigation/bottom-tabs`): Communities (placeholder for PR 2) + **Profile** (account info, **light/dark toggle**, blocked-users entry point, sign-out moved from the old HomePlaceholder). `HomePlaceholder` removed.
-  - Tests: ThemeContext toggle/persist/rehydrate; ProfileScreen sign-out order (deregister push before clearing session); existing auth/component tests stay green via a global ThemeContext test mock.
-- **Next:** `feat/communities-mobile` (PR 2) — browse/detail/create/join-leave + blocked-users list/unblock, on this foundation. Then admin (communities CRUD + reports queue read).
+- **`feat/communities-mobile`** — Sprint-3 mobile, **PR 2 of 2** (community screens on the #15 theme foundation). **Status: implemented; client tests 90/90 (no act warnings); types/lint/prettier/`npm test` clean. Awaiting Codex review before PR.**
+  - **IA correction (Codex):** communities are **not** a top-level tab. Post-login tabs are **Home · Events · Chat · Profile**; inside **Events** a segmented control switches **Events / Safe places / Communities** (that order). Only Communities is built this slice — Home, Chat, Events, and Safe places are themed placeholders (design refs: home/chat/events/event-safeplace mockups). The old top-level Communities placeholder is removed.
+  - **Shared API layer:** extracted `client/lib/api/http.ts` (request/network/retry-after/common-status mapper); `auth.ts` now builds on it (public API unchanged). New `communities.ts` + `safety.ts` clients — **screens never call `fetch`**.
+  - **Communities:** browse with debounced search + offset load-more (**stale-response guard** so an old search can't overwrite a newer one); detail join/leave (sole-admin **409 → Polish copy**, disambiguated by call site not by parsing server strings); create form with **trimmed** name/description validation (mirrors server, but trims since the server schema doesn't). No image upload — `imageUrl` rendered if present, else a letter placeholder.
+  - **Profile:** blocked-users list + unblock (loading/empty/error, row removed on success). `GET /blocks` consumed as a plain `PublicUser[]` (not paginated). Block _initiation_ still deferred.
+  - Tests: API-client mappers (communities + safety), community validation (trim), and screen behaviour (list/search/load-more, detail join/leave incl. sole-admin conflict copy, create validation/submit/navigate, blocked-users unblock removal).
+  - **Login redesign (from `assets/login-screen.png`):** login-first entry (brand, email/password, forgot, social) replaces the old 3-button Welcome; Google wired, Apple is a visual placeholder (**P-12**); sun/moon **light-dark toggle** on the screen. Quick-exit (button + neutral overlay) **removed from the UI** pending product/safety review (context/components kept on disk). Native deps aligned to SDK 54 + `@expo/vector-icons` added (fixes the Expo Go Fabric crash). Verified end-to-end on a real device (signup → email verify → login → communities).
+  - **Design fidelity (decision 2026-06-14, sprint-aligned):** Home/Chat/Events/Safe-places stay bare stubs **for now**; each is rebuilt from its `assets/*.png` mockup **with its backend** in its sprint — tracked as **P-13** so it isn't forgotten. UI is always built from the mockups (light = mockup, dark = brand purple).
+- **Next:** admin (communities CRUD + reports queue read), then Sprint 4.
 - **Backlog (Codex):** "Deactivate account" = a **reversible pause** (not GDPR erasure) — parked in [ROADMAP](ROADMAP.md) **Sprint 4**.
 
 ## Auth endpoints live (`/api/v1/auth/*`)

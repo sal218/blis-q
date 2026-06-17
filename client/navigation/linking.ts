@@ -20,9 +20,8 @@ export const linking: LinkingOptions<AuthStackParamList> = {
   prefixes,
   config: {
     screens: {
-      Welcome: "",
+      Login: "",
       SignUp: "signup",
-      Login: "login",
       CheckEmail: "check-email",
       ForgotPassword: "forgot-password",
       ResetPassword: "reset-password",

@@ -1,10 +1,13 @@
 import type { ConsentType, SessionResponse } from "@shared/types";
-import { fetchWithAuth } from "@/lib/auth";
+import { request, commonApiError } from "@/lib/api/http";
 
 // Typed client for the /api/v1/auth/* endpoints (docs/API.md §4). This is the
 // ONLY thing screens use to talk to auth — they never call fetch directly. Every
 // call resolves to a discriminated ApiResult so callers handle success and each
 // failure mode explicitly (no thrown exceptions for expected HTTP errors).
+//
+// Shared HTTP plumbing (request/network/retry-after/common status codes) lives
+// in ./http; this module only declares the auth-specific error kinds + mapping.
 //
 // Privacy: this layer never logs request bodies, tokens, emails, or response
 // bodies. It reads only the fields it needs (retryAfter) and returns codes.
@@ -41,50 +44,17 @@ export type SignUpInput = {
   policyVersion: string;
 };
 
-async function readRetryAfter(res: Response): Promise<number> {
-  try {
-    const body = (await res.json()) as { retryAfter?: unknown };
-    const ra = body?.retryAfter;
-    return typeof ra === "number" && ra > 0 ? Math.ceil(ra) : 60;
-  } catch {
-    return 60;
-  }
-}
-
-// Map a non-2xx Response to an ApiError. Only retryAfter is read from the body.
+// Map a non-2xx Response to an auth ApiError. 401/422 are auth-specific; the
+// rest (400/429/5xx) delegate to the shared mapper. Only retryAfter is read.
 async function toApiError(res: Response): Promise<ApiError> {
   switch (res.status) {
-    case 400:
-      return { kind: "validation" };
     case 401:
       return { kind: "invalidCredentials" };
     case 422:
       return { kind: "consentRequired" };
-    case 429:
-      return { kind: "rateLimited", retryAfter: await readRetryAfter(res) };
     default:
-      return { kind: "server" };
+      return commonApiError(res);
   }
-}
-
-// Run a request and resolve success bodies via `onOk`. Network failures (fetch
-// throwing) collapse to { kind: "network" }. No logging anywhere on this path.
-async function request<T>(
-  method: string,
-  path: string,
-  body: unknown,
-  onOk: (res: Response) => Promise<T>,
-): Promise<ApiResult<T>> {
-  let res: Response;
-  try {
-    res = await fetchWithAuth(method, path, body);
-  } catch {
-    return { ok: false, error: { kind: "network" } };
-  }
-  if (res.ok) {
-    return { ok: true, data: await onOk(res) };
-  }
-  return { ok: false, error: await toApiError(res) };
 }
 
 const accepted = async (): Promise<Accepted> => ({ accepted: true });
@@ -94,7 +64,7 @@ const sessionBody = (res: Response): Promise<SessionResponse> =>
 // ── Endpoints ─────────────────────────────────────────────────────────────────
 
 export function signUp(input: SignUpInput): Promise<ApiResult<Accepted>> {
-  return request("POST", "/api/v1/auth/signup", input, accepted);
+  return request("POST", "/api/v1/auth/signup", input, accepted, toApiError);
 }
 
 export function resendVerification(
@@ -105,6 +75,7 @@ export function resendVerification(
     "/api/v1/auth/resend-verification",
     { email },
     accepted,
+    toApiError,
   );
 }
 
@@ -117,11 +88,18 @@ export function login(
     "/api/v1/auth/login",
     { email, password },
     sessionBody,
+    toApiError,
   );
 }
 
 export function forgotPassword(email: string): Promise<ApiResult<Accepted>> {
-  return request("POST", "/api/v1/auth/forgot-password", { email }, accepted);
+  return request(
+    "POST",
+    "/api/v1/auth/forgot-password",
+    { email },
+    accepted,
+    toApiError,
+  );
 }
 
 export function resetPassword(
@@ -135,11 +113,12 @@ export function resetPassword(
     "/api/v1/auth/reset-password",
     { token, newPassword },
     accepted,
+    toApiError,
   );
 }
 
 export function googleSignIn(
   input: GoogleSignInInput,
 ): Promise<ApiResult<SessionResponse>> {
-  return request("POST", "/api/v1/auth/google", input, sessionBody);
+  return request("POST", "/api/v1/auth/google", input, sessionBody, toApiError);
 }

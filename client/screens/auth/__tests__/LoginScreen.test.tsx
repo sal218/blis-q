@@ -1,4 +1,7 @@
-jest.mock("@/lib/api/auth", () => ({ login: jest.fn() }));
+jest.mock("@/lib/api/auth", () => ({
+  login: jest.fn(),
+  googleSignIn: jest.fn(),
+}));
 
 import {
   render,

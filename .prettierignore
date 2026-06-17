@@ -1,0 +1,4 @@
+# Hand-maintained doc with a large hand-formatted issue tracker. Excluded from
+# Prettier so routine edits (e.g. adding a tracker row) don't trigger a whole-
+# file reflow. Keep edits matching the surrounding style.
+CLAUDE.md

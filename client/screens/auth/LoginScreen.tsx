@@ -1,95 +1,243 @@
-import { useState } from "react";
+import { useMemo } from "react";
+import {
+  View,
+  Text,
+  Pressable,
+  Animated,
+  Keyboard,
+  TouchableWithoutFeedback,
+  StyleSheet,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import type { AuthScreenProps } from "@/navigation/types";
-import { AuthScreen } from "@/components/AuthScreen";
-import { TextField } from "@/components/forms/TextField";
-import { PasswordField } from "@/components/forms/PasswordField";
-import { PrimaryButton } from "@/components/forms/PrimaryButton";
-import { TextLink } from "@/components/forms/TextLink";
-import { FormError } from "@/components/forms/FormError";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { login } from "@/lib/api/auth";
-import { validateEmail, isNonEmpty } from "@/validation/auth";
-import { fieldErrorMessage, apiErrorMessage } from "@/lib/messages";
+import { useGoogleSignIn } from "@/hooks/useGoogleSignIn";
+import { useEmailLogin } from "@/hooks/useEmailLogin";
+import { useKeyboardLift } from "@/hooks/useKeyboardLift";
+import { BrandMark } from "@/components/BrandMark";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { IconInput } from "@/components/forms/IconInput";
+import { PrimaryButton } from "@/components/forms/PrimaryButton";
+import { FormError } from "@/components/forms/FormError";
+import { LoginSocialButtons } from "@/components/LoginSocialButtons";
+import { GoogleConsentModal } from "@/components/GoogleConsentModal";
 import { strings } from "@/i18n";
+import { spacing, type ThemeColors } from "@/constants/theme";
+
+// Login-first entry screen (design ref: assets/login-screen.png): brand, email +
+// password, social sign-in, and a link to sign up. Composition only — form state
+// lives in useEmailLogin, the social row in LoginSocialButtons, the Google flow
+// in useGoogleSignIn. Quick-exit is intentionally not mounted (paused — App.tsx).
 
 export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { signIn } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function onSubmit() {
-    setFormError(null);
-    const em = validateEmail(email);
-    // Login never hints the password policy — just require a non-empty value.
-    const pwMissing = !isNonEmpty(password);
-    setEmailError(em ? fieldErrorMessage(em) : null);
-    setPasswordError(pwMissing ? strings.errors.invalidCredentials : null);
-    if (em || pwMissing) return;
-
-    setSubmitting(true);
-    const res = await login(email.trim().toLowerCase(), password);
-    setSubmitting(false);
-
-    if (res.ok) {
-      // Persist + flip into the authenticated tree (RootNavigator swaps stacks).
-      await signIn(res.data);
-    } else {
-      setFormError(apiErrorMessage(res.error));
-    }
-  }
-
-  function onNeedVerify() {
-    const em = validateEmail(email);
-    if (em) {
-      setEmailError(fieldErrorMessage(em));
-      return;
-    }
-    navigation.navigate("CheckEmail", { email: email.trim().toLowerCase() });
-  }
+  const google = useGoogleSignIn({ onSignedIn: signIn });
+  const form = useEmailLogin();
+  // Lift the form just enough to keep the Log in button (ctaRef) above the
+  // keyboard — minimal, so the logo barely moves rather than jumping to the top.
+  const { ctaRef, liftStyle } = useKeyboardLift();
 
   return (
-    <AuthScreen title={strings.login.title} subtitle={strings.login.subtitle}>
-      <FormError message={formError} />
+    <View style={styles.flex}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              paddingTop: insets.top + spacing.xl,
+              paddingBottom: insets.bottom + spacing.lg,
+            },
+            // Lifts just enough to keep the Log in button above the keyboard
+            // (synced to the keyboard animation; built-in, Expo-Go-safe).
+            liftStyle,
+          ]}
+        >
+          <View style={styles.header}>
+            <BrandMark size={68} />
+            <Text style={styles.brand}>{strings.common.appName}</Text>
+            <Text style={styles.tagline}>{strings.login.taglinePrimary}</Text>
+            <Text style={styles.taglineAccent}>
+              {strings.login.taglineAccent}
+            </Text>
+          </View>
 
-      <TextField
-        label={strings.common.email}
-        value={email}
-        onChangeText={setEmail}
-        placeholder={strings.common.emailPlaceholder}
-        keyboardType="email-address"
-        autoComplete="email"
-        textContentType="emailAddress"
-        error={emailError}
-      />
-      <PasswordField
-        label={strings.common.password}
-        value={password}
-        onChangeText={setPassword}
-        textContentType="password"
-        error={passwordError}
-        onSubmitEditing={onSubmit}
-        returnKeyType="go"
-      />
+          <FormError message={form.formError} />
 
-      <PrimaryButton
-        label={strings.login.submit}
-        onPress={onSubmit}
-        loading={submitting}
-      />
+          <IconInput
+            icon={
+              <Ionicons
+                name="person-outline"
+                size={20}
+                color={colors.textMuted}
+              />
+            }
+            value={form.email}
+            onChangeText={form.setEmail}
+            placeholder={strings.login.emailPlaceholder}
+            accessibilityLabel={strings.common.email}
+            keyboardType="email-address"
+            autoComplete="email"
+            textContentType="emailAddress"
+          />
+          <IconInput
+            icon={
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color={colors.textMuted}
+              />
+            }
+            value={form.password}
+            onChangeText={form.setPassword}
+            placeholder={strings.login.passwordPlaceholder}
+            accessibilityLabel={strings.common.password}
+            secureTextEntry={!form.showPassword}
+            autoComplete="off"
+            textContentType="password"
+            onSubmitEditing={form.submit}
+            returnKeyType="go"
+            rightAccessory={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  form.showPassword ? strings.common.hide : strings.common.show
+                }
+                onPress={form.toggleShowPassword}
+                hitSlop={8}
+              >
+                <Ionicons
+                  name={form.showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={20}
+                  color={colors.textMuted}
+                />
+              </Pressable>
+            }
+          />
 
-      <TextLink
-        label={strings.login.forgotPassword}
-        onPress={() => navigation.navigate("ForgotPassword")}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={strings.login.forgotPassword}
+            onPress={() => navigation.navigate("ForgotPassword")}
+            hitSlop={8}
+            style={styles.forgotWrap}
+          >
+            <Text style={styles.forgotText}>
+              {strings.login.forgotPassword}
+            </Text>
+          </Pressable>
+
+          {/* ctaRef marks the element that must stay above the keyboard. */}
+          <View ref={ctaRef} collapsable={false}>
+            <PrimaryButton
+              label={strings.login.submit}
+              onPress={form.submit}
+              loading={form.submitting}
+            />
+          </View>
+
+          <LoginSocialButtons
+            onGoogle={google.start}
+            googleLoading={google.loading}
+          />
+
+          <View style={styles.signupRow}>
+            <Text style={styles.signupPrompt}>
+              {strings.login.noAccountPrompt}{" "}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.login.signUpLink}
+              onPress={() => navigation.navigate("SignUp")}
+              hitSlop={8}
+            >
+              <Text style={styles.signupLink}>{strings.login.signUpLink}</Text>
+            </Pressable>
+          </View>
+        </Animated.View>
+      </TouchableWithoutFeedback>
+
+      <View style={[styles.themeToggle, { top: insets.top + spacing.sm }]}>
+        <ThemeToggle />
+      </View>
+
+      <GoogleConsentModal
+        visible={google.needsConsent}
+        loading={google.loading}
+        error={google.error}
+        onSubmit={google.submitConsent}
+        onCancel={google.cancelConsent}
       />
-      <TextLink label={strings.login.needVerify} onPress={onNeedVerify} />
-      <TextLink
-        label={strings.login.noAccount}
-        onPress={() => navigation.navigate("SignUp")}
-      />
-    </AuthScreen>
+    </View>
   );
+}
+
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    flex: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    themeToggle: {
+      position: "absolute",
+      right: spacing.lg,
+      zIndex: 10,
+    },
+    content: {
+      flex: 1,
+      justifyContent: "center",
+      paddingHorizontal: spacing.lg,
+    },
+    header: {
+      alignItems: "center",
+      marginBottom: spacing.xl,
+    },
+    brand: {
+      color: colors.text,
+      fontSize: 32,
+      fontWeight: "900",
+      marginTop: spacing.md,
+    },
+    tagline: {
+      color: colors.textMuted,
+      fontSize: 15,
+      textAlign: "center",
+      marginTop: spacing.sm,
+    },
+    taglineAccent: {
+      color: colors.primary,
+      fontSize: 15,
+      fontWeight: "600",
+      textAlign: "center",
+      marginTop: spacing.xs,
+    },
+    forgotWrap: {
+      alignSelf: "flex-end",
+      marginBottom: spacing.lg,
+    },
+    forgotText: {
+      color: colors.primary,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    signupRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: spacing.xl,
+    },
+    signupPrompt: {
+      color: colors.textMuted,
+      fontSize: 14,
+    },
+    signupLink: {
+      color: colors.primary,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+  });
 }

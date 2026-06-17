@@ -24,9 +24,35 @@ export const pl = {
     signOut: "Wyloguj się",
   },
 
+  // Bottom tabs (post-login IA): Home · Events · Chat · Profile.
   tabs: {
-    communities: "Społeczności",
+    home: "Strona główna",
+    events: "Wydarzenia",
+    chat: "Czat",
     profile: "Profil",
+  },
+
+  // Home tab — placeholder this slice (design ref: home-screen.png).
+  home: {
+    title: "Strona główna",
+    comingSoon: "Twój kanał społeczności pojawi się wkrótce.",
+  },
+
+  // Chat tab — placeholder this slice (design ref: chat-screen.png).
+  chat: {
+    title: "Czat",
+    comingSoon: "Czat pojawi się wkrótce.",
+  },
+
+  // Events tab: a segmented section (Events / Safe places / Communities). Only
+  // Communities is built this slice; the other two are placeholders.
+  events: {
+    title: "Wydarzenia",
+    tabEvents: "Wydarzenia",
+    tabSafePlaces: "Bezpieczne miejsca",
+    tabCommunities: "Społeczności",
+    eventsComingSoon: "Wydarzenia pojawią się wkrótce.",
+    safePlacesComingSoon: "Bezpieczne miejsca pojawią się wkrótce.",
   },
 
   profile: {
@@ -36,20 +62,39 @@ export const pl = {
     themeDark: "Ciemny",
     themeLight: "Jasny",
     blockedUsers: "Blokowani użytkownicy",
-    blockedUsersComingSoon:
-      "Lista zablokowanych użytkowników pojawi się wkrótce.",
+    blockedEmpty: "Nie masz zablokowanych użytkowników.",
+    blockedLoadError: "Nie udało się załadować listy. Spróbuj ponownie.",
+    unblock: "Odblokuj",
+    unblockError: "Nie udało się odblokować użytkownika. Spróbuj ponownie.",
   },
 
   communities: {
-    tabTitle: "Społeczności",
-    comingSoon: "Społeczności pojawią się wkrótce.",
-  },
-
-  welcome: {
-    tagline: "Bezpieczna przestrzeń dla osób LGBT+ w Polsce",
-    signIn: "Zaloguj się",
-    createAccount: "Załóż konto",
-    continueWithGoogle: "Kontynuuj z Google",
+    searchPlaceholder: "Szukaj społeczności",
+    empty: "Nie ma jeszcze żadnych społeczności.",
+    emptySearch: "Brak wyników dla tego wyszukiwania.",
+    loadError: "Nie udało się załadować społeczności.",
+    retry: "Spróbuj ponownie",
+    create: "Załóż społeczność",
+    members: "Członkowie: {count}",
+    joined: "Dołączono",
+    join: "Dołącz",
+    leave: "Opuść",
+    about: "O społeczności",
+    notFound: "Nie znaleziono tej społeczności.",
+    alreadyMember: "Już należysz do tej społeczności.",
+    leaveSoleAdmin:
+      "Społeczność musi mieć co najmniej jednego administratora. Najpierw przekaż tę rolę.",
+    joinError: "Nie udało się dołączyć. Spróbuj ponownie.",
+    leaveError: "Nie udało się opuścić społeczności. Spróbuj ponownie.",
+    createTitle: "Załóż społeczność",
+    nameLabel: "Nazwa",
+    namePlaceholder: "Nazwa społeczności",
+    descriptionLabel: "Opis (opcjonalnie)",
+    descriptionPlaceholder: "O czym jest ta społeczność?",
+    createError: "Nie udało się założyć społeczności. Spróbuj ponownie.",
+    nameRequired: "Podaj nazwę społeczności.",
+    nameTooLong: "Nazwa może mieć maksymalnie {max} znaków.",
+    descriptionTooLong: "Opis może mieć maksymalnie {max} znaków.",
   },
 
   signUp: {
@@ -68,12 +113,18 @@ export const pl = {
   },
 
   login: {
-    title: "Zaloguj się",
-    subtitle: "Witaj ponownie",
+    taglinePrimary: "Społeczność. Wydarzenia. Wsparcie. Bezpieczeństwo.",
+    taglineAccent: "Razem jest nam bliżej.",
+    emailPlaceholder: "E-mail",
+    passwordPlaceholder: "Hasło",
     submit: "Zaloguj się",
     forgotPassword: "Nie pamiętasz hasła?",
-    noAccount: "Nie masz konta? Załóż je",
-    needVerify: "Nie otrzymałeś linku weryfikacyjnego?",
+    orContinue: "lub kontynuuj przez",
+    continueWithApple: "Kontynuuj z Apple",
+    continueWithGoogle: "Kontynuuj z Google",
+    appleUnavailable: "Logowanie przez Apple będzie dostępne wkrótce.",
+    noAccountPrompt: "Nie masz konta?",
+    signUpLink: "Załóż konto",
   },
 
   forgotPassword: {

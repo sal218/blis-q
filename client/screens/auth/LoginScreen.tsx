@@ -7,6 +7,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGoogleSignIn } from "@/hooks/useGoogleSignIn";
 import { useEmailLogin } from "@/hooks/useEmailLogin";
+import { useKeyboardFormLift } from "@/hooks/useKeyboardFormLift";
 import { BrandMark } from "@/components/BrandMark";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { IconInput } from "@/components/forms/IconInput";
@@ -29,10 +30,16 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
   const { signIn } = useAuth();
   const google = useGoogleSignIn({ onSignedIn: signIn });
   const form = useEmailLogin();
+  // Lift the form (header scrolls away) so the Log in button stays visible above
+  // the keyboard; the form's top Y is captured via onLayout into formTopRef.
+  const { scrollRef, formTopRef } = useKeyboardFormLift(
+    insets.top + spacing.md,
+  );
 
   return (
     <View style={styles.flex}>
       <ScrollView
+        ref={scrollRef}
         style={styles.flex}
         contentContainerStyle={[
           styles.content,
@@ -45,6 +52,7 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
         // Let the OS inset the scroll view in sync with the keyboard animation,
         // instead of KeyboardAvoidingView's JS-driven padding (which lags behind
         // the keyboard and makes the centered form visibly chase it on iOS).
+        // useKeyboardFormLift then scrolls the form up so the button stays visible.
         automaticallyAdjustKeyboardInsets
         keyboardDismissMode="interactive"
       >
@@ -57,92 +65,100 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
           </Text>
         </View>
 
-        <FormError message={form.formError} />
+        <View
+          onLayout={(e) => {
+            formTopRef.current = e.nativeEvent.layout.y;
+          }}
+        >
+          <FormError message={form.formError} />
 
-        <IconInput
-          icon={
-            <Ionicons
-              name="person-outline"
-              size={20}
-              color={colors.textMuted}
-            />
-          }
-          value={form.email}
-          onChangeText={form.setEmail}
-          placeholder={strings.login.emailPlaceholder}
-          accessibilityLabel={strings.common.email}
-          keyboardType="email-address"
-          autoComplete="email"
-          textContentType="emailAddress"
-        />
-        <IconInput
-          icon={
-            <Ionicons
-              name="lock-closed-outline"
-              size={20}
-              color={colors.textMuted}
-            />
-          }
-          value={form.password}
-          onChangeText={form.setPassword}
-          placeholder={strings.login.passwordPlaceholder}
-          accessibilityLabel={strings.common.password}
-          secureTextEntry={!form.showPassword}
-          autoComplete="off"
-          textContentType="password"
-          onSubmitEditing={form.submit}
-          returnKeyType="go"
-          rightAccessory={
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                form.showPassword ? strings.common.hide : strings.common.show
-              }
-              onPress={form.toggleShowPassword}
-              hitSlop={8}
-            >
+          <IconInput
+            icon={
               <Ionicons
-                name={form.showPassword ? "eye-off-outline" : "eye-outline"}
+                name="person-outline"
                 size={20}
                 color={colors.textMuted}
               />
-            </Pressable>
-          }
-        />
+            }
+            value={form.email}
+            onChangeText={form.setEmail}
+            placeholder={strings.login.emailPlaceholder}
+            accessibilityLabel={strings.common.email}
+            keyboardType="email-address"
+            autoComplete="email"
+            textContentType="emailAddress"
+          />
+          <IconInput
+            icon={
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color={colors.textMuted}
+              />
+            }
+            value={form.password}
+            onChangeText={form.setPassword}
+            placeholder={strings.login.passwordPlaceholder}
+            accessibilityLabel={strings.common.password}
+            secureTextEntry={!form.showPassword}
+            autoComplete="off"
+            textContentType="password"
+            onSubmitEditing={form.submit}
+            returnKeyType="go"
+            rightAccessory={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  form.showPassword ? strings.common.hide : strings.common.show
+                }
+                onPress={form.toggleShowPassword}
+                hitSlop={8}
+              >
+                <Ionicons
+                  name={form.showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={20}
+                  color={colors.textMuted}
+                />
+              </Pressable>
+            }
+          />
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={strings.login.forgotPassword}
-          onPress={() => navigation.navigate("ForgotPassword")}
-          hitSlop={8}
-          style={styles.forgotWrap}
-        >
-          <Text style={styles.forgotText}>{strings.login.forgotPassword}</Text>
-        </Pressable>
-
-        <PrimaryButton
-          label={strings.login.submit}
-          onPress={form.submit}
-          loading={form.submitting}
-        />
-
-        <LoginSocialButtons
-          onGoogle={google.start}
-          googleLoading={google.loading}
-        />
-
-        <View style={styles.signupRow}>
-          <Text style={styles.signupPrompt}>
-            {strings.login.noAccountPrompt}{" "}
-          </Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={strings.login.signUpLink}
-            onPress={() => navigation.navigate("SignUp")}
+            accessibilityLabel={strings.login.forgotPassword}
+            onPress={() => navigation.navigate("ForgotPassword")}
             hitSlop={8}
+            style={styles.forgotWrap}
           >
-            <Text style={styles.signupLink}>{strings.login.signUpLink}</Text>
+            <Text style={styles.forgotText}>
+              {strings.login.forgotPassword}
+            </Text>
           </Pressable>
+
+          <PrimaryButton
+            label={strings.login.submit}
+            onPress={form.submit}
+            loading={form.submitting}
+          />
+
+          <LoginSocialButtons
+            onGoogle={google.start}
+            googleLoading={google.loading}
+          />
+
+          <View style={styles.signupRow}>
+            <Text style={styles.signupPrompt}>
+              {strings.login.noAccountPrompt}{" "}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.login.signUpLink}
+              onPress={() => navigation.navigate("SignUp")}
+              hitSlop={8}
+            >
+              <Text style={styles.signupLink}>{strings.login.signUpLink}</Text>
+            </Pressable>
+          </View>
         </View>
       </ScrollView>
 

@@ -885,26 +885,32 @@ export class DatabaseStorage {
     if (input.name !== undefined) fields.name = input.name;
     if (input.description !== undefined) fields.description = input.description;
 
-    const [row] = await db
-      .update(communities)
-      .set(fields)
-      .where(and(eq(communities.id, id), isNull(communities.deletedAt)))
-      .returning({
-        id: communities.id,
-        name: communities.name,
-        description: communities.description,
-        imageUrl: communities.imageUrl,
-        createdAt: communities.createdAt,
-      });
-    if (!row) return null;
+    // The update + mandatory audit row must commit together (§7): a community
+    // mutation must never persist without its audit entry.
+    const row = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(communities)
+        .set(fields)
+        .where(and(eq(communities.id, id), isNull(communities.deletedAt)))
+        .returning({
+          id: communities.id,
+          name: communities.name,
+          description: communities.description,
+          imageUrl: communities.imageUrl,
+          createdAt: communities.createdAt,
+        });
+      if (!updated) return null;
 
-    await db.insert(auditLog).values({
-      actorId,
-      action: "community.updated",
-      resourceType: "community",
-      resourceId: id,
-      ipAddress: ipAddress ?? null,
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "community.updated",
+        resourceType: "community",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return updated;
     });
+    if (!row) return null;
 
     const [{ n }] = await db
       .select({ n: count() })
@@ -921,21 +927,24 @@ export class DatabaseStorage {
     actorId: string,
     ipAddress?: string | null,
   ): Promise<"deleted" | "not_found"> {
-    const [row] = await db
-      .update(communities)
-      .set({ deletedAt: new Date() })
-      .where(and(eq(communities.id, id), isNull(communities.deletedAt)))
-      .returning({ id: communities.id });
-    if (!row) return "not_found";
+    // Soft-delete + mandatory audit row commit together (§7).
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(communities)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(communities.id, id), isNull(communities.deletedAt)))
+        .returning({ id: communities.id });
+      if (!row) return "not_found";
 
-    await db.insert(auditLog).values({
-      actorId,
-      action: "community.deleted",
-      resourceType: "community",
-      resourceId: id,
-      ipAddress: ipAddress ?? null,
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "community.deleted",
+        resourceType: "community",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return "deleted";
     });
-    return "deleted";
   }
 
   // Join: idempotent at the DB via onConflictDoNothing on the unique

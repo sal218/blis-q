@@ -124,7 +124,12 @@ export const withdrawConsentSchema = z
 // R2 lands. An empty body is rejected — PATCH must change something.
 export const updateProfileSchema = z
   .object({
-    displayName: z.string().trim().min(1).max(MAX_DISPLAY_NAME_LENGTH).optional(),
+    displayName: z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_DISPLAY_NAME_LENGTH)
+      .optional(),
     // city-level text; blank (or whitespace) CLEARS the city → null, so a user
     // can remove it. Omitted → undefined → not touched.
     preferredCity: z
@@ -135,10 +140,9 @@ export const updateProfileSchema = z
       .optional(),
   })
   .strict()
-  .refine(
-    (d) => d.displayName !== undefined || d.preferredCity !== undefined,
-    { message: "Provide at least one field to update" },
-  );
+  .refine((d) => d.displayName !== undefined || d.preferredCity !== undefined, {
+    message: "Provide at least one field to update",
+  });
 
 export const assetTypeSchema = z.enum(["avatar", "community", "event", "post"]);
 
@@ -166,6 +170,28 @@ export const updateCommunitySchema = z
 export const membershipRoleSchema = z
   .object({ role: z.enum(["member", "moderator", "admin"]) })
   .strict();
+
+// ── Admin communities ─────────────────────────────────────────────────────────
+// Server-side trimming (do not rely on UI). `.trim()` runs before `.min(1)`, so
+// a whitespace-only name collapses to "" and is rejected. No `imageKey` here:
+// community image upload (R2) is deferred, so admin must not accept it.
+export const adminCreateCommunitySchema = z
+  .object({
+    name: z.string().trim().min(1).max(MAX_COMMUNITY_NAME_LENGTH),
+    description: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
+  })
+  .strict();
+
+export const adminUpdateCommunitySchema = z
+  .object({
+    name: z.string().trim().min(1).max(MAX_COMMUNITY_NAME_LENGTH).optional(),
+    description: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
+  })
+  .strict()
+  // PATCH must change something — an empty body is a 400, not a silent no-op.
+  .refine((d) => d.name !== undefined || d.description !== undefined, {
+    message: "At least one field is required",
+  });
 
 // ── Posts (communityId comes from /communities/:id/posts, not the body) ───────
 
@@ -271,6 +297,19 @@ export const offsetPageQuerySchema = z.object({
     .default(DEFAULT_OFFSET_PAGE_SIZE),
   sort: z.string().optional(),
   order: z.enum(["asc", "desc"]).default("desc"),
+});
+
+// Admin reports queue: offset/page + optional status filter (read-only this
+// slice — resolve/dismiss is a Sprint-4 moderation action).
+export const adminReportsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_OFFSET_PAGE_SIZE)
+    .default(DEFAULT_OFFSET_PAGE_SIZE),
+  status: z.enum(["pending", "reviewing", "resolved", "dismissed"]).optional(),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

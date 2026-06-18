@@ -63,6 +63,7 @@ const limiters = {
   blockUser: makeLimiter(30, "1 h"), // block/unblock mutations
   communityCreateUser: makeLimiter(10, "1 h"), // creating communities
   communityJoinUser: makeLimiter(20, "1 h"),
+  adminMutationUser: makeLimiter(60, "1 h"), // admin POST/PATCH/DELETE (owner-operated)
   pushTokenUser: makeLimiter(20, "1 h"), // register/deregister on launch + logout
   exportUser: makeLimiter(5, "10 m"), // GDPR data export — expensive to generate
 
@@ -248,6 +249,14 @@ export async function checkCommunityJoinRateLimit(
   userId: string,
 ): Promise<RateLimitResult> {
   return check(limiters.communityJoinUser, `community-join:user:${userId}`);
+}
+
+// Admin community mutations (POST/PATCH/DELETE). Owner-operated behind
+// requireAdmin, but CLAUDE.md §6 requires every mutation be rate-limited.
+export async function checkAdminMutationRateLimit(
+  userId: string,
+): Promise<RateLimitResult> {
+  return check(limiters.adminMutationUser, `admin-mutation:user:${userId}`);
 }
 
 export async function checkPushTokenRateLimit(

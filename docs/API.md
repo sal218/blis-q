@@ -79,7 +79,7 @@ Response: { "data": T[], "page": number, "pageSize": number, "total": number, "t
 
 ### Rate limiting
 
-Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in prod). Auth flows use **dual buckets** (IP **and** email/userId — both must pass). Limiter names referenced per-endpoint below: `loginIp`/`loginEmail`, `signupIp`, `googleAuthIp`, `passwordResetIp`/`passwordResetEmail`, `contentCreateUser`, `reportUser`, `blockUser`, `communityCreateUser`, `communityJoinUser`, `pushTokenUser`, `accountUpdateUser`, `changePasswordUser`, `exportUser`, `eraseUser`, `revenuecatWebhookIp`.
+Per CLAUDE.md §6 / `server/rateLimit.ts`. Fail-closed (Redis outage → 429 in prod). Auth flows use **dual buckets** (IP **and** email/userId — both must pass). Limiter names referenced per-endpoint below: `loginIp`/`loginEmail`, `signupIp`, `googleAuthIp`, `passwordResetIp`/`passwordResetEmail`, `contentCreateUser`, `reportUser`, `blockUser`, `communityCreateUser`, `communityJoinUser`, `adminMutationUser`, `pushTokenUser`, `accountUpdateUser`, `changePasswordUser`, `exportUser`, `eraseUser`, `revenuecatWebhookIp`.
 
 ---
 
@@ -296,20 +296,24 @@ User writes to safe places are **admin-only** (§14). 🚧 whether `/safe-places
 
 ---
 
-## 14. Admin dashboard — `/api/v1/admin/*` 🛡️
+## 14. Admin dashboard — `/api/admin/*` (→ `/api/v1/admin/*`, migration tracked) 🛡️
 
 **Admin sign-in — `POST /api/admin/login` 🌐** (the one unauthenticated admin route — it _is_ the auth step). Body `{ email, password }` (strict). Authenticates via Supabase `signInWithPassword`, then **gates on a verified, live `isAdmin` profile server-side**. Every failure — bad credentials, unverified, missing/soft-deleted profile, or **non-admin** — returns the **same generic `401 { "error": "Invalid credentials" }`**, so the client can never learn who is an admin. If Supabase issued a session before the gate fails, it is **revoked** (global sign-out) so a non-admin never holds one. Success → `200 SessionResponse` (admin's `AccountProfile` + tokens). Audited: `admin.login` on success, `admin.login_failed` on every failure (with actor id when known). Dual-bucket rate-limited (`adminLoginIp` + `adminLoginEmail`). The dashboard stores only the access token (`localStorage` — **AR-1**).
 
-All other admin routes are `isAuthenticated` **then** `requireAdmin` (403 for non-admins). All list endpoints use **offset/page**. All mutations write `audit_log`. (`GET /api/v1/admin/me` is the scaffolded `/api/admin/me`, to migrate.)
+All other admin routes are `isAuthenticated` **then** `requireAdmin` (403 for non-admins). All list endpoints use **offset/page**. All mutations write `audit_log`.
+
+**Path note:** admin routes are currently served under **`/api/admin/*`** (matching the `login`/`me` scaffold and the admin web client), **not** `/api/v1/admin/*` yet. The table below uses the short form; the `/api/v1/admin` migration is tracked, not churned now (§16).
+
+**Implemented (Sprint-3 admin slice, `feat/admin-communities`):** `GET/POST /api/admin/communities`, `GET/PATCH/DELETE /api/admin/communities/:id` (create reuses community semantics → admin is `createdById` + admin member; PATCH is name/description only — **no `imageKey`**, R2 deferred; DELETE is soft-delete via `deletedAt`, so the community drops out of the public list/detail/join; name/description trimmed server-side; mutations rate-limited `adminMutationUser` + audited `community.created/updated/deleted`), and **`GET /api/admin/reports`** (offset, `?status=` — **read-only**). **Not yet built:** report resolve/dismiss (`PATCH /admin/reports/:id`) and all moderation actions → **Sprint 4**.
 
 | Domain       | Endpoints                                                                                                                    |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | Self         | `GET /admin/me` → `{ id, displayName, isAdmin }`                                                                             |
 | Users        | `GET /admin/users` (offset, `?search=&status=`), `GET /admin/users/:id`, `PATCH /admin/users/:id` (ban/unban, set `isAdmin`) |
-| Communities  | `GET/POST /admin/communities`, `GET/PATCH/DELETE /admin/communities/:id`                                                     |
+| Communities  | ✅ `GET/POST /admin/communities`, `GET/PATCH/DELETE /admin/communities/:id`                                                  |
 | Events       | `GET/POST /admin/events`, `GET/PATCH/DELETE /admin/events/:id`                                                               |
 | Safe places  | `GET/POST /admin/safe-places`, `GET/PATCH/DELETE /admin/safe-places/:id` (the only write path for venues)                    |
-| Reports      | `GET /admin/reports` (offset, `?status=`), `PATCH /admin/reports/:id` (resolve/dismiss + `resolution`)                       |
+| Reports      | ✅ `GET /admin/reports` (offset, `?status=`) · ⛔ `PATCH /admin/reports/:id` (resolve/dismiss + `resolution`) — Sprint 4     |
 | Moderation   | `POST /admin/moderation/ban`, `/mute`, `/remove-content` (each writes `audit_log: moderation.*`)                             |
 | Ad campaigns | `GET/POST /admin/ad-campaigns`, `GET/PATCH/DELETE /admin/ad-campaigns/:id`                                                   |
 

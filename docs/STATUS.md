@@ -2,7 +2,7 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-13 — theme foundation merged (#15); building `feat/communities-mobile` (Sprint-3 mobile, PR 2 of 2)._
+_Last updated: 2026-06-17 — communities-mobile merged (#16); building `feat/admin-communities` (Sprint-3 admin slice)._
 
 ## Current phase
 
@@ -27,20 +27,18 @@ _Last updated: 2026-06-13 — theme foundation merged (#15); building `feat/comm
 | #13 | `feat/communities` — Sprint-3 slice 1: communities create/browse/get/join/leave, creator→admin, last-admin-leave guard (409), audited                                                                          |
 | #14 | `feat/block-reports` — Sprint-3 slice 2: blocks (block/unblock/list, idempotent, soft-deleted unavailable) + `POST /reports`; block-only (mute deferred); audited                                              |
 | #15 | `feat/theme-foundation` — Sprint-3 mobile PR 1: light/dark theme (`ThemeContext`, SecureStore-persisted, default dark) + ~20-file `useTheme()` migration + authenticated tab shell; `HomePlaceholder` removed  |
+| #16 | `feat/communities-mobile` — Sprint-3 mobile PR 2: communities browse/detail/create + blocked-users under Events tab; login-first redesign + sun/moon toggle; SDK-54 dep alignment + Expo entry fixes           |
 
-**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed). **🎉 Sprint-3 backend complete** (communities #13, block/reports #14). **Sprint-3 mobile: theme foundation merged (#15); community screens in `feat/communities-mobile`.**
+**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed). **🎉 Sprint-3 backend complete** (communities #13, block/reports #14). **🎉 Sprint-3 mobile complete** (theme #15, communities/login #16). Now the **admin slice** (`feat/admin-communities`).
 
 ## In progress
 
-- **`feat/communities-mobile`** — Sprint-3 mobile, **PR 2 of 2** (community screens on the #15 theme foundation). **Status: implemented; client tests 90/90 (no act warnings); types/lint/prettier/`npm test` clean. Awaiting Codex review before PR.**
-  - **IA correction (Codex):** communities are **not** a top-level tab. Post-login tabs are **Home · Events · Chat · Profile**; inside **Events** a segmented control switches **Events / Safe places / Communities** (that order). Only Communities is built this slice — Home, Chat, Events, and Safe places are themed placeholders (design refs: home/chat/events/event-safeplace mockups). The old top-level Communities placeholder is removed.
-  - **Shared API layer:** extracted `client/lib/api/http.ts` (request/network/retry-after/common-status mapper); `auth.ts` now builds on it (public API unchanged). New `communities.ts` + `safety.ts` clients — **screens never call `fetch`**.
-  - **Communities:** browse with debounced search + offset load-more (**stale-response guard** so an old search can't overwrite a newer one); detail join/leave (sole-admin **409 → Polish copy**, disambiguated by call site not by parsing server strings); create form with **trimmed** name/description validation (mirrors server, but trims since the server schema doesn't). No image upload — `imageUrl` rendered if present, else a letter placeholder.
-  - **Profile:** blocked-users list + unblock (loading/empty/error, row removed on success). `GET /blocks` consumed as a plain `PublicUser[]` (not paginated). Block _initiation_ still deferred.
-  - Tests: API-client mappers (communities + safety), community validation (trim), and screen behaviour (list/search/load-more, detail join/leave incl. sole-admin conflict copy, create validation/submit/navigate, blocked-users unblock removal).
-  - **Login redesign (from `assets/login-screen.png`):** login-first entry (brand, email/password, forgot, social) replaces the old 3-button Welcome; Google wired, Apple is a visual placeholder (**P-12**); sun/moon **light-dark toggle** on the screen. Quick-exit (button + neutral overlay) **removed from the UI** pending product/safety review (context/components kept on disk). Native deps aligned to SDK 54 + `@expo/vector-icons` added (fixes the Expo Go Fabric crash). Verified end-to-end on a real device (signup → email verify → login → communities).
-  - **Design fidelity (decision 2026-06-14, sprint-aligned):** Home/Chat/Events/Safe-places stay bare stubs **for now**; each is rebuilt from its `assets/*.png` mockup **with its backend** in its sprint — tracked as **P-13** so it isn't forgotten. UI is always built from the mockups (light = mockup, dark = brand purple).
-- **Next:** admin (communities CRUD + reports queue read), then Sprint 4.
+- **`feat/admin-communities`** — Sprint-3 admin slice (backend + admin web; **no mobile changes**). **Status: implemented; check:types/lint/`npm test` clean; admin integration suite 15/15 (real DB); `admin npm run build` passes. Awaiting Codex review before PR.**
+  - **Admin endpoints** (`/api/admin/*`, `isAuthenticated → requireAdmin`, mutations rate-limited `adminMutationUser` + audited): `GET/POST /communities`, `GET/PATCH/DELETE /communities/:id`, and **`GET /reports`** (offset + `?status=`, **read-only**).
+  - **Create** reuses community semantics (admin = `createdById` + admin member). **PATCH** is name/description only — **no `imageKey`** (R2 deferred; admin schema rejects it). **DELETE** is soft-delete (`deletedAt`) — tests prove the community drops out of the public list/detail/join. Name/description **trimmed server-side**. `adminListCommunities` avoids N+1 (page query + one grouped member-count query).
+  - **Admin web** (matches the existing dashboard style): new **Communities** page (list + search + create/edit form + delete) and a real read-only **Reports** queue (status filter), built on reusable `DataTable` + `StatusBadge`. Polish copy.
+  - **Out of scope (Sprint 4):** report resolve/dismiss (`PATCH /admin/reports/:id`) + moderation actions (ban/mute/remove).
+- **Next:** Sprint 4 — posts + reporting/moderation actions + safety features.
 - **Backlog (Codex):** "Deactivate account" = a **reversible pause** (not GDPR erasure) — parked in [ROADMAP](ROADMAP.md) **Sprint 4**.
 
 ## Auth endpoints live (`/api/v1/auth/*`)
@@ -49,7 +47,7 @@ _Last updated: 2026-06-13 — theme foundation merged (#15); building `feat/comm
 Account (🔑): `GET/PATCH /api/v1/profile` · `POST /api/v1/account/change-password` · `GET /api/v1/account/consents` (merged #10) · `GET /api/v1/account/export` (merged #11) · `DELETE /api/v1/account` (merged #12). **Account/GDPR surface complete.**
 Communities (🔑, merged #13): `POST /api/v1/communities` · `GET /api/v1/communities` · `GET /:id` · `POST /:id/join` · `DELETE /:id/leave`.
 Safety (🔑, merged #14): `POST /api/v1/blocks` · `DELETE /api/v1/blocks/:userId` · `GET /api/v1/blocks` · `POST /api/v1/reports`.
-Admin: **`POST /api/admin/login`** (#9, merged) + `GET /api/admin/me`.
+Admin (🛡️ `isAuthenticated → requireAdmin`): **`POST /api/admin/login`** (#9, merged) + `GET /api/admin/me`. **`feat/admin-communities`:** `GET/POST /api/admin/communities` · `GET/PATCH/DELETE /api/admin/communities/:id` · `GET /api/admin/reports` (read-only). Paths stay under `/api/admin/*` (→ `/api/v1/admin/*` migration tracked).
 
 ## Sprint status
 

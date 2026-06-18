@@ -143,6 +143,17 @@ export type CommunityRow = {
   callerRole: MembershipRole | null;
 };
 
+// One row of the admin reports queue (read-only this slice). `status`/
+// `resourceType` are DB text columns; the route narrows them to the DTO unions.
+export type ReportRow = {
+  id: string;
+  resourceType: string;
+  resourceId: string;
+  reason: string;
+  status: string;
+  createdAt: Date;
+};
+
 // The boolean flags read by server/notifications.ts preferenceKey(). Returned
 // even when a user has no notification_preferences row yet (defaults all-on).
 export type NotificationPreferenceFlags = {
@@ -787,6 +798,155 @@ export class DatabaseStorage {
     };
   }
 
+  // ── Admin community management (docs/API.md §14) ────────────────────────────
+
+  // Admin community list: one page of NON-deleted communities (newest first),
+  // optional name search, each with memberCount. No caller-role scoping (admin
+  // view). Member counts come from one grouped query — no per-row N+1.
+  async adminListCommunities(input: {
+    offset: number;
+    limit: number;
+    search?: string;
+  }): Promise<{ rows: CommunityRow[]; total: number }> {
+    const where = and(
+      isNull(communities.deletedAt),
+      input.search ? ilike(communities.name, `%${input.search}%`) : undefined,
+    );
+
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(communities)
+      .where(where);
+
+    const page = await db
+      .select({
+        id: communities.id,
+        name: communities.name,
+        description: communities.description,
+        imageUrl: communities.imageUrl,
+        createdAt: communities.createdAt,
+      })
+      .from(communities)
+      .where(where)
+      .orderBy(desc(communities.createdAt))
+      .limit(input.limit)
+      .offset(input.offset);
+
+    if (page.length === 0) return { rows: [], total: Number(total) };
+
+    const ids = page.map((c) => c.id);
+    const counts = await db
+      .select({ communityId: communityMemberships.communityId, n: count() })
+      .from(communityMemberships)
+      .where(inArray(communityMemberships.communityId, ids))
+      .groupBy(communityMemberships.communityId);
+    const countMap = new Map(counts.map((c) => [c.communityId, Number(c.n)]));
+
+    const rows: CommunityRow[] = page.map((c) => ({
+      ...c,
+      memberCount: countMap.get(c.id) ?? 0,
+      callerRole: null,
+    }));
+    return { rows, total: Number(total) };
+  }
+
+  // Admin get: a single NON-deleted community + memberCount (no caller role).
+  async adminGetCommunity(id: string): Promise<CommunityRow | null> {
+    const [community] = await db
+      .select({
+        id: communities.id,
+        name: communities.name,
+        description: communities.description,
+        imageUrl: communities.imageUrl,
+        createdAt: communities.createdAt,
+      })
+      .from(communities)
+      .where(and(eq(communities.id, id), isNull(communities.deletedAt)))
+      .limit(1);
+    if (!community) return null;
+
+    const [{ n }] = await db
+      .select({ n: count() })
+      .from(communityMemberships)
+      .where(eq(communityMemberships.communityId, id));
+    return { ...community, memberCount: Number(n), callerRole: null };
+  }
+
+  // Update a non-deleted community (admin). Returns the updated row (+ member
+  // count) or null if missing/deleted. Audited community.updated. Callers pass
+  // already-trimmed, validated fields; at least one field is present.
+  async updateCommunity(
+    id: string,
+    input: { name?: string; description?: string },
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<CommunityRow | null> {
+    const fields: { name?: string; description?: string } = {};
+    if (input.name !== undefined) fields.name = input.name;
+    if (input.description !== undefined) fields.description = input.description;
+
+    // The update + mandatory audit row must commit together (§7): a community
+    // mutation must never persist without its audit entry.
+    const row = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(communities)
+        .set(fields)
+        .where(and(eq(communities.id, id), isNull(communities.deletedAt)))
+        .returning({
+          id: communities.id,
+          name: communities.name,
+          description: communities.description,
+          imageUrl: communities.imageUrl,
+          createdAt: communities.createdAt,
+        });
+      if (!updated) return null;
+
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "community.updated",
+        resourceType: "community",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return updated;
+    });
+    if (!row) return null;
+
+    const [{ n }] = await db
+      .select({ n: count() })
+      .from(communityMemberships)
+      .where(eq(communityMemberships.communityId, id));
+    return { ...row, memberCount: Number(n), callerRole: null };
+  }
+
+  // Soft-delete a community (admin) — sets deletedAt so it disappears from the
+  // public list/detail/join. Audited community.deleted. Returns "not_found" if
+  // it's missing or already deleted (idempotent-safe).
+  async softDeleteCommunity(
+    id: string,
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<"deleted" | "not_found"> {
+    // Soft-delete + mandatory audit row commit together (§7).
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(communities)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(communities.id, id), isNull(communities.deletedAt)))
+        .returning({ id: communities.id });
+      if (!row) return "not_found";
+
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "community.deleted",
+        resourceType: "community",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return "deleted";
+    });
+  }
+
   // Join: idempotent at the DB via onConflictDoNothing on the unique
   // (communityId, userId) constraint. Returns "already" when the membership
   // existed (route → 409), "not_found" for a missing/deleted community.
@@ -989,6 +1149,38 @@ export class DatabaseStorage {
       resourceId: row.id,
       ipAddress: ipAddress ?? null,
     });
+  }
+
+  // Admin reports queue (read-only this slice): one page, newest first, optional
+  // status filter. Resolve/dismiss is a Sprint-4 moderation action, not here.
+  async listReports(input: {
+    offset: number;
+    limit: number;
+    status?: string;
+  }): Promise<{ rows: ReportRow[]; total: number }> {
+    const where = input.status ? eq(reports.status, input.status) : undefined;
+
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(reports)
+      .where(where);
+
+    const rows = await db
+      .select({
+        id: reports.id,
+        resourceType: reports.resourceType,
+        resourceId: reports.resourceId,
+        reason: reports.reason,
+        status: reports.status,
+        createdAt: reports.createdAt,
+      })
+      .from(reports)
+      .where(where)
+      .orderBy(desc(reports.createdAt))
+      .limit(input.limit)
+      .offset(input.offset);
+
+    return { rows, total: Number(total) };
   }
 
   // ── Community membership ────────────────────────────────────────────────────

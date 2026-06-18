@@ -18,6 +18,11 @@ const config: Config = {
     "<rootDir>/client/**/__tests__/**/*.test.ts",
     "<rootDir>/client/**/__tests__/**/*.test.tsx",
   ],
+  // jest-expo's first React Native render pays a cold-start cost that can exceed
+  // the default 5s on slower CI runners (a component suite intermittently timed
+  // out on its first test). 15s gives RN-rendering suites headroom without
+  // masking real hangs.
+  testTimeout: 15000,
 };
 
 export default config;

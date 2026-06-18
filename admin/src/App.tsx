@@ -7,6 +7,7 @@ import {
   adminLogin,
   type AdminUser,
 } from "./lib/api";
+import { CommunitiesPage } from "./pages/CommunitiesPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ModerationPage } from "./pages/ModerationPage";
 import { UsersPage } from "./pages/UsersPage";
@@ -15,12 +16,21 @@ import { EventsPage } from "./pages/EventsPage";
 import { AdCampaignsPage } from "./pages/AdCampaignsPage";
 
 const NAV_ITEMS = [
+  { path: "/communities", label: "Społeczności", element: <CommunitiesPage /> },
   { path: "/reports", label: "Zgłoszenia", element: <ReportsPage /> },
   { path: "/moderation", label: "Moderacja", element: <ModerationPage /> },
   { path: "/users", label: "Użytkownicy", element: <UsersPage /> },
-  { path: "/safe-places", label: "Bezpieczne miejsca", element: <SafePlacesPage /> },
+  {
+    path: "/safe-places",
+    label: "Bezpieczne miejsca",
+    element: <SafePlacesPage />,
+  },
   { path: "/events", label: "Wydarzenia", element: <EventsPage /> },
-  { path: "/ad-campaigns", label: "Kampanie reklamowe", element: <AdCampaignsPage /> },
+  {
+    path: "/ad-campaigns",
+    label: "Kampanie reklamowe",
+    element: <AdCampaignsPage />,
+  },
 ] as const;
 
 export function App() {
@@ -139,7 +149,11 @@ function LoginScreen({
           onChange={(e) => setPassword(e.target.value)}
         />
         {error && <p style={styles.error}>{error}</p>}
-        <button type="submit" style={styles.primaryButton} disabled={submitting}>
+        <button
+          type="submit"
+          style={styles.primaryButton}
+          disabled={submitting}
+        >
           {submitting ? "Logowanie…" : "Zaloguj się"}
         </button>
       </form>

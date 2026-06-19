@@ -19,6 +19,7 @@ const MAX_POST_LENGTH = 2000;
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_EVENT_TITLE_LENGTH = 150;
 const MAX_REPORT_REASON_LENGTH = 1000;
+const MAX_RESOLUTION_LENGTH = 1000;
 const MAX_POLICY_VERSION_LENGTH = 32;
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -263,6 +264,26 @@ export const createReportSchema = z
 
 export const blockSchema = z
   .object({ blockedUserId: z.string().uuid() })
+  .strict();
+
+// ── Admin moderation actions (docs/API.md §14) ────────────────────────────────
+
+// PATCH /api/admin/reports/:id — resolve or dismiss a queued report. Optional
+// trimmed, bounded resolution note. Strict so unknown fields are rejected.
+export const adminReportResolveSchema = z
+  .object({
+    status: z.enum(["resolved", "dismissed"]),
+    resolution: z.string().trim().min(1).max(MAX_RESOLUTION_LENGTH).optional(),
+  })
+  .strict();
+
+// POST /api/admin/moderation/remove-content — post-only this slice (message
+// removal lands with chat, Sprint 5). resourceId is the target post id.
+export const adminRemoveContentSchema = z
+  .object({
+    resourceType: z.literal("post"),
+    resourceId: z.string().uuid(),
+  })
   .strict();
 
 export const notificationPreferencesUpdateSchema = z

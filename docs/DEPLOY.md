@@ -48,7 +48,11 @@ npm run check:rls    # read-only: every expected table RLS-enabled, zero policie
 
 Read-only. Parses the expected-table set from `supabase/rls.sql` (single source
 of truth) and asserts each table exists, has RLS enabled, and has zero policies.
-Run it any time against any environment:
+It **also fails if any public base table exists that is not listed in
+`supabase/rls.sql`** — a table forgotten from `rls.sql` is created RLS-disabled
+by default and would otherwise pass silently. (Intentional exceptions go in the
+`ALLOWLIST` in `scripts/check-rls.mjs`, currently empty.) Run it any time against
+any environment:
 
 ```bash
 npm run check:rls                          # checks DATABASE_URL (.env / prod)

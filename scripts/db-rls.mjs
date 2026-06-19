@@ -13,6 +13,7 @@
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 async function main() {
@@ -35,9 +36,11 @@ async function main() {
   }
 
   // Verify by delegating to the read-only checker (same DATABASE_URL).
+  // fileURLToPath (not .pathname) — on Windows .pathname yields "/C:/..." which
+  // Node mis-resolves as "C:\C:\...".
   const res = spawnSync(
     process.execPath,
-    [new URL("./check-rls.mjs", import.meta.url).pathname],
+    [fileURLToPath(new URL("./check-rls.mjs", import.meta.url))],
     { stdio: "inherit", env: process.env },
   );
   process.exit(res.status ?? 1);

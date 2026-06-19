@@ -1,12 +1,18 @@
 // Read-only RLS verifier (zero-policy model — CLAUDE.md §2).
 //
-// Asserts, against the database in DATABASE_URL, that every table the project
-// expects to exist (1) exists, (2) has ROW LEVEL SECURITY enabled, and (3) has
-// ZERO policies. RLS-enabled + zero-policies = deny-all for anon/authenticated;
-// the service_role (used by the Express backend) bypasses RLS by design.
+// Asserts, against the database in DATABASE_URL, that:
+//   1. every table the project expects (parsed from supabase/rls.sql) exists,
+//      has ROW LEVEL SECURITY enabled, and has ZERO policies;
+//   2. NO public base table exists that is absent from supabase/rls.sql — a
+//      table forgotten from rls.sql is created RLS-disabled by default and
+//      would otherwise pass silently, defeating the whole point of this check.
+// RLS-enabled + zero-policies = deny-all for anon/authenticated; the
+// service_role (used by the Express backend) bypasses RLS by design.
 //
 // The expected-table set is parsed from supabase/rls.sql so this stays in sync
-// with the single source of truth — never hardcode the list here.
+// with the single source of truth — never hardcode the list here. ALLOWLIST
+// below is for public base tables that are intentionally NOT in rls.sql (e.g.
+// a tool-managed migrations table); keep it empty unless one truly exists.
 //
 // Exits 0 when the DB matches the model, 1 otherwise. Makes no writes.
 //
@@ -15,6 +21,10 @@
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import pg from "pg";
+
+// Public base tables intentionally excluded from supabase/rls.sql. Empty by
+// design — add an entry only with a documented reason.
+const ALLOWLIST = new Set([]);
 
 function expectedTablesFromRlsSql() {
   const sql = readFileSync(
@@ -50,10 +60,21 @@ async function main() {
         where relnamespace = 'public'::regnamespace and relkind = 'r'`,
     );
     const byName = new Map(tableRows.map((r) => [r.relname, r.relrowsecurity]));
+    const expectedSet = new Set(expected);
 
     for (const t of expected) {
       if (!byName.has(t)) problems.push(`missing table: ${t}`);
       else if (byName.get(t) !== true) problems.push(`RLS DISABLED: ${t}`);
+    }
+
+    // Any public base table not in rls.sql (and not explicitly allowlisted) is
+    // a coverage gap — flag it. Such a table is RLS-disabled by default.
+    for (const r of tableRows) {
+      if (expectedSet.has(r.relname) || ALLOWLIST.has(r.relname)) continue;
+      problems.push(
+        `table not in supabase/rls.sql: ${r.relname}` +
+          (r.relrowsecurity !== true ? " (RLS DISABLED)" : " (RLS enabled)"),
+      );
     }
 
     // Zero-policy rule: no policies anywhere in the public schema.

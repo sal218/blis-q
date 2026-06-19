@@ -36,7 +36,7 @@ _Last updated: 2026-06-18 — posts (#19) + db:push/RLS hardening (#20) merged; 
 
 ## In progress
 
-- **`feat/moderation-actions`** — Sprint-4 admin moderation (backend-only; admin-web UI wiring deferred). **Zero schema change** — the `reports` table already has `status`/`reviewedById`/`resolution`/`reviewedAt`. **Status: implemented; check:types/lint clean; admin-moderation integration suite 12/12 (real DB). Awaiting full battery → commit → Codex validation before PR.**
+- **`feat/moderation-actions`** — Sprint-4 admin moderation (backend-only; admin-web UI wiring deferred). **Zero schema change** — the `reports` table already has `status`/`reviewedById`/`resolution`/`reviewedAt`. **Status: implemented; check:types/lint clean; admin-moderation integration suite 13/13 (real DB). Codex-validated — opening PR.**
   - **`PATCH /api/admin/reports/:id`** — resolve/dismiss (+ trimmed `resolution`); **atomic one-way transition** (only `pending`/`reviewing`; re-action → `409`; missing → `404`); stamps `reviewedById`/`reviewedAt`; returns **`AdminReportDTO`** (moderation internals, never on the public/export `ReportDTO`); audit `report.resolved`/`report.dismissed`.
   - **`POST /api/admin/moderation/remove-content`** — **post-only** (other `resourceType` → `400`); missing/already-removed → `404`; soft-deletes + **scrubs stored content/media** + audit `moderation.content_removed`, one transaction; platform-admin authority (no community-membership check). Both `requireAdmin`, rate-limited `adminMutationUser`. **Audit privacy:** resource ids only — never reason/resolution/content.
   - **Deferred:** ban/unban + `GET/PATCH /admin/users` (schema change → **P-15**); `/mute` (DPIA-gated — API §12); message removal (chat, Sprint 5); admin-web moderation UI.

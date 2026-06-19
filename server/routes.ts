@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerAccountRoutes } from "./routes/account";
 import { registerCommunityRoutes } from "./routes/communities";
+import { registerPostRoutes } from "./routes/posts";
 import { registerSafetyRoutes } from "./routes/safety";
 import { registerAdminRoutes } from "./routes/admin";
 
@@ -20,6 +21,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerAuthRoutes(app);
   registerAccountRoutes(app);
   registerCommunityRoutes(app);
+  registerPostRoutes(app);
   registerSafetyRoutes(app);
   registerAdminRoutes(app);
 

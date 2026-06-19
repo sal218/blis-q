@@ -350,6 +350,24 @@ export const adminReportsQuerySchema = z.object({
   status: z.enum(["pending", "reviewing", "resolved", "dismissed"]).optional(),
 });
 
+// Admin user directory: offset/page + optional search + status filter.
+export const adminUsersQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_OFFSET_PAGE_SIZE)
+    .default(DEFAULT_OFFSET_PAGE_SIZE),
+  search: z.string().trim().min(1).max(100).optional(),
+  status: z.enum(["active", "banned"]).optional(),
+});
+
+// POST /api/admin/moderation/ban|unban body — just the target user id.
+export const adminBanUserSchema = z
+  .object({ userId: z.string().uuid() })
+  .strict();
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type CreateCommunityInput = z.infer<typeof createCommunitySchema>;
 export type UpdateCommunityInput = z.infer<typeof updateCommunitySchema>;

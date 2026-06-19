@@ -313,18 +313,29 @@ All other admin routes are `isAuthenticated` **then** `requireAdmin` (403 for no
 
 Also: **`GET /api/admin/reports`** now returns **`OffsetPage<AdminReportDTO>`** (the moderation fields, not the public `ReportDTO`) so the queue shows reviewer/time/resolution.
 
-Both mutations are `isAuthenticated → requireAdmin`, rate-limited `adminMutationUser`. **Audit privacy:** entries reference resource ids only — never the report reason, resolution text, or removed content. **Deferred:** `POST /admin/moderation/ban`/`unban` + `GET/PATCH /admin/users` (needs a `users` ban column + auth-gate integration — tracker **P-15**); `/mute` (DPIA-gated, no model — §12); message removal (lands with chat, Sprint 5). **Admin-web UI wiring deferred** (backend-only slice).
+Both mutations are `isAuthenticated → requireAdmin`, rate-limited `adminMutationUser`. **Audit privacy:** entries reference resource ids only — never the report reason, resolution text, or removed content.
 
-| Domain       | Endpoints                                                                                                                           |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Self         | `GET /admin/me` → `{ id, displayName, isAdmin }`                                                                                    |
-| Users        | `GET /admin/users` (offset, `?search=&status=`), `GET /admin/users/:id`, `PATCH /admin/users/:id` (ban/unban, set `isAdmin`) — P-15 |
-| Communities  | ✅ `GET/POST /admin/communities`, `GET/PATCH/DELETE /admin/communities/:id`                                                         |
-| Events       | `GET/POST /admin/events`, `GET/PATCH/DELETE /admin/events/:id`                                                                      |
-| Safe places  | `GET/POST /admin/safe-places`, `GET/PATCH/DELETE /admin/safe-places/:id` (the only write path for venues)                           |
-| Reports      | ✅ `GET /admin/reports` (offset, `?status=`) · ✅ `PATCH /admin/reports/:id` (resolve/dismiss + `resolution`)                       |
-| Moderation   | ✅ `POST /admin/moderation/remove-content` (post-only) · ⛔ `/ban`, `/mute` (P-15 / DPIA) — each writes `audit_log: moderation.*`   |
-| Ad campaigns | `GET/POST /admin/ad-campaigns`, `GET/PATCH/DELETE /admin/ad-campaigns/:id`                                                          |
+**Implemented (Sprint-4 user-ban slice, `feat/user-ban`, backend-only — P-15):**
+
+- **`GET /api/admin/users`** — offset paged; `?search=` (email/displayName, ilike); `?status=active|banned`; → **`OffsetPage<AdminUserDTO>`** (`{ id, email, displayName, isAdmin, isPremium, createdAt, bannedAt, deletedAt }` — admin-only; `email` is exposed for admins and never on a public/self surface).
+- **`GET /api/admin/users/:id`** — `AdminUserDTO` / `404`.
+- **`POST /api/admin/moderation/ban`** — `BanUserInput { userId }`. Guarded atomic `UPDATE … WHERE deletedAt IS NULL AND bannedAt IS NULL` in a tx + audit `moderation.user_banned` + `invalidateProfileCache`. Missing/erased → `404`, already banned → `409`.
+- **`POST /api/admin/moderation/unban`** — `{ userId }`. Guarded clear (`bannedAt IS NOT NULL`) + audit `moderation.user_unbanned` + cache-invalidate. Missing/erased → `404`, not banned → `409`.
+- **Auth gate:** a banned (`users.bannedAt` set) user is **resolved** but `isAuthenticated` returns **`403 "Account suspended"`** — so all product + admin routes block them. The **GDPR rights routes stay reachable** for banned users via `isAuthenticatedAllowBanned`: `GET /api/v1/account/export` and `DELETE /api/v1/account` (Art. 20 / Art. 17). **Erasure cascade:** `DELETE /api/v1/account` clears `bannedAt` and anonymises user-targeted audit rows (`audit_log.resourceId` for `resourceType='user'`).
+- **Schema:** `users.bannedAt timestamptz null` (additive) — deploy via the safe `docs/DEPLOY.md` flow.
+
+**Deferred:** `PATCH /admin/users/:id` set-`isAdmin` / admin promotion (separate sensitive slice — tracker **P-16**); ban `reason` (no privacy-safe store); `/mute` (DPIA-gated, no model — §12); message removal (chat, Sprint 5). **Admin-web UI wiring deferred** (backend-only slice).
+
+| Domain       | Endpoints                                                                                                                                    |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Self         | `GET /admin/me` → `{ id, displayName, isAdmin }`                                                                                             |
+| Users        | ✅ `GET /admin/users` (offset, `?search=&status=`), `GET /admin/users/:id` · ⛔ `PATCH /admin/users/:id` set `isAdmin` (P-16)                |
+| Communities  | ✅ `GET/POST /admin/communities`, `GET/PATCH/DELETE /admin/communities/:id`                                                                  |
+| Events       | `GET/POST /admin/events`, `GET/PATCH/DELETE /admin/events/:id`                                                                               |
+| Safe places  | `GET/POST /admin/safe-places`, `GET/PATCH/DELETE /admin/safe-places/:id` (the only write path for venues)                                    |
+| Reports      | ✅ `GET /admin/reports` (offset, `?status=`) · ✅ `PATCH /admin/reports/:id` (resolve/dismiss + `resolution`)                                |
+| Moderation   | ✅ `POST /admin/moderation/remove-content` (post-only) · ✅ `/ban` · ✅ `/unban` · ⛔ `/mute` (DPIA) — each writes `audit_log: moderation.*` |
+| Ad campaigns | `GET/POST /admin/ad-campaigns`, `GET/PATCH/DELETE /admin/ad-campaigns/:id`                                                                   |
 
 ---
 

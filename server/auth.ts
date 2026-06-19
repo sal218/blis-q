@@ -18,6 +18,9 @@ declare global {
         displayName: string;
         isPremium: boolean;
         isAdmin: boolean;
+        // Moderation suspension. The user is still resolved (so GDPR
+        // export/erasure stay reachable); isAuthenticated returns 403 for them.
+        banned: boolean;
       };
     }
   }
@@ -41,6 +44,7 @@ type CachedProfile = {
   email: string; // DB email; JWT email is layered on top at read time
   displayName: string;
   deleted: boolean;
+  banned: boolean;
   isPremium: boolean;
   isAdmin: boolean;
 };
@@ -109,6 +113,7 @@ async function verifyAndResolve(token: string): Promise<{
   displayName: string;
   isPremium: boolean;
   isAdmin: boolean;
+  banned: boolean;
 } | null> {
   const supabaseUrl = process.env.SUPABASE_URL!;
 
@@ -130,7 +135,9 @@ async function verifyAndResolve(token: string): Promise<{
 
   const jwtEmail = (payload["email"] as string | undefined) ?? "";
 
-  // Fast path — profile in Redis cache.
+  // Fast path — profile in Redis cache. Banned users are still RESOLVED (with
+  // the banned flag) so GDPR export/erasure stay reachable; isAuthenticated does
+  // the 403. Only deleted (erased) accounts resolve to null.
   const cached = await getCachedProfile(userId);
   if (cached) {
     if (cached.deleted) return null;
@@ -140,6 +147,7 @@ async function verifyAndResolve(token: string): Promise<{
       displayName: cached.displayName,
       isPremium: cached.isPremium,
       isAdmin: cached.isAdmin,
+      banned: cached.banned,
     };
   }
 
@@ -152,6 +160,7 @@ async function verifyAndResolve(token: string): Promise<{
     email: profile.email,
     displayName: profile.displayName,
     deleted: profile.deletedAt !== null,
+    banned: profile.bannedAt !== null,
     isPremium: profile.isPremium,
     isAdmin: profile.isAdmin,
   });
@@ -164,6 +173,7 @@ async function verifyAndResolve(token: string): Promise<{
     displayName: profile.displayName,
     isPremium: profile.isPremium,
     isAdmin: profile.isAdmin,
+    banned: profile.bannedAt !== null,
   };
 }
 
@@ -201,6 +211,11 @@ export async function isAuthenticated(
     if (!user) {
       return res.status(401).json({ error: "Invalid or expired token" });
     }
+    // Banned (suspended) accounts are resolved but blocked here. GDPR
+    // export/erasure routes use isAuthenticatedAllowBanned to stay reachable.
+    if (user.banned) {
+      return res.status(403).json({ error: "Account suspended" });
+    }
     req.user = user;
     next();
   } catch (err) {
@@ -213,6 +228,36 @@ export async function isAuthenticated(
 }
 
 /**
+ * Like isAuthenticated, but does NOT block banned (suspended) accounts — it only
+ * rejects missing/invalid tokens and erased accounts. Used ONLY on the GDPR
+ * data-subject-rights routes (account export, account erasure) so a suspended
+ * user can still exercise Art. 20 / Art. 17 rights. Do not use elsewhere.
+ */
+export async function isAuthenticatedAllowBanned(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    const user = await verifyAndResolve(authHeader.substring(7));
+    if (!user) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    req.user = user;
+    next();
+  } catch (err) {
+    console.error("[auth] isAuthenticatedAllowBanned error", err);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+/**
  * Gate a route to platform admins (the admin/moderation dashboard).
  *
  * MUST run AFTER isAuthenticated in the middleware chain — it relies on
@@ -220,11 +265,7 @@ export async function isAuthenticated(
  * extra DB hit). Returns 403 for authenticated non-admins. Admin mutations
  * should additionally be recorded in audit_log by the route handler.
  */
-export function requireAdmin(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }

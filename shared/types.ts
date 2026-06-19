@@ -228,6 +228,25 @@ export type RemoveContentInput = {
   resourceId: string;
 };
 
+// Admin-only user view (admin/moderation dashboard). Includes `email` (admins
+// manage accounts) — NEVER returned on a public/self surface. `bannedAt` is the
+// moderation suspension marker; `deletedAt` flags an erased account.
+export type AdminUserDTO = {
+  id: string;
+  email: string;
+  displayName: string;
+  isAdmin: boolean;
+  isPremium: boolean;
+  createdAt: string;
+  bannedAt: string | null;
+  deletedAt: string | null;
+};
+
+// POST /api/admin/moderation/ban|unban body.
+export type BanUserInput = {
+  userId: string;
+};
+
 // ── GDPR export (Art. 20 portability) ─────────────────────────────────────────
 
 export type ConsentRecordDTO = {

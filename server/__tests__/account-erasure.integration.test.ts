@@ -11,8 +11,8 @@ import { randomUUID } from "crypto";
 // invalidateProfileCache, defeating the spy. We stub only what the loaded route
 // graph imports from ../auth.
 let mockUser: { id: string } | null = null;
-jest.mock("../auth", () => ({
-  isAuthenticated: (
+jest.mock("../auth", () => {
+  const inject = (
     req: { user?: { id: string } },
     res: { status(code: number): { json(body: unknown): void } },
     next: () => void,
@@ -23,11 +23,16 @@ jest.mock("../auth", () => ({
     }
     req.user = mockUser;
     next();
-  },
-  invalidateProfileCache: jest.fn().mockResolvedValue(undefined),
-  generateResetToken: () => "stub",
-  hashResetToken: () => "stub",
-}));
+  };
+  return {
+    isAuthenticated: inject,
+    // DELETE /account uses the allow-banned variant; mock it the same way.
+    isAuthenticatedAllowBanned: inject,
+    invalidateProfileCache: jest.fn().mockResolvedValue(undefined),
+    generateResetToken: () => "stub",
+    hashResetToken: () => "stub",
+  };
+});
 
 jest.mock("../supabase", () => ({
   supabaseAdmin: {
@@ -227,7 +232,13 @@ afterEach(async () => {
   // Erasure nulls actorId, so delete the audit rows we produce by action.
   await db
     .delete(auditLog)
-    .where(inArray(auditLog.action, ["user.registered", "user.deleted"]));
+    .where(
+      inArray(auditLog.action, [
+        "user.registered",
+        "user.deleted",
+        "moderation.user_banned",
+      ]),
+    );
   if (createdUserIds.length) {
     await db.delete(users).where(inArray(users.id, createdUserIds));
   }
@@ -414,6 +425,29 @@ describe("DELETE /api/v1/account", () => {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     expect(user.displayName).toBe("[deleted]");
     expect(user.email).toBe(`deleted-${id}@deleted.invalid`);
+  });
+
+  it("erasing a previously-banned user anonymises the user-targeted audit row and clears bannedAt", async () => {
+    const { id } = await seedUser();
+    const { id: adminId } = await seedUser();
+    // Ban writes audit moderation.user_banned with resourceId = the banned user.
+    expect(await storage.banUser(id, adminId)).toBe("banned");
+
+    await storage.eraseUser(id);
+
+    // The erased user's UUID must not linger in audit_log.resourceId.
+    const banRows = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.action, "moderation.user_banned"));
+    const row = banRows.find((r) => r.actorId === adminId);
+    expect(row).toBeTruthy();
+    expect(row!.resourceId).toBeNull();
+
+    // bannedAt is cleared as part of anonymisation.
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    expect(user.bannedAt).toBeNull();
+    expect(user.deletedAt).not.toBeNull();
   });
 
   it("returns generic 200 even if Supabase cleanup fails (PII already erased)", async () => {

@@ -3,7 +3,11 @@ import { z } from "zod";
 import { isAuthenticated, requireAdmin } from "../auth";
 import { safeErrorCode } from "./auth";
 import { storage } from "../storage";
-import type { CommunityRow, ModeratedReportRow } from "../storage";
+import type {
+  CommunityRow,
+  ModeratedReportRow,
+  AdminUserRow,
+} from "../storage";
 import { supabaseClient, supabaseAdmin } from "../supabase";
 import {
   loginSchema,
@@ -12,6 +16,8 @@ import {
   adminReportsQuerySchema,
   adminReportResolveSchema,
   adminRemoveContentSchema,
+  adminUsersQuerySchema,
+  adminBanUserSchema,
   offsetPageQuerySchema,
 } from "../validation";
 import {
@@ -23,6 +29,7 @@ import type {
   SessionResponse,
   CommunityDTO,
   AdminReportDTO,
+  AdminUserDTO,
   OffsetPage,
 } from "@shared/types";
 
@@ -77,6 +84,14 @@ export function registerAdminRoutes(app: Express): void {
     ...admin,
     handleRemoveContent,
   );
+
+  // User directory + ban/unban (P-15, docs/API.md §14). Backend-only — admin-web
+  // wiring deferred. Banned users are blocked everywhere by isAuthenticated (403)
+  // except GDPR export/erasure; see server/auth.ts.
+  app.get("/api/admin/users", ...admin, handleListUsers);
+  app.get("/api/admin/users/:id", ...admin, handleGetUser);
+  app.post("/api/admin/moderation/ban", ...admin, handleBanUser);
+  app.post("/api/admin/moderation/unban", ...admin, handleUnbanUser);
 }
 
 function toCommunityDTO(row: CommunityRow): CommunityDTO {
@@ -106,6 +121,21 @@ function toAdminReportDTO(row: ModeratedReportRow): AdminReportDTO {
     reviewedById: row.reviewedById,
     reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
     resolution: row.resolution,
+  };
+}
+
+// Admin-only user view — includes email (admins manage accounts). Never used on
+// a public/self surface.
+function toAdminUserDTO(row: AdminUserRow): AdminUserDTO {
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.displayName,
+    isAdmin: row.isAdmin,
+    isPremium: row.isPremium,
+    createdAt: row.createdAt.toISOString(),
+    bannedAt: row.bannedAt ? row.bannedAt.toISOString() : null,
+    deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
   };
 }
 
@@ -382,6 +412,121 @@ async function handleRemoveContent(
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("[POST /api/admin/moderation/remove-content]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleListUsers(req: Request, res: Response): Promise<Response> {
+  try {
+    const q = adminUsersQuerySchema.parse(req.query); // lenient: ignores extras
+
+    const { rows, total } = await storage.adminListUsers({
+      offset: (q.page - 1) * q.pageSize,
+      limit: q.pageSize,
+      search: q.search,
+      status: q.status,
+    });
+
+    const body: OffsetPage<AdminUserDTO> = {
+      data: rows.map(toAdminUserDTO),
+      page: q.page,
+      pageSize: q.pageSize,
+      total,
+      totalPages: Math.ceil(total / q.pageSize),
+    };
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[GET /api/admin/users]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleGetUser(req: Request, res: Response): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+
+    const user = await storage.adminGetUser(id);
+    if (!user) return res.status(404).json({ error: "Not found" });
+    return res.status(200).json(toAdminUserDTO(user));
+  } catch (err) {
+    console.error("[GET /api/admin/users/:id]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// Ban (suspend) a user. Audited (moderation.user_banned) + profile-cache
+// invalidated in storage. A missing/erased user → 404; already banned → 409.
+async function handleBanUser(req: Request, res: Response): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const parsed = adminBanUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+
+    const result = await storage.banUser(
+      parsed.data.userId,
+      userId,
+      req.ip ?? null,
+    );
+    if (result === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    if (result === "already") {
+      return res.status(409).json({ error: "User already banned" });
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[POST /api/admin/moderation/ban]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleUnbanUser(req: Request, res: Response): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const parsed = adminBanUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+
+    const result = await storage.unbanUser(
+      parsed.data.userId,
+      userId,
+      req.ip ?? null,
+    );
+    if (result === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    if (result === "not_banned") {
+      return res.status(409).json({ error: "User is not banned" });
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[POST /api/admin/moderation/unban]", {
       code: safeErrorCode(err),
     });
     return res.status(500).json({ error: "Internal Server Error" });

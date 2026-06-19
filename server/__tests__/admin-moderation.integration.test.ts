@@ -299,6 +299,29 @@ describe("PATCH /api/admin/reports/:id", () => {
   });
 });
 
+describe("GET /api/admin/reports (AdminReportDTO)", () => {
+  it("lists a resolved report with reviewer/time/resolution fields", async () => {
+    const admin = await seedUser();
+    const reporter = await seedUser();
+    const reportId = await seedReport(reporter, randomUUID());
+    mockUser = { id: admin, isAdmin: true };
+
+    // Resolve it, then confirm it surfaces in the admin list with internals.
+    await request(app)
+      .patch(`/api/admin/reports/${reportId}`)
+      .send({ status: "resolved", resolution: "handled" });
+
+    const res = await request(app).get("/api/admin/reports?status=resolved");
+    expect(res.status).toBe(200);
+    const entry = res.body.data.find((r: { id: string }) => r.id === reportId);
+    expect(entry).toBeTruthy();
+    expect(entry.status).toBe("resolved");
+    expect(entry.reviewedById).toBe(admin);
+    expect(entry.reviewedAt).not.toBeNull();
+    expect(entry.resolution).toBe("handled");
+  });
+});
+
 describe("POST /api/admin/moderation/remove-content", () => {
   it("removes a post → 200, scrubs stored content + audit", async () => {
     const admin = await seedUser();

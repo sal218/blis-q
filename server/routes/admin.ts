@@ -3,7 +3,7 @@ import { z } from "zod";
 import { isAuthenticated, requireAdmin } from "../auth";
 import { safeErrorCode } from "./auth";
 import { storage } from "../storage";
-import type { CommunityRow, ReportRow, ModeratedReportRow } from "../storage";
+import type { CommunityRow, ModeratedReportRow } from "../storage";
 import { supabaseClient, supabaseAdmin } from "../supabase";
 import {
   loginSchema,
@@ -22,7 +22,6 @@ import type {
   AccountProfile,
   SessionResponse,
   CommunityDTO,
-  ReportDTO,
   AdminReportDTO,
   OffsetPage,
 } from "@shared/types";
@@ -92,21 +91,10 @@ function toCommunityDTO(row: CommunityRow): CommunityDTO {
   };
 }
 
-// DB text columns → DTO unions. The values are constrained on write
-// (createReportSchema / the "pending" default), so the narrowing is safe.
-function toReportDTO(row: ReportRow): ReportDTO {
-  return {
-    id: row.id,
-    resourceType: row.resourceType as ReportDTO["resourceType"],
-    resourceId: row.resourceId,
-    reason: row.reason,
-    status: row.status as ReportDTO["status"],
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
-// Admin-only view — adds moderation internals (reviewer/time/resolution) over
-// the public ReportDTO. Only the /api/admin/* moderation routes return this.
+// Admin reports view — DB text columns narrowed to the DTO unions (values are
+// constrained on write), plus moderation internals (reviewer/time/resolution).
+// The /api/admin/* surface always returns AdminReportDTO; the public ReportDTO
+// (account export) never carries these fields.
 function toAdminReportDTO(row: ModeratedReportRow): AdminReportDTO {
   return {
     id: row.id,
@@ -299,8 +287,8 @@ async function handleListReports(
       status: q.status,
     });
 
-    const body: OffsetPage<ReportDTO> = {
-      data: rows.map(toReportDTO),
+    const body: OffsetPage<AdminReportDTO> = {
+      data: rows.map(toAdminReportDTO),
       page: q.page,
       pageSize: q.pageSize,
       total,

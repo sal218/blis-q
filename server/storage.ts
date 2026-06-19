@@ -1425,7 +1425,7 @@ export class DatabaseStorage {
     offset: number;
     limit: number;
     status?: string;
-  }): Promise<{ rows: ReportRow[]; total: number }> {
+  }): Promise<{ rows: ModeratedReportRow[]; total: number }> {
     const where = input.status ? eq(reports.status, input.status) : undefined;
 
     const [{ total }] = await db
@@ -1441,6 +1441,9 @@ export class DatabaseStorage {
         reason: reports.reason,
         status: reports.status,
         createdAt: reports.createdAt,
+        reviewedById: reports.reviewedById,
+        reviewedAt: reports.reviewedAt,
+        resolution: reports.resolution,
       })
       .from(reports)
       .where(where)
@@ -1554,18 +1557,17 @@ export class DatabaseStorage {
     adminId: string,
     ipAddress?: string | null,
   ): Promise<"removed" | "not_found"> {
-    const [post] = await db
-      .select({ deletedAt: posts.deletedAt })
-      .from(posts)
-      .where(eq(posts.id, postId))
-      .limit(1);
-    if (!post || post.deletedAt) return "not_found";
-
-    await db.transaction(async (tx) => {
-      await tx
+    return db.transaction(async (tx) => {
+      // Guarded UPDATE makes the removal atomic — `deletedAt IS NULL` ensures a
+      // concurrent remove can't also match, so the audit row is written at most
+      // once. No row updated ⇒ missing or already-removed ⇒ not_found.
+      const [removed] = await tx
         .update(posts)
         .set({ content: "[deleted]", imageUrl: null, deletedAt: new Date() })
-        .where(eq(posts.id, postId));
+        .where(and(eq(posts.id, postId), isNull(posts.deletedAt)))
+        .returning({ id: posts.id });
+      if (!removed) return "not_found";
+
       await tx.insert(auditLog).values({
         actorId: adminId,
         action: "moderation.content_removed",
@@ -1573,8 +1575,8 @@ export class DatabaseStorage {
         resourceId: postId,
         ipAddress: ipAddress ?? null,
       });
+      return "removed";
     });
-    return "removed";
   }
 
   // ── Community membership ────────────────────────────────────────────────────

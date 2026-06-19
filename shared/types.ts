@@ -205,6 +205,29 @@ export type ReportDTO = {
   createdAt: string;
 };
 
+// Admin-only report view — the public ReportDTO plus moderation internals (who
+// reviewed it, when, and the resolution note). Returned ONLY by /api/admin/*
+// moderation endpoints; the public surface and account export use ReportDTO so
+// moderation internals never leak to the reporter.
+export type AdminReportDTO = ReportDTO & {
+  reviewedById: string | null;
+  reviewedAt: string | null;
+  resolution: string | null;
+};
+
+// PATCH /api/admin/reports/:id body — resolve or dismiss a queued report.
+export type ResolveReportInput = {
+  status: "resolved" | "dismissed";
+  resolution?: string;
+};
+
+// POST /api/admin/moderation/remove-content body — post-only this slice
+// (message removal lands with chat, Sprint 5).
+export type RemoveContentInput = {
+  resourceType: "post";
+  resourceId: string;
+};
+
 // ── GDPR export (Art. 20 portability) ─────────────────────────────────────────
 
 export type ConsentRecordDTO = {

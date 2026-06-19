@@ -161,8 +161,8 @@ export type PostRow = {
   deletedAt: Date | null;
 };
 
-// One row of the admin reports queue (read-only this slice). `status`/
-// `resourceType` are DB text columns; the route narrows them to the DTO unions.
+// One row of the admin reports queue. `status`/`resourceType` are DB text
+// columns; the route narrows them to the DTO unions.
 export type ReportRow = {
   id: string;
   resourceType: string;
@@ -170,6 +170,14 @@ export type ReportRow = {
   reason: string;
   status: string;
   createdAt: Date;
+};
+
+// A report row with moderation fields, for the admin resolve/queue surface
+// (→ AdminReportDTO). Never exposed on public/account-export surfaces.
+export type ModeratedReportRow = ReportRow & {
+  reviewedById: string | null;
+  reviewedAt: Date | null;
+  resolution: string | null;
 };
 
 // The boolean flags read by server/notifications.ts preferenceKey(). Returned
@@ -1411,13 +1419,13 @@ export class DatabaseStorage {
     });
   }
 
-  // Admin reports queue (read-only this slice): one page, newest first, optional
-  // status filter. Resolve/dismiss is a Sprint-4 moderation action, not here.
+  // Admin reports queue: one page, newest first, optional status filter.
+  // Resolve/dismiss lives in resolveReport; content removal in adminRemovePost.
   async listReports(input: {
     offset: number;
     limit: number;
     status?: string;
-  }): Promise<{ rows: ReportRow[]; total: number }> {
+  }): Promise<{ rows: ModeratedReportRow[]; total: number }> {
     const where = input.status ? eq(reports.status, input.status) : undefined;
 
     const [{ total }] = await db
@@ -1433,6 +1441,9 @@ export class DatabaseStorage {
         reason: reports.reason,
         status: reports.status,
         createdAt: reports.createdAt,
+        reviewedById: reports.reviewedById,
+        reviewedAt: reports.reviewedAt,
+        resolution: reports.resolution,
       })
       .from(reports)
       .where(where)
@@ -1441,6 +1452,131 @@ export class DatabaseStorage {
       .offset(input.offset);
 
     return { rows, total: Number(total) };
+  }
+
+  // Fetch a single report with its moderation fields (admin moderation). Returns
+  // null if absent.
+  async getReport(id: string): Promise<ModeratedReportRow | null> {
+    const [row] = await db
+      .select({
+        id: reports.id,
+        resourceType: reports.resourceType,
+        resourceId: reports.resourceId,
+        reason: reports.reason,
+        status: reports.status,
+        createdAt: reports.createdAt,
+        reviewedById: reports.reviewedById,
+        reviewedAt: reports.reviewedAt,
+        resolution: reports.resolution,
+      })
+      .from(reports)
+      .where(eq(reports.id, id))
+      .limit(1);
+    return row ?? null;
+  }
+
+  // Resolve or dismiss a queued report. The transition is ATOMIC and one-way:
+  // only a pending/reviewing report may transition (the UPDATE is guarded by a
+  // status predicate so concurrent resolves can't both win). A report that is
+  // already resolved/dismissed returns "conflict" — never a silent overwrite of
+  // reviewer/time. The status update + audit row commit together (§7). The audit
+  // entry references the report id only — never the reason/resolution free text
+  // (may contain PII) — so it can't leak content.
+  async resolveReport(input: {
+    id: string;
+    adminId: string;
+    status: "resolved" | "dismissed";
+    resolution?: string | null;
+    ipAddress?: string | null;
+  }): Promise<
+    | { status: "ok"; report: ModeratedReportRow }
+    | { status: "not_found" }
+    | { status: "conflict" }
+  > {
+    return db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ status: reports.status })
+        .from(reports)
+        .where(eq(reports.id, input.id))
+        .limit(1);
+      if (!current) return { status: "not_found" as const };
+      if (current.status !== "pending" && current.status !== "reviewing") {
+        return { status: "conflict" as const };
+      }
+
+      const [updated] = await tx
+        .update(reports)
+        .set({
+          status: input.status,
+          reviewedById: input.adminId,
+          reviewedAt: new Date(),
+          resolution: input.resolution ?? null,
+        })
+        // Status predicate makes the transition atomic — if a concurrent tx
+        // already moved it out of pending/reviewing, this matches no row.
+        .where(
+          and(
+            eq(reports.id, input.id),
+            inArray(reports.status, ["pending", "reviewing"]),
+          ),
+        )
+        .returning({
+          id: reports.id,
+          resourceType: reports.resourceType,
+          resourceId: reports.resourceId,
+          reason: reports.reason,
+          status: reports.status,
+          createdAt: reports.createdAt,
+          reviewedById: reports.reviewedById,
+          reviewedAt: reports.reviewedAt,
+          resolution: reports.resolution,
+        });
+      if (!updated) return { status: "conflict" as const };
+
+      await tx.insert(auditLog).values({
+        actorId: input.adminId,
+        action:
+          input.status === "resolved" ? "report.resolved" : "report.dismissed",
+        resourceType: "report",
+        resourceId: input.id,
+        ipAddress: input.ipAddress ?? null,
+      });
+
+      return { status: "ok" as const, report: updated };
+    });
+  }
+
+  // Admin content removal (moderation). Platform-admin authority — no community
+  // membership check (the route is requireAdmin-gated, unlike softDeletePost
+  // which is author/community-mod gated). Post-only this slice. Scrubs stored
+  // content/media in the same transaction as the moderation.content_removed
+  // audit (§7); the audit references the post id only, never the removed text.
+  // A missing or already-deleted post returns "not_found".
+  async adminRemovePost(
+    postId: string,
+    adminId: string,
+    ipAddress?: string | null,
+  ): Promise<"removed" | "not_found"> {
+    return db.transaction(async (tx) => {
+      // Guarded UPDATE makes the removal atomic — `deletedAt IS NULL` ensures a
+      // concurrent remove can't also match, so the audit row is written at most
+      // once. No row updated ⇒ missing or already-removed ⇒ not_found.
+      const [removed] = await tx
+        .update(posts)
+        .set({ content: "[deleted]", imageUrl: null, deletedAt: new Date() })
+        .where(and(eq(posts.id, postId), isNull(posts.deletedAt)))
+        .returning({ id: posts.id });
+      if (!removed) return "not_found";
+
+      await tx.insert(auditLog).values({
+        actorId: adminId,
+        action: "moderation.content_removed",
+        resourceType: "post",
+        resourceId: postId,
+        ipAddress: ipAddress ?? null,
+      });
+      return "removed";
+    });
   }
 
   // ── Community membership ────────────────────────────────────────────────────

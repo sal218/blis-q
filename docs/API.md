@@ -304,18 +304,27 @@ All other admin routes are `isAuthenticated` **then** `requireAdmin` (403 for no
 
 **Path note:** admin routes are currently served under **`/api/admin/*`** (matching the `login`/`me` scaffold and the admin web client), **not** `/api/v1/admin/*` yet. The table below uses the short form; the `/api/v1/admin` migration is tracked, not churned now (§16).
 
-**Implemented (Sprint-3 admin slice, `feat/admin-communities`):** `GET/POST /api/admin/communities`, `GET/PATCH/DELETE /api/admin/communities/:id` (create reuses community semantics → admin is `createdById` + admin member; PATCH is name/description only — **no `imageKey`**, R2 deferred; DELETE is soft-delete via `deletedAt`, so the community drops out of the public list/detail/join; name/description trimmed server-side; mutations rate-limited `adminMutationUser` + audited `community.created/updated/deleted`), and **`GET /api/admin/reports`** (offset, `?status=` — **read-only**). **Not yet built:** report resolve/dismiss (`PATCH /admin/reports/:id`) and all moderation actions → **Sprint 4**.
+**Implemented (Sprint-3 admin slice, `feat/admin-communities`):** `GET/POST /api/admin/communities`, `GET/PATCH/DELETE /api/admin/communities/:id` (create reuses community semantics → admin is `createdById` + admin member; PATCH is name/description only — **no `imageKey`**, R2 deferred; DELETE is soft-delete via `deletedAt`, so the community drops out of the public list/detail/join; name/description trimmed server-side; mutations rate-limited `adminMutationUser` + audited `community.created/updated/deleted`), and **`GET /api/admin/reports`** (offset, `?status=` — **read-only**).
 
-| Domain       | Endpoints                                                                                                                    |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| Self         | `GET /admin/me` → `{ id, displayName, isAdmin }`                                                                             |
-| Users        | `GET /admin/users` (offset, `?search=&status=`), `GET /admin/users/:id`, `PATCH /admin/users/:id` (ban/unban, set `isAdmin`) |
-| Communities  | ✅ `GET/POST /admin/communities`, `GET/PATCH/DELETE /admin/communities/:id`                                                  |
-| Events       | `GET/POST /admin/events`, `GET/PATCH/DELETE /admin/events/:id`                                                               |
-| Safe places  | `GET/POST /admin/safe-places`, `GET/PATCH/DELETE /admin/safe-places/:id` (the only write path for venues)                    |
-| Reports      | ✅ `GET /admin/reports` (offset, `?status=`) · ⛔ `PATCH /admin/reports/:id` (resolve/dismiss + `resolution`) — Sprint 4     |
-| Moderation   | `POST /admin/moderation/ban`, `/mute`, `/remove-content` (each writes `audit_log: moderation.*`)                             |
-| Ad campaigns | `GET/POST /admin/ad-campaigns`, `GET/PATCH/DELETE /admin/ad-campaigns/:id`                                                   |
+**Implemented (Sprint-4 moderation slice, `feat/moderation-actions`, backend-only):**
+
+- **`PATCH /api/admin/reports/:id`** — `ResolveReportInput { status: resolved|dismissed, resolution? }`. Atomic, one-way transition: only a `pending`/`reviewing` report may transition (UPDATE guarded by a status predicate); an already-actioned report → **`409`**, missing → `404`. Stamps `reviewedById`/`reviewedAt` + trimmed `resolution`; returns **`AdminReportDTO`** (the public `ReportDTO` plus `reviewedById`/`reviewedAt`/`resolution` — moderation internals never leak to the public/export surface). Transactional + audit `report.resolved`/`report.dismissed`.
+- **`POST /api/admin/moderation/remove-content`** — `RemoveContentInput { resourceType: "post", resourceId }`. **Post-only this slice**; any other `resourceType` → `400`. Missing/already-removed post → `404`. Soft-deletes + **scrubs stored content/media** (`content="[deleted]"`, `imageUrl=null`, `deletedAt`) and audits `moderation.content_removed` in one transaction. Platform-admin authority — no community-membership check (unlike the author/mod-gated `DELETE /posts/:id`).
+
+Also: **`GET /api/admin/reports`** now returns **`OffsetPage<AdminReportDTO>`** (the moderation fields, not the public `ReportDTO`) so the queue shows reviewer/time/resolution.
+
+Both mutations are `isAuthenticated → requireAdmin`, rate-limited `adminMutationUser`. **Audit privacy:** entries reference resource ids only — never the report reason, resolution text, or removed content. **Deferred:** `POST /admin/moderation/ban`/`unban` + `GET/PATCH /admin/users` (needs a `users` ban column + auth-gate integration — tracker **P-15**); `/mute` (DPIA-gated, no model — §12); message removal (lands with chat, Sprint 5). **Admin-web UI wiring deferred** (backend-only slice).
+
+| Domain       | Endpoints                                                                                                                           |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Self         | `GET /admin/me` → `{ id, displayName, isAdmin }`                                                                                    |
+| Users        | `GET /admin/users` (offset, `?search=&status=`), `GET /admin/users/:id`, `PATCH /admin/users/:id` (ban/unban, set `isAdmin`) — P-15 |
+| Communities  | ✅ `GET/POST /admin/communities`, `GET/PATCH/DELETE /admin/communities/:id`                                                         |
+| Events       | `GET/POST /admin/events`, `GET/PATCH/DELETE /admin/events/:id`                                                                      |
+| Safe places  | `GET/POST /admin/safe-places`, `GET/PATCH/DELETE /admin/safe-places/:id` (the only write path for venues)                           |
+| Reports      | ✅ `GET /admin/reports` (offset, `?status=`) · ✅ `PATCH /admin/reports/:id` (resolve/dismiss + `resolution`)                       |
+| Moderation   | ✅ `POST /admin/moderation/remove-content` (post-only) · ⛔ `/ban`, `/mute` (P-15 / DPIA) — each writes `audit_log: moderation.*`   |
+| Ad campaigns | `GET/POST /admin/ad-campaigns`, `GET/PATCH/DELETE /admin/ad-campaigns/:id`                                                          |
 
 ---
 

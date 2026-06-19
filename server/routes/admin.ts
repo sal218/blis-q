@@ -3,13 +3,15 @@ import { z } from "zod";
 import { isAuthenticated, requireAdmin } from "../auth";
 import { safeErrorCode } from "./auth";
 import { storage } from "../storage";
-import type { CommunityRow, ReportRow } from "../storage";
+import type { CommunityRow, ModeratedReportRow } from "../storage";
 import { supabaseClient, supabaseAdmin } from "../supabase";
 import {
   loginSchema,
   adminCreateCommunitySchema,
   adminUpdateCommunitySchema,
   adminReportsQuerySchema,
+  adminReportResolveSchema,
+  adminRemoveContentSchema,
   offsetPageQuerySchema,
 } from "../validation";
 import {
@@ -20,7 +22,7 @@ import type {
   AccountProfile,
   SessionResponse,
   CommunityDTO,
-  ReportDTO,
+  AdminReportDTO,
   OffsetPage,
 } from "@shared/types";
 
@@ -66,8 +68,15 @@ export function registerAdminRoutes(app: Express): void {
   app.patch("/api/admin/communities/:id", ...admin, handleUpdateCommunity);
   app.delete("/api/admin/communities/:id", ...admin, handleDeleteCommunity);
 
-  // Reports queue — READ ONLY this slice. Resolve/dismiss is Sprint-4 moderation.
+  // Reports queue (read) + moderation actions (Sprint-4, docs/API.md §14).
+  // Backend-only this slice — admin-web wiring is deferred (tracker note).
   app.get("/api/admin/reports", ...admin, handleListReports);
+  app.patch("/api/admin/reports/:id", ...admin, handleResolveReport);
+  app.post(
+    "/api/admin/moderation/remove-content",
+    ...admin,
+    handleRemoveContent,
+  );
 }
 
 function toCommunityDTO(row: CommunityRow): CommunityDTO {
@@ -82,16 +91,21 @@ function toCommunityDTO(row: CommunityRow): CommunityDTO {
   };
 }
 
-// DB text columns → DTO unions. The values are constrained on write
-// (createReportSchema / the "pending" default), so the narrowing is safe.
-function toReportDTO(row: ReportRow): ReportDTO {
+// Admin reports view — DB text columns narrowed to the DTO unions (values are
+// constrained on write), plus moderation internals (reviewer/time/resolution).
+// The /api/admin/* surface always returns AdminReportDTO; the public ReportDTO
+// (account export) never carries these fields.
+function toAdminReportDTO(row: ModeratedReportRow): AdminReportDTO {
   return {
     id: row.id,
-    resourceType: row.resourceType as ReportDTO["resourceType"],
+    resourceType: row.resourceType as AdminReportDTO["resourceType"],
     resourceId: row.resourceId,
     reason: row.reason,
-    status: row.status as ReportDTO["status"],
+    status: row.status as AdminReportDTO["status"],
     createdAt: row.createdAt.toISOString(),
+    reviewedById: row.reviewedById,
+    reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
+    resolution: row.resolution,
   };
 }
 
@@ -273,8 +287,8 @@ async function handleListReports(
       status: q.status,
     });
 
-    const body: OffsetPage<ReportDTO> = {
-      data: rows.map(toReportDTO),
+    const body: OffsetPage<AdminReportDTO> = {
+      data: rows.map(toAdminReportDTO),
       page: q.page,
       pageSize: q.pageSize,
       total,
@@ -283,6 +297,93 @@ async function handleListReports(
     return res.status(200).json(body);
   } catch (err) {
     console.error("[GET /api/admin/reports]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// Resolve or dismiss a queued report (one-way: only pending/reviewing → 409 if
+// already actioned). Audited (report.resolved / report.dismissed) in storage.
+async function handleResolveReport(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+
+    const parsed = adminReportResolveSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+
+    const result = await storage.resolveReport({
+      id,
+      adminId: userId,
+      status: parsed.data.status,
+      resolution: parsed.data.resolution ?? null,
+      ipAddress: req.ip ?? null,
+    });
+    if (result.status === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    if (result.status === "conflict") {
+      return res.status(409).json({ error: "Report already actioned" });
+    }
+    return res.status(200).json(toAdminReportDTO(result.report));
+  } catch (err) {
+    console.error("[PATCH /api/admin/reports/:id]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// Admin content removal. Post-only this slice — the strict schema rejects any
+// other resourceType with 400. Missing/already-removed post → 404. Soft-delete +
+// scrub + audit (moderation.content_removed) happen in one transaction.
+async function handleRemoveContent(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const parsed = adminRemoveContentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+
+    const result = await storage.adminRemovePost(
+      parsed.data.resourceId,
+      userId,
+      req.ip ?? null,
+    );
+    if (result === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[POST /api/admin/moderation/remove-content]", {
+      code: safeErrorCode(err),
+    });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }

@@ -439,6 +439,10 @@ EXPO_PUBLIC_WEB_APP_URL         # Web app base URL exposed to the client (deep-l
 
 ## Known Gotchas
 
+### `drizzle-kit push --force` Disables RLS — Never Run It
+
+Drizzle does not manage RLS (it lives in `supabase/rls.sql`), so `drizzle-kit push` reads RLS as schema drift and proposes `DISABLE ROW LEVEL SECURITY` on **every** table. With `--force` that applies with no prompt — silently tearing down the zero-policy deny-all firewall (§2) on whatever DB `DATABASE_URL` points at (`.env` = **prod**). This actually happened once (see `docs/DEPLOY.md` incident log). The `db:push` script no longer uses `--force`. Deploy schema changes with the safe sequence: `npm run db:push` (interactive — apply additive DDL only, decline RLS-disable lines) → it re-applies `supabase/rls.sql` → `npm run check:rls` verifies every expected table is RLS-enabled with zero policies. New tables are created RLS-**disabled** by default, so `rls.sql` must always be re-run after DDL. Full procedure in `docs/DEPLOY.md`.
+
 ### Trust Proxy — Required for Fly.io
 
 Fly.io sits behind a proxy. Without `app.set('trust proxy', 1)` in `server/index.ts`, `req.ip` returns the proxy IP instead of the real client IP. This breaks rate limiting (all requests appear to come from one IP) and audit logging. This must be set and must not be removed.
@@ -536,6 +540,7 @@ Surfaced in the 2026-06-02 scaffold review. **P-1 and P-2 are hard blockers befo
 | P-11 | Bottom-tab icons are emoji `Text` placeholders (`client/navigation/AppTabs.tsx`) | 🔧 | 🟢 | **Before serious UI polish / app-store quality** (Codex P3 on `feat/communities-mobile`). Replace with a real icon set / established icon component (e.g. `@expo/vector-icons`). Not a launch blocker. |
 | P-12 | "Continue with Apple" on the login screen is a visual placeholder (no handler) | 🔒 | 🟡 | **Before launch.** `LoginScreen` renders the Apple button per the design, but Sign in with Apple isn't implemented (needs `expo-apple-authentication` + the backend exchange). App Store Guideline 4.8 **requires** Apple sign-in once Google is offered, so this must ship before iOS release. |
 | P-13 | Placeholder tab screens must be rebuilt from their mockups when their sprint lands | 🎨 | 🟡 | **Do not forget — sprint-aligned by decision (2026-06-14).** `HomeScreen`, `ChatScreen`, and the Events-tab Events/Safe-places segments are bare `ComingSoon` stubs. Build each from its `assets/*.png` mockup **with its backend**, replacing the stub: **Chat** (`chat-screen.png`, Sprint 5), **Events** (`events-screen.png`, Sprint 6), **Safe places** (`event-safeplace-screen.png`, Sprint 7), **Home** feed (`home-screen.png`, aggregates the above — schedule once its inputs exist). Light mode must match the mockups (mockups are light; dark = brand purple). |
+| P-14 | Full prod↔schema parity pass + `check:rls` on prod before launch | 🏗️ | 🟡 | **Before launch.** The 2026-06-18 RLS/schema incident (`docs/DEPLOY.md`) showed prod schema sync had been ad hoc: prod was missing `password_reset_tokens`, and the test DB had RLS disabled on all tables — both now repaired. `db:push --force` is neutralized + `db:rls`/`check:rls` added (`fix/db-push-rls-safety`). Do a full parity sweep between the committed Drizzle schema and prod, and add `npm run check:rls` against prod to the launch checklist. |
 
 ### Accepted Risks
 

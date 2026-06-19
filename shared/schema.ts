@@ -147,21 +147,33 @@ export const eventRsvps = pgTable(
 // ── posts ─────────────────────────────────────────────────────────────────────
 // authorId SET NULL: on erasure the post is retained for community/thread
 // integrity, content is replaced with "[deleted]", and the author is anonymised.
-export const posts = pgTable("posts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  communityId: uuid("community_id")
-    .notNull()
-    .references(() => communities.id, { onDelete: "cascade" }),
-  authorId: uuid("author_id").references(() => users.id, {
-    onDelete: "set null",
+export const posts = pgTable(
+  "posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    communityId: uuid("community_id")
+      .notNull()
+      .references(() => communities.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    content: text("content").notNull(),
+    imageUrl: text("image_url"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  // Feed index for cursor pagination by community, newest-first, with id as the
+  // keyset tie-breaker for the (createdAt, id) ordering.
+  (t) => ({
+    byCommunity: index("idx_posts_community").on(
+      t.communityId,
+      t.createdAt,
+      t.id,
+    ),
   }),
-  content: text("content").notNull(),
-  imageUrl: text("image_url"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+);
 
 // ── messages ──────────────────────────────────────────────────────────────────
 // Community chat. Stored in PLAINTEXT by design (Discord model) so moderation

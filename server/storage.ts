@@ -1,13 +1,17 @@
 import {
   eq,
   and,
+  or,
+  lt,
   inArray,
+  notInArray,
   gt,
   isNull,
   exists,
   desc,
   count,
   ilike,
+  type SQL,
 } from "drizzle-orm";
 import type { MembershipRole, PublicUser } from "@shared/types";
 import { db } from "./db";
@@ -141,6 +145,20 @@ export type CommunityRow = {
   createdAt: Date;
   memberCount: number;
   callerRole: MembershipRole | null;
+};
+
+// One post row joined with its author's public fields. The route masks deleted
+// posts (content → "[deleted]", author → null) when building the DTO.
+export type PostRow = {
+  id: string;
+  communityId: string;
+  authorId: string | null;
+  authorDisplayName: string | null;
+  authorAvatarUrl: string | null;
+  content: string;
+  imageUrl: string | null;
+  createdAt: Date;
+  deletedAt: Date | null;
 };
 
 // One row of the admin reports queue (read-only this slice). `status`/
@@ -1123,6 +1141,245 @@ export class DatabaseStorage {
       .orderBy(desc(blocks.createdAt));
   }
 
+  // ── Posts (docs/API.md §8) ──────────────────────────────────────────────────
+
+  // IDs of users the caller has blocked — used to hide their content from feeds.
+  async getBlockedUserIds(blockerId: string): Promise<string[]> {
+    const rows = await db
+      .select({ id: blocks.blockedId })
+      .from(blocks)
+      .where(eq(blocks.blockerId, blockerId));
+    return rows.map((r) => r.id);
+  }
+
+  // True if a non-deleted community with this id exists.
+  async communityExists(id: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: communities.id })
+      .from(communities)
+      .where(and(eq(communities.id, id), isNull(communities.deletedAt)))
+      .limit(1);
+    return !!row;
+  }
+
+  // Create a post. Requires a non-deleted community AND author membership (POST
+  // is member-gated). Insert + post.created audit commit together (§7).
+  async createPost(
+    communityId: string,
+    authorId: string,
+    content: string,
+    ipAddress?: string | null,
+  ): Promise<
+    | { status: "created"; post: PostRow }
+    | { status: "not_found" }
+    | { status: "forbidden" }
+  > {
+    if (!(await this.communityExists(communityId))) {
+      return { status: "not_found" };
+    }
+    const [membership] = await db
+      .select({ role: communityMemberships.role })
+      .from(communityMemberships)
+      .where(
+        and(
+          eq(communityMemberships.communityId, communityId),
+          eq(communityMemberships.userId, authorId),
+        ),
+      )
+      .limit(1);
+    if (!membership) return { status: "forbidden" };
+
+    const row = await db.transaction(async (tx) => {
+      const [inserted] = await tx
+        .insert(posts)
+        .values({ communityId, authorId, content })
+        .returning({
+          id: posts.id,
+          communityId: posts.communityId,
+          authorId: posts.authorId,
+          content: posts.content,
+          imageUrl: posts.imageUrl,
+          createdAt: posts.createdAt,
+          deletedAt: posts.deletedAt,
+        });
+      await tx.insert(auditLog).values({
+        actorId: authorId,
+        action: "post.created",
+        resourceType: "post",
+        resourceId: inserted.id,
+        ipAddress: ipAddress ?? null,
+      });
+      return inserted;
+    });
+
+    const [author] = await db
+      .select({
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(users)
+      .where(eq(users.id, authorId))
+      .limit(1);
+
+    return {
+      status: "created",
+      post: {
+        ...row,
+        authorDisplayName: author?.displayName ?? null,
+        authorAvatarUrl: author?.avatarUrl ?? null,
+      },
+    };
+  }
+
+  // One page of a community's posts, newest-first, keyset-paginated on
+  // (createdAt, id). Hides posts authored by users the caller has blocked.
+  // Deleted posts are returned as-is (the route masks them). Returns the rows
+  // plus the next opaque cursor (or null at the end).
+  async listPosts(input: {
+    communityId: string;
+    callerId: string;
+    limit: number;
+    cursor?: { createdAt: Date; id: string } | null;
+  }): Promise<{
+    rows: PostRow[];
+    nextCursor: { createdAt: Date; id: string } | null;
+  }> {
+    const blockedIds = await this.getBlockedUserIds(input.callerId);
+
+    const conditions: (SQL | undefined)[] = [
+      eq(posts.communityId, input.communityId),
+    ];
+    if (blockedIds.length) {
+      // authorId IS NULL (anonymised) is never "blocked".
+      conditions.push(
+        or(isNull(posts.authorId), notInArray(posts.authorId, blockedIds)),
+      );
+    }
+    if (input.cursor) {
+      conditions.push(
+        or(
+          lt(posts.createdAt, input.cursor.createdAt),
+          and(
+            eq(posts.createdAt, input.cursor.createdAt),
+            lt(posts.id, input.cursor.id),
+          ),
+        ),
+      );
+    }
+
+    const rows = await db
+      .select({
+        id: posts.id,
+        communityId: posts.communityId,
+        authorId: posts.authorId,
+        authorDisplayName: users.displayName,
+        authorAvatarUrl: users.avatarUrl,
+        content: posts.content,
+        imageUrl: posts.imageUrl,
+        createdAt: posts.createdAt,
+        deletedAt: posts.deletedAt,
+      })
+      .from(posts)
+      .leftJoin(users, eq(users.id, posts.authorId))
+      .where(and(...conditions))
+      .orderBy(desc(posts.createdAt), desc(posts.id))
+      .limit(input.limit + 1);
+
+    const hasMore = rows.length > input.limit;
+    const page = hasMore ? rows.slice(0, input.limit) : rows;
+    const last = page[page.length - 1];
+    const nextCursor =
+      hasMore && last ? { createdAt: last.createdAt, id: last.id } : null;
+    return { rows: page, nextCursor };
+  }
+
+  // A single post (incl. its deletedAt so the caller can mask/gate). Returns null
+  // when missing, in a deleted community, or authored by someone the caller has
+  // blocked (so the route answers 404 for hidden posts).
+  async getPost(id: string, callerId: string): Promise<PostRow | null> {
+    const [row] = await db
+      .select({
+        id: posts.id,
+        communityId: posts.communityId,
+        authorId: posts.authorId,
+        authorDisplayName: users.displayName,
+        authorAvatarUrl: users.avatarUrl,
+        content: posts.content,
+        imageUrl: posts.imageUrl,
+        createdAt: posts.createdAt,
+        deletedAt: posts.deletedAt,
+      })
+      .from(posts)
+      .leftJoin(users, eq(users.id, posts.authorId))
+      .innerJoin(
+        communities,
+        and(
+          eq(communities.id, posts.communityId),
+          isNull(communities.deletedAt),
+        ),
+      )
+      .where(eq(posts.id, id))
+      .limit(1);
+    if (!row) return null;
+
+    if (row.authorId) {
+      const blockedIds = await this.getBlockedUserIds(callerId);
+      if (blockedIds.includes(row.authorId)) return null;
+    }
+    return row;
+  }
+
+  // Soft-delete a post (author OR a community mod/admin). deletedAt + post.deleted
+  // audit commit together (§7). The route masks content in the response.
+  async softDeletePost(
+    id: string,
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<"deleted" | "not_found" | "forbidden"> {
+    const [post] = await db
+      .select({
+        communityId: posts.communityId,
+        authorId: posts.authorId,
+        deletedAt: posts.deletedAt,
+      })
+      .from(posts)
+      .where(eq(posts.id, id))
+      .limit(1);
+    if (!post || post.deletedAt) return "not_found";
+
+    let authorized = post.authorId === actorId;
+    if (!authorized) {
+      const [m] = await db
+        .select({ role: communityMemberships.role })
+        .from(communityMemberships)
+        .where(
+          and(
+            eq(communityMemberships.communityId, post.communityId),
+            eq(communityMemberships.userId, actorId),
+          ),
+        )
+        .limit(1);
+      authorized = m?.role === "moderator" || m?.role === "admin";
+    }
+    if (!authorized) return "forbidden";
+
+    await db.transaction(async (tx) => {
+      // Scrub stored content/media (not only mask the DTO) — API §8.
+      await tx
+        .update(posts)
+        .set({ content: "[deleted]", imageUrl: null, deletedAt: new Date() })
+        .where(eq(posts.id, id));
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "post.deleted",
+        resourceType: "post",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+    });
+    return "deleted";
+  }
+
   // Insert a user-submitted report into the moderation queue (status defaults to
   // "pending"). The audit entry references the report record only — never the
   // free-text reason (which may contain PII) — so it can't leak content.
@@ -1132,22 +1389,25 @@ export class DatabaseStorage {
     input: { resourceType: string; resourceId: string; reason: string },
     ipAddress?: string | null,
   ): Promise<void> {
-    const [row] = await db
-      .insert(reports)
-      .values({
-        reporterId,
-        resourceType: input.resourceType,
-        resourceId: input.resourceId,
-        reason: input.reason,
-      })
-      .returning({ id: reports.id });
+    // The report insert + its audit row commit together (§7).
+    await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(reports)
+        .values({
+          reporterId,
+          resourceType: input.resourceType,
+          resourceId: input.resourceId,
+          reason: input.reason,
+        })
+        .returning({ id: reports.id });
 
-    await db.insert(auditLog).values({
-      actorId: reporterId,
-      action: "report.submitted",
-      resourceType: "report",
-      resourceId: row.id,
-      ipAddress: ipAddress ?? null,
+      await tx.insert(auditLog).values({
+        actorId: reporterId,
+        action: "report.submitted",
+        resourceType: "report",
+        resourceId: row.id,
+        ipAddress: ipAddress ?? null,
+      });
     });
   }
 

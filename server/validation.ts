@@ -202,6 +202,23 @@ export const createPostSchema = z
   })
   .strict();
 
+// Post create as served this slice: text-only (R2/image upload deferred, so
+// `imageKey` is rejected by .strict()) and trimmed server-side — a whitespace-
+// only body collapses to "" and fails .min(1).
+export const postCreateBodySchema = z
+  .object({
+    content: z.string().trim().min(1).max(MAX_POST_LENGTH),
+  })
+  .strict();
+
+// POST /posts/:id/report body — just the reason (resourceType/resourceId come
+// from the path). Trimmed; mirrors createReportSchema's reason rule.
+export const postReportSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(MAX_REPORT_REASON_LENGTH),
+  })
+  .strict();
+
 // ── Chat (communityId comes from the path) ────────────────────────────────────
 
 export const createMessageSchema = z

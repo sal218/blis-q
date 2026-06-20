@@ -52,7 +52,9 @@ Repeat until `APPROVED`, capped at **4 rounds**:
    `REVIEW MODE A — PLAN VALIDATION` + the repo guard (expected dir
    `C:\dev\blis-q`, branch `feat/<name>`, tip SHA) + the plan. Subagents start
    with **no memory of prior rounds**, so on every round re-feed the brief and a
-   short "round N: you asked X, I changed Y" recap.
+   short "round N: you asked X, I changed Y" recap. **Always open the prompt with
+   the synchronous-review instruction** (see Loop rules) so the agent returns the
+   actual verdict, not a "I'll get back to you" placeholder.
 2. Read the verdict. Relay a tight summary to the human (the agent's output is
    not shown to them).
    - `CHANGES_REQUESTED` → apply the fixes to the plan, then re-invoke.
@@ -80,8 +82,9 @@ so Codex reviews a real, committed diff.
 Repeat until `READY_FOR_PR`, capped at **4 rounds**:
 
 1. Invoke `codex:codex-rescue` with the brief + `REVIEW MODE B — WORKING-TREE
-REVIEW` + repo guard + the commit range. Codex reads the actual diff and
-   **runs the gates itself** — never accept "Claude said tests pass."
+REVIEW` + repo guard + the commit range, **opening with the synchronous-review
+   instruction** (see Loop rules). Codex reads the actual diff and **runs the
+   gates itself** — never accept "Claude said tests pass."
 2. Read the verdict; relay a summary to the human.
    - `CHANGES_REQUESTED` → apply the P1/P2 fixes, re-run the battery, commit, then
      re-invoke.
@@ -117,6 +120,15 @@ need a follow-up pass.
 
 - **Frozen objective:** feed the reviewer brief verbatim every Codex round; never
   paraphrase or weaken it.
+- **Synchronous review (required):** every `codex:codex-rescue` prompt MUST open
+  with a synchronous-execution instruction, e.g. _"Run the review synchronously
+  and put the actual verdict in YOUR FINAL MESSAGE. Do NOT spawn a background
+  task, do NOT defer, do NOT reply 'I'll return output when it completes.' If you
+  invoke the codex CLI, run it in the foreground, wait for it, then summarise its
+  verdict. Your final message MUST end with APPROVED/READY_FOR_PR or
+  CHANGES_REQUESTED + findings."_ Without this the bridge may run codex in the
+  background and return a placeholder; if that happens, re-invoke with this
+  instruction.
 - **No subagent memory:** re-pass the brief + round recap each call (subagents
   don't see prior rounds or this conversation).
 - **Independent gate:** success = Codex APPROVED **and** CI green on a clean

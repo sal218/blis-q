@@ -57,6 +57,10 @@ export const users = pgTable("users", {
     .defaultNow(),
   // Soft delete / anonymisation marker. isAuthenticated rejects non-null rows.
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  // Moderation suspension marker (admin ban). Non-null = banned: isAuthenticated
+  // resolves the user but returns 403, while GDPR export/erasure stay reachable.
+  // Cleared on erasure (a deleted account's ban state is moot).
+  bannedAt: timestamp("banned_at", { withTimezone: true }),
 });
 
 // ── communities ───────────────────────────────────────────────────────────────

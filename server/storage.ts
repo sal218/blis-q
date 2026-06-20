@@ -7,6 +7,7 @@ import {
   notInArray,
   gt,
   isNull,
+  isNotNull,
   exists,
   desc,
   count,
@@ -82,6 +83,20 @@ export type AuthUserProfile = {
   displayName: string;
   isPremium: boolean;
   isAdmin: boolean;
+  deletedAt: Date | null;
+  bannedAt: Date | null;
+};
+
+// A user row projected for the admin/moderation dashboard (→ AdminUserDTO).
+// Includes email (admins manage accounts); never used on a public/self surface.
+export type AdminUserRow = {
+  id: string;
+  email: string;
+  displayName: string;
+  isAdmin: boolean;
+  isPremium: boolean;
+  createdAt: Date;
+  bannedAt: Date | null;
   deletedAt: Date | null;
 };
 
@@ -222,6 +237,7 @@ export class DatabaseStorage {
         isPremium: users.isPremium,
         isAdmin: users.isAdmin,
         deletedAt: users.deletedAt,
+        bannedAt: users.bannedAt,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -258,6 +274,161 @@ export class DatabaseStorage {
       .returning();
     await invalidateProfileCache(userId);
     return row ?? null;
+  }
+
+  // ── Admin: users / moderation ───────────────────────────────────────────────
+
+  // Admin user directory: one page, newest first, optional email/displayName
+  // search and status filter (active = not banned, not deleted; banned = banned
+  // and not deleted). Page query + one count query (no N+1).
+  async adminListUsers(input: {
+    offset: number;
+    limit: number;
+    search?: string;
+    status?: "active" | "banned";
+  }): Promise<{ rows: AdminUserRow[]; total: number }> {
+    const conditions: (SQL | undefined)[] = [];
+    if (input.search) {
+      const term = `%${input.search}%`;
+      conditions.push(
+        or(ilike(users.email, term), ilike(users.displayName, term)),
+      );
+    }
+    if (input.status === "active") {
+      conditions.push(isNull(users.bannedAt));
+      conditions.push(isNull(users.deletedAt));
+    } else if (input.status === "banned") {
+      conditions.push(isNotNull(users.bannedAt));
+      conditions.push(isNull(users.deletedAt));
+    }
+    const where = conditions.length ? and(...conditions) : undefined;
+
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(users)
+      .where(where);
+
+    const rows = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        displayName: users.displayName,
+        isAdmin: users.isAdmin,
+        isPremium: users.isPremium,
+        createdAt: users.createdAt,
+        bannedAt: users.bannedAt,
+        deletedAt: users.deletedAt,
+      })
+      .from(users)
+      .where(where)
+      .orderBy(desc(users.createdAt))
+      .limit(input.limit)
+      .offset(input.offset);
+
+    return { rows, total: Number(total) };
+  }
+
+  async adminGetUser(id: string): Promise<AdminUserRow | null> {
+    const [row] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        displayName: users.displayName,
+        isAdmin: users.isAdmin,
+        isPremium: users.isPremium,
+        createdAt: users.createdAt,
+        bannedAt: users.bannedAt,
+        deletedAt: users.deletedAt,
+      })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+    return row ?? null;
+  }
+
+  // Ban (suspend) a user. The guarded UPDATE makes it atomic and one-way: only a
+  // live, not-already-banned account matches, so the audit row is written at most
+  // once. No row matched ⇒ distinguish missing/deleted (not_found) from already
+  // banned (already). MUST invalidateProfileCache so the 60s auth cache can't keep
+  // serving the now-banned identity (CLAUDE.md §8). Audit references the user id
+  // only — no free text.
+  async banUser(
+    userId: string,
+    adminId: string,
+    ipAddress?: string | null,
+  ): Promise<"banned" | "not_found" | "already"> {
+    const result = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(users)
+        .set({ bannedAt: new Date() })
+        .where(
+          and(
+            eq(users.id, userId),
+            isNull(users.deletedAt),
+            isNull(users.bannedAt),
+          ),
+        )
+        .returning({ id: users.id });
+      if (!row) {
+        const [existing] = await tx
+          .select({ bannedAt: users.bannedAt, deletedAt: users.deletedAt })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+        if (!existing || existing.deletedAt) return "not_found" as const;
+        return "already" as const;
+      }
+      await tx.insert(auditLog).values({
+        actorId: adminId,
+        action: "moderation.user_banned",
+        resourceType: "user",
+        resourceId: userId,
+        ipAddress: ipAddress ?? null,
+      });
+      return "banned" as const;
+    });
+    if (result === "banned") await invalidateProfileCache(userId);
+    return result;
+  }
+
+  // Unban a user. Guarded UPDATE: only a live, currently-banned account matches.
+  async unbanUser(
+    userId: string,
+    adminId: string,
+    ipAddress?: string | null,
+  ): Promise<"unbanned" | "not_found" | "not_banned"> {
+    const result = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(users)
+        .set({ bannedAt: null })
+        .where(
+          and(
+            eq(users.id, userId),
+            isNull(users.deletedAt),
+            isNotNull(users.bannedAt),
+          ),
+        )
+        .returning({ id: users.id });
+      if (!row) {
+        const [existing] = await tx
+          .select({ deletedAt: users.deletedAt })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+        if (!existing || existing.deletedAt) return "not_found" as const;
+        return "not_banned" as const;
+      }
+      await tx.insert(auditLog).values({
+        actorId: adminId,
+        action: "moderation.user_unbanned",
+        resourceType: "user",
+        resourceId: userId,
+        ipAddress: ipAddress ?? null,
+      });
+      return "unbanned" as const;
+    });
+    if (result === "unbanned") await invalidateProfileCache(userId);
+    return result;
   }
 
   async getAccountProfile(userId: string): Promise<AccountProfileRow | null> {
@@ -605,7 +776,20 @@ export class DatabaseStorage {
         .set({ actorId: null })
         .where(eq(auditLog.actorId, userId));
 
-      // Anonymise the users row in place (NOT a hard delete).
+      // Audit: also anonymise user-targeted rows (e.g. moderation.user_banned),
+      // where the erased user's UUID sits in resourceId. RETAIN the rows.
+      await tx
+        .update(auditLog)
+        .set({ resourceId: null })
+        .where(
+          and(
+            eq(auditLog.resourceType, "user"),
+            eq(auditLog.resourceId, userId),
+          ),
+        );
+
+      // Anonymise the users row in place (NOT a hard delete). bannedAt is
+      // cleared — a deleted (erased) account's moderation state is moot.
       await tx
         .update(users)
         .set({
@@ -615,6 +799,7 @@ export class DatabaseStorage {
           preferredCity: null,
           isPremium: false,
           isAdmin: false,
+          bannedAt: null,
           deletedAt: new Date(),
         })
         .where(eq(users.id, userId));

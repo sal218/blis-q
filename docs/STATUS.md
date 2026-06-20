@@ -2,11 +2,11 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-18 — posts (#19) + db:push/RLS hardening (#20) merged; building `feat/moderation-actions` (Sprint-4 admin moderation, backend-only)._
+_Last updated: 2026-06-19 — posts (#19), db:push/RLS hardening (#20), moderation actions (#22), /autoslice skill (#21) merged; building `feat/user-ban` (Sprint-4 P-15, backend-only)._
 
 ## Current phase
 
-**Sprint 4 — Community posts + moderation actions (ROADMAP Sprint 4). Sprint 3 (communities + block + reports + mobile + admin) is done. Posts slice (`feat/posts`) merged (#19); `fix/db-push-rls-safety` merged (#20). Current branch `feat/moderation-actions` adds admin report resolve/dismiss + post content removal (backend-only). Next: ban/unban (P-15), then mobile posts UI + safety features.**
+**Sprint 4 — Community posts + moderation (ROADMAP Sprint 4). Sprint 3 done. Merged: posts (#19), db:push/RLS hardening (#20), moderation actions (#22), /autoslice skill (#21). Current branch `feat/user-ban` (P-15): admin ban/unban + user directory + the auth-gate + erasure-cascade compliance integration (backend-only). Next: mobile posts UI + safety features.**
 
 ## Merged to `main`
 
@@ -31,15 +31,18 @@ _Last updated: 2026-06-18 — posts (#19) + db:push/RLS hardening (#20) merged; 
 | #17 | `feat/admin-communities` — Sprint-3 admin slice: admin communities CRUD (`GET/POST /admin/communities`, `GET/PATCH/DELETE /:id`, transactional update/soft-delete) + read-only `GET /admin/reports`; admin web Communities page + Reports queue                                                                                       |
 | #19 | `feat/posts` — Sprint-4 slice 1: community posts CRUD + report (backend-only, text-only). Cursor-paged feed, member-gated create, block filtering, transactional+audited mutations, DELETE scrubs stored content, defensive cursor, best-effort `new_community_post` push, `idx_posts_community`. 19 integration tests                |
 | #20 | `fix/db-push-rls-safety` — neutralized `db:push --force` (proposed disabling RLS on every prod table) → safe interactive orchestrator; added `db:rls` + read-only `check:rls` (fails on unlisted public tables); `docs/DEPLOY.md` + incident log. Repaired prod (missing `password_reset_tokens`) + test (RLS disabled on all tables) |
+| #21 | `chore/autoslice-skill` — `/autoslice` skill: automated Claude↔Codex review loop (plan + working-tree review via the `codex:codex-rescue` subagent, round caps, human gate before PR) + frozen `CODEX_REVIEWER_BRIEF.md`                                                                                                              |
+| #22 | `feat/moderation-actions` — Sprint-4 admin moderation: `PATCH /admin/reports/:id` (resolve/dismiss, atomic one-way, `AdminReportDTO`) + `POST /admin/moderation/remove-content` (post-only, scrub+audit) + admin reports list → `AdminReportDTO`. 13 integration tests                                                                |
 
-**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed). **🎉 Sprint-3 complete** (communities #13, block/reports #14, theme #15, communities/login mobile #16, admin slice #17). **Sprint 4 underway** (posts #19, db:push/RLS hardening #20 merged).
+**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed). **🎉 Sprint-3 complete** (communities #13, block/reports #14, theme #15, communities/login mobile #16, admin slice #17). **Sprint 4 underway** (posts #19, db:push/RLS hardening #20, /autoslice #21, moderation actions #22 merged).
 
 ## In progress
 
-- **`feat/moderation-actions`** — Sprint-4 admin moderation (backend-only; admin-web UI wiring deferred). **Zero schema change** — the `reports` table already has `status`/`reviewedById`/`resolution`/`reviewedAt`. **Status: implemented; check:types/lint clean; admin-moderation integration suite 13/13 (real DB). Codex-validated — opening PR.**
-  - **`PATCH /api/admin/reports/:id`** — resolve/dismiss (+ trimmed `resolution`); **atomic one-way transition** (only `pending`/`reviewing`; re-action → `409`; missing → `404`); stamps `reviewedById`/`reviewedAt`; returns **`AdminReportDTO`** (moderation internals, never on the public/export `ReportDTO`); audit `report.resolved`/`report.dismissed`.
-  - **`POST /api/admin/moderation/remove-content`** — **post-only** (other `resourceType` → `400`); missing/already-removed → `404`; soft-deletes + **scrubs stored content/media** + audit `moderation.content_removed`, one transaction; platform-admin authority (no community-membership check). Both `requireAdmin`, rate-limited `adminMutationUser`. **Audit privacy:** resource ids only — never reason/resolution/content.
-  - **Deferred:** ban/unban + `GET/PATCH /admin/users` (schema change → **P-15**); `/mute` (DPIA-gated — API §12); message removal (chat, Sprint 5); admin-web moderation UI.
+- **`feat/user-ban`** — Sprint-4 P-15 (backend-only; admin-web UI wiring deferred). First `/autoslice` run. **Status: implemented; check:types/lint clean; focused suites green (admin-users + auth-ban-gate + account-erasure/export 27/27, real DB). In the Codex working-tree review loop.**
+  - **Schema (additive):** `users.bannedAt timestamptz null`. Applied to the **test DB**; **prod deploy is a manual step** via [docs/DEPLOY.md](DEPLOY.md) after merge.
+  - **Auth gate:** a banned user is **resolved** but `isAuthenticated` → **403 "Account suspended"** (blocks all product + admin routes). **GDPR export/erasure stay reachable** via `isAuthenticatedAllowBanned`. **Erasure cascade:** `eraseUser` clears `bannedAt` + anonymises user-targeted audit `resourceId`.
+  - **Endpoints** (`requireAdmin`, `adminMutationUser`): `GET /api/admin/users` (search + `?status=`), `GET /api/admin/users/:id`, `POST /api/admin/moderation/ban` / `unban` (guarded atomic + audited + cache-invalidated; 409 on already/​not-banned). Admin-only `AdminUserDTO` (includes email).
+  - **Deferred:** set-`isAdmin` / admin promotion (**P-16**); ban `reason`; `/mute` (DPIA); message removal (Sprint 5); admin-web UI.
 - **Backlog (Codex):** "Deactivate account" = a **reversible pause** (not GDPR erasure) — parked in [ROADMAP](ROADMAP.md) **Sprint 4**.
 
 ## Auth endpoints live (`/api/v1/auth/*`)
@@ -49,7 +52,7 @@ Account (🔑): `GET/PATCH /api/v1/profile` · `POST /api/v1/account/change-pass
 Communities (🔑, merged #13): `POST /api/v1/communities` · `GET /api/v1/communities` · `GET /:id` · `POST /:id/join` · `DELETE /:id/leave`.
 Posts (🔑, merged #19): `GET /api/v1/communities/:id/posts` · `POST /api/v1/communities/:id/posts` · `GET /api/v1/posts/:id` · `DELETE /api/v1/posts/:id` · `POST /api/v1/posts/:id/report`.
 Safety (🔑, merged #14): `POST /api/v1/blocks` · `DELETE /api/v1/blocks/:userId` · `GET /api/v1/blocks` · `POST /api/v1/reports`.
-Admin (🛡️ `isAuthenticated → requireAdmin`): **`POST /api/admin/login`** (#9, merged) + `GET /api/admin/me`. **`feat/admin-communities`:** `GET/POST /api/admin/communities` · `GET/PATCH/DELETE /api/admin/communities/:id` · `GET /api/admin/reports` (read-only). **`feat/moderation-actions`:** `PATCH /api/admin/reports/:id` (resolve/dismiss) · `POST /api/admin/moderation/remove-content` (post-only). Paths stay under `/api/admin/*` (→ `/api/v1/admin/*` migration tracked).
+Admin (🛡️ `isAuthenticated → requireAdmin`): **`POST /api/admin/login`** (#9, merged) + `GET /api/admin/me`. **`feat/admin-communities`:** `GET/POST /api/admin/communities` · `GET/PATCH/DELETE /api/admin/communities/:id` · `GET /api/admin/reports` (read-only). **`feat/moderation-actions`:** `PATCH /api/admin/reports/:id` (resolve/dismiss) · `POST /api/admin/moderation/remove-content` (post-only). **`feat/user-ban`:** `GET /api/admin/users` · `GET /api/admin/users/:id` · `POST /api/admin/moderation/ban` · `POST /api/admin/moderation/unban`. Paths stay under `/api/admin/*` (→ `/api/v1/admin/*` migration tracked).
 
 ## Sprint status
 

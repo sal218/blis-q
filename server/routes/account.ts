@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { isAuthenticated } from "../auth";
+import { isAuthenticated, isAuthenticatedAllowBanned } from "../auth";
 import { safeErrorCode } from "./auth";
 import { storage } from "../storage";
 import { supabaseClient, supabaseAdmin } from "../supabase";
@@ -34,8 +34,19 @@ export function registerAccountRoutes(app: Express): void {
     handleChangePassword,
   );
   app.get("/api/v1/account/consents", isAuthenticated, handleGetConsents);
-  app.get("/api/v1/account/export", isAuthenticated, handleExportAccount);
-  app.delete("/api/v1/account", isAuthenticated, handleDeleteAccount);
+  // GDPR data-subject rights (Art. 20 export, Art. 17 erasure) stay reachable for
+  // suspended (banned) accounts — isAuthenticatedAllowBanned resolves but does
+  // not 403 a banned user. All other account routes use plain isAuthenticated.
+  app.get(
+    "/api/v1/account/export",
+    isAuthenticatedAllowBanned,
+    handleExportAccount,
+  );
+  app.delete(
+    "/api/v1/account",
+    isAuthenticatedAllowBanned,
+    handleDeleteAccount,
+  );
 }
 
 function extractBearer(req: Request): string | null {

@@ -9,20 +9,23 @@ import { randomUUID } from "crypto";
 let mockUser: { id: string } | null = null;
 jest.mock("../auth", () => {
   const actual = jest.requireActual("../auth");
+  const inject = (
+    req: { user?: { id: string } },
+    res: { status(code: number): { json(body: unknown): void } },
+    next: () => void,
+  ) => {
+    if (!mockUser) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    req.user = mockUser;
+    next();
+  };
   return {
     ...actual,
-    isAuthenticated: (
-      req: { user?: { id: string } },
-      res: { status(code: number): { json(body: unknown): void } },
-      next: () => void,
-    ) => {
-      if (!mockUser) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-      req.user = mockUser;
-      next();
-    },
+    isAuthenticated: inject,
+    // GET /account/export uses the allow-banned variant; mock it the same way.
+    isAuthenticatedAllowBanned: inject,
   };
 });
 
@@ -164,9 +167,7 @@ describe("GET /api/v1/account/export", () => {
     await db
       .insert(eventRsvps)
       .values({ eventId: event.id, userId: id, status: "going" });
-    await db
-      .insert(blocks)
-      .values({ blockerId: id, blockedId: blocked.id });
+    await db.insert(blocks).values({ blockerId: id, blockedId: blocked.id });
     await db.insert(reports).values({
       reporterId: id,
       resourceType: "post",
@@ -200,9 +201,7 @@ describe("GET /api/v1/account/export", () => {
     ).toBe(true);
     expect(res.body.messages).toHaveLength(2);
     expect(
-      res.body.messages.some(
-        (m: { deleted: boolean }) => m.deleted === true,
-      ),
+      res.body.messages.some((m: { deleted: boolean }) => m.deleted === true),
     ).toBe(true);
 
     expect(res.body.events).toHaveLength(1);

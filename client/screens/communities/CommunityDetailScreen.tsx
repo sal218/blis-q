@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { FormError } from "@/components/forms/FormError";
 import { Avatar } from "@/components/Avatar";
@@ -31,6 +32,7 @@ const ABOUT = 0;
 export function CommunityDetailScreen({ route, navigation }: Props) {
   const { id } = route.params;
   const { colors } = useTheme();
+  const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const {
     community,
@@ -69,6 +71,8 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
   }
 
   const isMember = community.membership !== null;
+  // Compose requires membership AND a resolved identity (user.id non-null).
+  const canCompose = isMember && !!user?.id;
 
   return (
     <View style={styles.root}>
@@ -119,7 +123,11 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
           />
         </ScrollView>
       ) : (
-        <CommunityFeed communityId={id} />
+        <CommunityFeed
+          communityId={id}
+          canCompose={canCompose}
+          currentUserId={user?.id ?? null}
+        />
       )}
     </View>
   );

@@ -192,6 +192,18 @@ export const pl = {
     timeMinutes: "{count} min temu",
     timeHours: "{count} godz. temu",
     timeDays: "{count} dni temu",
+    // Compose (members)
+    compose: "Dodaj wpis", // compose entry button
+    composeTitle: "Nowy wpis", // compose modal title
+    composePlaceholder: "Podziel się czymś ze społecznością", // composer placeholder
+    composeSubmit: "Opublikuj", // publish
+    composeRequired: "Wpis nie może być pusty.", // empty-content validation
+    // Delete-own
+    delete: "Usuń", // delete action
+    deleteConfirmTitle: "Usunąć wpis?", // delete confirm title
+    deleteConfirmBody: "Tej operacji nie można cofnąć.", // delete confirm body
+    // Shared
+    forbidden: "Nie masz uprawnień do tej akcji.", // 403 on create/delete
   },
 
   errors: {

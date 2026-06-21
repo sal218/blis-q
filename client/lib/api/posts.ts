@@ -1,13 +1,14 @@
 import type { CursorPage, PostDTO } from "@shared/types";
 import { request, commonApiError } from "@/lib/api/http";
 
-// Typed client for the community posts feed + report (docs/API.md §8). Screens
-// go through these functions, never fetch directly. Read-only this slice: list a
-// community's posts (cursor-paginated) and report a post. Create/delete are a
-// later slice.
+// Typed client for the community posts feed (docs/API.md §8). Screens go through
+// these functions, never fetch directly: list a community's posts (cursor-
+// paginated), report a post, create a post (members), and delete a post (author/
+// mod — own-post deletion in the UI this slice).
 
 export type PostsApiError =
   | { kind: "validation" } // 400
+  | { kind: "forbidden" } // 403 — create: not a member; delete: not author/mod
   | { kind: "notFound" } // 404 — community missing/deleted, or post not visible
   | { kind: "rateLimited"; retryAfter: number } // 429
   | { kind: "server" } // 5xx / unexpected
@@ -17,9 +18,10 @@ export type PostsResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: PostsApiError };
 
-// 404 is posts-specific (missing/deleted community on list; not-visible post on
-// report); 400/429/5xx delegate to the shared mapper.
+// 403/404 are posts-specific (forbidden create/delete; missing/deleted community
+// or not-visible post); 400/429/5xx delegate to the shared mapper.
 async function toPostsError(res: Response): Promise<PostsApiError> {
+  if (res.status === 403) return { kind: "forbidden" };
   if (res.status === 404) return { kind: "notFound" };
   return commonApiError(res);
 }
@@ -51,6 +53,34 @@ export function reportPost(
     "POST",
     `/api/v1/posts/${postId}/report`,
     { reason },
+    async () => ({ ok: true }) as const,
+    toPostsError,
+  );
+}
+
+// POST /api/v1/communities/:id/posts — create a post (members only). Returns 201
+// with the created PostDTO. 403 = not a member; 404 = community missing/deleted.
+export function createPost(
+  communityId: string,
+  content: string,
+): Promise<PostsResult<PostDTO>> {
+  return request(
+    "POST",
+    `/api/v1/communities/${communityId}/posts`,
+    { content },
+    (res) => res.json() as Promise<PostDTO>,
+    toPostsError,
+  );
+}
+
+// DELETE /api/v1/posts/:id — delete a post. The UI exposes this for the caller's
+// OWN posts this slice; the API also allows community mods/admins. 403 = not
+// permitted; 404 = missing/already-deleted.
+export function deletePost(postId: string): Promise<PostsResult<{ ok: true }>> {
+  return request(
+    "DELETE",
+    `/api/v1/posts/${postId}`,
+    undefined,
     async () => ({ ok: true }) as const,
     toPostsError,
   );

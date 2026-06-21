@@ -4,6 +4,19 @@ jest.mock("@/lib/api/communities", () => ({
   leaveCommunity: jest.fn(),
 }));
 
+// The screen now reads useAuth() (for canCompose/currentUserId) and mounts
+// CommunityFeed on the Tablica tab — mock both boundaries.
+let mockUser: { id: string } | null = { id: "me" };
+jest.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({ user: mockUser }),
+}));
+jest.mock("@/lib/api/posts", () => ({
+  listCommunityPosts: jest.fn(),
+  reportPost: jest.fn(),
+  createPost: jest.fn(),
+  deletePost: jest.fn(),
+}));
+
 import {
   render,
   screen,
@@ -16,11 +29,13 @@ import {
   joinCommunity,
   leaveCommunity,
 } from "@/lib/api/communities";
+import { listCommunityPosts } from "@/lib/api/posts";
 import { strings } from "@/i18n";
 
 const getMock = getCommunity as unknown as jest.Mock;
 const joinMock = joinCommunity as unknown as jest.Mock;
 const leaveMock = leaveCommunity as unknown as jest.Mock;
+const listPostsMock = listCommunityPosts as unknown as jest.Mock;
 
 type Membership = { role: "member" | "moderator" | "admin" } | null;
 
@@ -51,6 +66,12 @@ beforeEach(() => {
   getMock.mockReset();
   joinMock.mockReset();
   leaveMock.mockReset();
+  listPostsMock.mockReset();
+  listPostsMock.mockResolvedValue({
+    ok: true,
+    data: { data: [], nextCursor: null },
+  });
+  mockUser = { id: "me" };
 });
 
 describe("CommunityDetailScreen", () => {
@@ -98,5 +119,51 @@ describe("CommunityDetailScreen", () => {
     await waitFor(() =>
       expect(screen.getByText(strings.communities.leaveSoleAdmin)).toBeTruthy(),
     );
+  });
+
+  // canCompose wiring: compose appears on the Feed tab only for a member with a
+  // resolved identity.
+  async function openFeedTab() {
+    fireEvent.press(
+      await screen.findByRole("tab", { name: strings.posts.tabFeed }),
+    );
+    // Feed reaches its empty (ready) state — compose can now render.
+    await screen.findByText(strings.posts.empty);
+  }
+
+  it("member + user → compose on the Feed tab", async () => {
+    getMock.mockResolvedValue({
+      ok: true,
+      data: community({ role: "member" }),
+    });
+    mockUser = { id: "me" };
+    renderDetail();
+    await openFeedTab();
+    expect(
+      screen.getByRole("button", { name: strings.posts.compose }),
+    ).toBeTruthy();
+  });
+
+  it("non-member → no compose on the Feed tab", async () => {
+    getMock.mockResolvedValue({ ok: true, data: community(null) });
+    mockUser = { id: "me" };
+    renderDetail();
+    await openFeedTab();
+    expect(
+      screen.queryByRole("button", { name: strings.posts.compose }),
+    ).toBeNull();
+  });
+
+  it("member but no resolved user → no compose on the Feed tab", async () => {
+    getMock.mockResolvedValue({
+      ok: true,
+      data: community({ role: "member" }),
+    });
+    mockUser = null;
+    renderDetail();
+    await openFeedTab();
+    expect(
+      screen.queryByRole("button", { name: strings.posts.compose }),
+    ).toBeNull();
   });
 });

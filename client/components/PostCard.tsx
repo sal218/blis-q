@@ -8,17 +8,17 @@ import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type { PostDTO } from "@shared/types";
 
 // A single post in a community feed: author avatar + name + relative time, the
-// content, and a ⋯ overflow that opens the report flow. Pure presentation — it
-// takes a post and an onReport handler, owns no data. Deleted posts (server
-// masks content to "[deleted]", author to null) render as a tombstone with no
-// author and no report action.
+// content, and a ⋯ overflow that opens the post action menu (report / delete).
+// Pure presentation — it takes a post and an onMenu handler, owns no data.
+// Deleted posts (server masks content to "[deleted]", author to null) render as
+// a tombstone with no author and no ⋯.
 
 interface PostCardProps {
   post: PostDTO;
-  onReport: (post: PostDTO) => void;
+  onMenu: (post: PostDTO) => void;
 }
 
-export function PostCard({ post, onReport }: PostCardProps) {
+export function PostCard({ post, onMenu }: PostCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -50,7 +50,7 @@ export function PostCard({ post, onReport }: PostCardProps) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={strings.posts.moreActions}
-          onPress={() => onReport(post)}
+          onPress={() => onMenu(post)}
           hitSlop={8}
           style={({ pressed }) => [styles.more, pressed && styles.morePressed]}
         >

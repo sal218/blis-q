@@ -3,7 +3,12 @@
 jest.mock("@/lib/auth", () => ({ fetchWithAuth: jest.fn() }));
 
 import { fetchWithAuth } from "@/lib/auth";
-import { listCommunityPosts, reportPost } from "@/lib/api/posts";
+import {
+  listCommunityPosts,
+  reportPost,
+  createPost,
+  deletePost,
+} from "@/lib/api/posts";
 
 const fetchMock = fetchWithAuth as unknown as jest.Mock;
 
@@ -116,6 +121,98 @@ describe("posts API client — reportPost", () => {
     expect(await reportPost("p1", "x")).toEqual({
       ok: false,
       error: { kind: "rateLimited", retryAfter: 12 },
+    });
+  });
+});
+
+describe("posts API client — createPost", () => {
+  const CREATED = {
+    id: "p9",
+    communityId: "c1",
+    author: { id: "u1", displayName: "Marta", avatarUrl: null },
+    content: "Nowy",
+    imageUrl: null,
+    createdAt: "2026-02-01T00:00:00.000Z",
+    deleted: false,
+  };
+
+  it("201 → ok with the created PostDTO and posts the content", async () => {
+    fetchMock.mockResolvedValue(res(201, CREATED));
+    expect(await createPost("c1", "Nowy")).toEqual({ ok: true, data: CREATED });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/v1/communities/c1/posts",
+      { content: "Nowy" },
+    );
+  });
+
+  it("403 → forbidden; 404 → notFound; 400 → validation; 429 → rateLimited; network", async () => {
+    fetchMock.mockResolvedValueOnce(res(403, {}));
+    expect(await createPost("c1", "x")).toEqual({
+      ok: false,
+      error: { kind: "forbidden" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(404, {}));
+    expect(await createPost("c1", "x")).toEqual({
+      ok: false,
+      error: { kind: "notFound" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(400, {}));
+    expect(await createPost("c1", "x")).toEqual({
+      ok: false,
+      error: { kind: "validation" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(429, { retryAfter: 9 }));
+    expect(await createPost("c1", "x")).toEqual({
+      ok: false,
+      error: { kind: "rateLimited", retryAfter: 9 },
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    expect(await createPost("c1", "x")).toEqual({
+      ok: false,
+      error: { kind: "network" },
+    });
+  });
+});
+
+describe("posts API client — deletePost", () => {
+  it("200 → ok and issues DELETE", async () => {
+    fetchMock.mockResolvedValue(res(200, { ok: true }));
+    expect(await deletePost("p1")).toEqual({ ok: true, data: { ok: true } });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "DELETE",
+      "/api/v1/posts/p1",
+      undefined,
+    );
+  });
+
+  it("403 → forbidden; 404 → notFound; 400 → validation; network", async () => {
+    fetchMock.mockResolvedValueOnce(res(403, {}));
+    expect(await deletePost("p1")).toEqual({
+      ok: false,
+      error: { kind: "forbidden" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(404, {}));
+    expect(await deletePost("p1")).toEqual({
+      ok: false,
+      error: { kind: "notFound" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(400, {}));
+    expect(await deletePost("p1")).toEqual({
+      ok: false,
+      error: { kind: "validation" },
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    expect(await deletePost("p1")).toEqual({
+      ok: false,
+      error: { kind: "network" },
     });
   });
 });

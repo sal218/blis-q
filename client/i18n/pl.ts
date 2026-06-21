@@ -168,6 +168,32 @@ export const pl = {
       "Aby dokończyć rejestrację przez Google, potwierdź wymagane zgody.",
   },
 
+  // Community posts feed + report (design ref: event-communities-details-screen.png,
+  // "Feed" tab). Read-only this slice — composing a post comes later.
+  posts: {
+    tabAbout: "Informacje", // segment: About
+    tabFeed: "Tablica", // segment: Feed
+    empty: "Nie ma jeszcze wpisów. Zajrzyj tu później.", // no posts yet
+    retry: "Spróbuj ponownie", // retry
+    deleted: "Ten wpis został usunięty.", // deleted-post tombstone
+    notAvailable: "Ten wpis nie jest już dostępny.", // 404 on report/refresh
+    moreActions: "Opcje wpisu", // ⋯ accessibility label
+    report: "Zgłoś", // report action
+    reportTitle: "Zgłoś wpis", // report modal title
+    reportReasonPlaceholder: "Opisz, co jest nie tak z tym wpisem",
+    // Data-minimising helper — the reason is sent to moderators and stored.
+    reportReasonHelper:
+      "Twoje zgłoszenie trafi do moderatorów. Nie podawaj zbędnych danych osobowych ani wrażliwych.",
+    reportReasonRequired: "Podaj powód zgłoszenia.", // empty-reason validation
+    reportSubmit: "Wyślij zgłoszenie", // submit
+    reportSuccess: "Dziękujemy. Zgłoszenie zostało wysłane.", // success toast
+    // Relative timestamps (abbreviated units avoid Polish plural complexity).
+    timeNow: "przed chwilą",
+    timeMinutes: "{count} min temu",
+    timeHours: "{count} godz. temu",
+    timeDays: "{count} dni temu",
+  },
+
   errors: {
     generic: "Coś poszło nie tak. Spróbuj ponownie.",
     network: "Brak połączenia. Sprawdź internet i spróbuj ponownie.",

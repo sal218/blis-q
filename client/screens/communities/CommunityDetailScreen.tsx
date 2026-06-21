@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,17 +11,22 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { FormError } from "@/components/forms/FormError";
 import { Avatar } from "@/components/Avatar";
+import { SegmentedControl } from "@/components/SegmentedControl";
+import { CommunityFeed } from "@/screens/communities/CommunityFeed";
 import { useCommunityDetail } from "@/hooks/useCommunityDetail";
 import { strings, format } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type { EventsStackParamList } from "@/navigation/AppTabs";
 
-// Community detail — join/leave. Design ref:
-// assets/event-communities-details-screen.png (we render only what the API
-// provides this slice: name, member count, description, join/leave). Data lives
-// in useCommunityDetail; this screen is composition only.
+// Community detail — header (name/members) + an About|Feed segmented control.
+// Design ref: assets/event-communities-details-screen.png (we ship About + Feed;
+// Events/Members/Resources tabs land in their sprints — P-13). The header and
+// tabs are fixed; each segment owns its own scroller (About = ScrollView, Feed =
+// CommunityFeed's FlatList) so no VirtualizedList is nested in a ScrollView.
 
 type Props = NativeStackScreenProps<EventsStackParamList, "CommunityDetail">;
+
+const ABOUT = 0;
 
 export function CommunityDetailScreen({ route, navigation }: Props) {
   const { id } = route.params;
@@ -37,9 +42,9 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
     join,
     leave,
   } = useCommunityDetail(id);
+  const [segment, setSegment] = useState(ABOUT);
 
-  // Title the native header with the community name once it loads (view-only
-  // side effect — no data fetching here).
+  // Title the native header with the community name once it loads.
   useEffect(() => {
     if (community) navigation.setOptions({ title: community.name });
   }, [community, navigation]);
@@ -66,12 +71,12 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
   const isMember = community.membership !== null;
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+    <View style={styles.root}>
       <View style={styles.header}>
         <Avatar
           uri={community.imageUrl}
           name={community.name}
-          size={88}
+          size={72}
           borderRadius={radius.lg}
         />
         <Text style={styles.name}>{community.name}</Text>
@@ -82,22 +87,41 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
         </Text>
       </View>
 
-      {community.description ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{strings.communities.about}</Text>
-          <Text style={styles.description}>{community.description}</Text>
-        </View>
-      ) : null}
-
-      <FormError message={actionError} />
-
-      <PrimaryButton
-        label={isMember ? strings.communities.leave : strings.communities.join}
-        onPress={isMember ? leave : join}
-        loading={actionLoading}
-        variant={isMember ? "secondary" : "primary"}
+      <SegmentedControl
+        segments={[strings.posts.tabAbout, strings.posts.tabFeed]}
+        selectedIndex={segment}
+        onChange={setSegment}
       />
-    </ScrollView>
+
+      {segment === ABOUT ? (
+        <ScrollView
+          style={styles.about}
+          contentContainerStyle={styles.aboutContent}
+        >
+          {community.description ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                {strings.communities.about}
+              </Text>
+              <Text style={styles.description}>{community.description}</Text>
+            </View>
+          ) : null}
+
+          <FormError message={actionError} />
+
+          <PrimaryButton
+            label={
+              isMember ? strings.communities.leave : strings.communities.join
+            }
+            onPress={isMember ? leave : join}
+            loading={actionLoading}
+            variant={isMember ? "secondary" : "primary"}
+          />
+        </ScrollView>
+      ) : (
+        <CommunityFeed communityId={id} />
+      )}
+    </View>
   );
 }
 
@@ -106,9 +130,6 @@ function createStyles(colors: ThemeColors) {
     root: {
       flex: 1,
       backgroundColor: colors.background,
-    },
-    content: {
-      padding: spacing.lg,
     },
     centered: {
       alignItems: "center",
@@ -126,19 +147,27 @@ function createStyles(colors: ThemeColors) {
     },
     header: {
       alignItems: "center",
-      marginBottom: spacing.lg,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.md,
     },
     name: {
       color: colors.text,
-      fontSize: 24,
+      fontSize: 22,
       fontWeight: "800",
       textAlign: "center",
-      marginTop: spacing.md,
+      marginTop: spacing.sm,
     },
     meta: {
       color: colors.textMuted,
       fontSize: 14,
       marginTop: spacing.xs,
+    },
+    about: {
+      flex: 1,
+    },
+    aboutContent: {
+      padding: spacing.lg,
     },
     section: {
       marginBottom: spacing.lg,

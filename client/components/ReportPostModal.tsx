@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Modal,
-  View,
   Text,
   TextInput,
   Pressable,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
 } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -72,49 +73,61 @@ export function ReportPostModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.backdrop}>
-        <View style={styles.sheet}>
-          <Text style={styles.title}>{strings.posts.reportTitle}</Text>
-          <Text style={styles.helper}>{strings.posts.reportReasonHelper}</Text>
+      <KeyboardAvoidingView
+        style={styles.fill}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        {/* Tap the backdrop (outside the sheet) to dismiss. */}
+        <Pressable style={styles.backdrop} onPress={onClose}>
+          {/* Absorb taps inside the sheet so they don't close it. */}
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <Text style={styles.title}>{strings.posts.reportTitle}</Text>
+            <Text style={styles.helper}>
+              {strings.posts.reportReasonHelper}
+            </Text>
 
-          <TextInput
-            style={styles.input}
-            value={reason}
-            onChangeText={setReason}
-            placeholder={strings.posts.reportReasonPlaceholder}
-            placeholderTextColor={colors.textMuted}
-            multiline
-            numberOfLines={4}
-            maxLength={MAX_REASON_LENGTH}
-            textAlignVertical="top"
-            editable={!submitting}
-            accessibilityLabel={strings.posts.reportTitle}
-          />
+            <TextInput
+              style={styles.input}
+              value={reason}
+              onChangeText={setReason}
+              placeholder={strings.posts.reportReasonPlaceholder}
+              placeholderTextColor={colors.textMuted}
+              multiline
+              numberOfLines={4}
+              maxLength={MAX_REASON_LENGTH}
+              textAlignVertical="top"
+              editable={!submitting}
+              accessibilityLabel={strings.posts.reportTitle}
+            />
 
-          <FormError message={error} />
+            <FormError message={error} />
 
-          <PrimaryButton
-            label={strings.posts.reportSubmit}
-            onPress={submit}
-            loading={submitting}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={strings.common.cancel}
-            onPress={onClose}
-            disabled={submitting}
-            style={styles.cancel}
-          >
-            <Text style={styles.cancelText}>{strings.common.cancel}</Text>
+            <PrimaryButton
+              label={strings.posts.reportSubmit}
+              onPress={submit}
+              loading={submitting}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.common.cancel}
+              onPress={onClose}
+              disabled={submitting}
+              style={styles.cancel}
+            >
+              <Text style={styles.cancelText}>{strings.common.cancel}</Text>
+            </Pressable>
           </Pressable>
-        </View>
-      </View>
+        </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
+    fill: {
+      flex: 1,
+    },
     backdrop: {
       flex: 1,
       backgroundColor: "rgba(0,0,0,0.45)",

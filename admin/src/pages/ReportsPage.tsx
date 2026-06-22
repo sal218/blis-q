@@ -25,7 +25,17 @@ export function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  // Per-row in-flight set — a Set (not a single id) so concurrent actions on
+  // different rows don't overwrite each other's disabled state.
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+
+  const setBusy = (id: string, busy: boolean) =>
+    setBusyIds((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   const load = useCallback(
     async (targetPage: number, statusFilter: "" | ReportStatus) => {
@@ -56,7 +66,7 @@ export function ReportsPage() {
   // Resolve/dismiss a report. On failure show a banner; always reload so the row
   // reflects the server's actual state afterwards.
   async function resolveReport(id: string, next: "resolved" | "dismissed") {
-    setBusyId(id);
+    setBusy(id, true);
     setActionError(null);
     try {
       await adminFetch("PATCH", `/api/admin/reports/${id}`, { status: next });
@@ -65,7 +75,7 @@ export function ReportsPage() {
         "Nie udało się zaktualizować zgłoszenia. Odświeżono listę.",
       );
     } finally {
-      setBusyId(null);
+      setBusy(id, false);
       await load(pageNum, status);
     }
   }
@@ -77,7 +87,7 @@ export function ReportsPage() {
     ) {
       return;
     }
-    setBusyId(report.id);
+    setBusy(report.id, true);
     setActionError(null);
     try {
       await adminFetch("POST", "/api/admin/moderation/remove-content", {
@@ -87,7 +97,7 @@ export function ReportsPage() {
     } catch {
       setActionError("Nie udało się usunąć treści. Odświeżono listę.");
     } finally {
-      setBusyId(null);
+      setBusy(report.id, false);
       await load(pageNum, status);
     }
   }
@@ -122,7 +132,7 @@ export function ReportsPage() {
             </span>
           );
         }
-        const busy = busyId === r.id;
+        const busy = busyIds.has(r.id);
         return (
           <div style={styles.actions}>
             <button

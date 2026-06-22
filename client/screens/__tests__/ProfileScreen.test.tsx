@@ -47,9 +47,16 @@ async function renderScreen() {
 }
 
 describe("ProfileScreen", () => {
-  it("renders the theme toggle + blocked-users entry", async () => {
+  it("renders the sun/moon theme toggle + blocked-users entry", async () => {
     await renderScreen();
     expect(screen.getByText(strings.profile.appearance)).toBeTruthy();
+    // The ThemeToggle pill (same control as the login screen).
+    expect(
+      screen.getByRole("button", { name: strings.profile.themeLight }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: strings.profile.themeDark }),
+    ).toBeTruthy();
     expect(
       screen.getByRole("button", { name: strings.profile.blockedUsers }),
     ).toBeTruthy();

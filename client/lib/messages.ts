@@ -86,6 +86,8 @@ export function postsApiErrorMessage(error: PostsApiError): string {
       return strings.errors.network;
     case "notFound":
       return strings.posts.notAvailable;
+    case "forbidden":
+      return strings.posts.forbidden;
     case "validation":
     case "server":
       return strings.errors.generic;

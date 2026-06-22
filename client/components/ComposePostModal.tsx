@@ -15,44 +15,42 @@ import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type { PostActionOutcome } from "@/hooks/useCommunityPosts";
 
-// Report-a-post modal. A local themed multiline input (NOT the shared single-line
-// TextField) bounded to the backend's reason limit. The helper copy is
-// data-minimising — the reason is sent to moderators and stored — and the reason
-// is never logged. onSubmit returns the outcome; the modal closes on success and
-// shows the mapped error otherwise.
+// Compose-a-post modal. A local themed multiline input bounded to the backend's
+// content limit (1..2000, trimmed). onSubmit returns the outcome; the modal
+// closes on success and shows the mapped error otherwise. Mirrors
+// ReportPostModal's structure.
 
-const MAX_REASON_LENGTH = 1000;
+const MAX_POST_LENGTH = 2000;
 
-interface ReportPostModalProps {
+interface ComposePostModalProps {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (reason: string) => Promise<PostActionOutcome>;
+  onSubmit: (content: string) => Promise<PostActionOutcome>;
 }
 
-export function ReportPostModal({
+export function ComposePostModal({
   visible,
   onClose,
   onSubmit,
-}: ReportPostModalProps) {
+}: ComposePostModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [reason, setReason] = useState("");
+  const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Reset the field each time the modal opens.
   useEffect(() => {
     if (visible) {
-      setReason("");
+      setContent("");
       setError(null);
       setSubmitting(false);
     }
   }, [visible]);
 
   const submit = async () => {
-    const trimmed = reason.trim();
+    const trimmed = content.trim();
     if (!trimmed) {
-      setError(strings.posts.reportReasonRequired);
+      setError(strings.posts.composeRequired);
       return;
     }
     setSubmitting(true);
@@ -81,29 +79,26 @@ export function ReportPostModal({
         <Pressable style={styles.backdrop} onPress={onClose}>
           {/* Absorb taps inside the sheet so they don't close it. */}
           <Pressable style={styles.sheet} onPress={() => {}}>
-            <Text style={styles.title}>{strings.posts.reportTitle}</Text>
-            <Text style={styles.helper}>
-              {strings.posts.reportReasonHelper}
-            </Text>
+            <Text style={styles.title}>{strings.posts.composeTitle}</Text>
 
             <TextInput
               style={styles.input}
-              value={reason}
-              onChangeText={setReason}
-              placeholder={strings.posts.reportReasonPlaceholder}
+              value={content}
+              onChangeText={setContent}
+              placeholder={strings.posts.composePlaceholder}
               placeholderTextColor={colors.textMuted}
               multiline
-              numberOfLines={4}
-              maxLength={MAX_REASON_LENGTH}
+              numberOfLines={5}
+              maxLength={MAX_POST_LENGTH}
               textAlignVertical="top"
               editable={!submitting}
-              accessibilityLabel={strings.posts.reportTitle}
+              accessibilityLabel={strings.posts.composeTitle}
             />
 
             <FormError message={error} />
 
             <PrimaryButton
-              label={strings.posts.reportSubmit}
+              label={strings.posts.composeSubmit}
               onPress={submit}
               loading={submitting}
             />
@@ -143,12 +138,6 @@ function createStyles(colors: ThemeColors) {
       color: colors.text,
       fontSize: 18,
       fontWeight: "800",
-      marginBottom: spacing.xs,
-    },
-    helper: {
-      color: colors.textMuted,
-      fontSize: 14,
-      lineHeight: 20,
       marginBottom: spacing.md,
     },
     input: {
@@ -157,7 +146,7 @@ function createStyles(colors: ThemeColors) {
       borderColor: colors.border,
       borderRadius: radius.md,
       padding: spacing.md,
-      minHeight: 110,
+      minHeight: 130,
       color: colors.text,
       fontSize: 16,
       marginBottom: spacing.sm,

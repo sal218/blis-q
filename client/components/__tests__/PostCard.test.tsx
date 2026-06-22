@@ -16,29 +16,29 @@ const basePost: PostDTO = {
 
 describe("PostCard", () => {
   it("renders author, content and a relative time", () => {
-    render(<PostCard post={basePost} onReport={jest.fn()} />);
+    render(<PostCard post={basePost} onMenu={jest.fn()} />);
     expect(screen.getByText("Marta")).toBeTruthy();
     expect(screen.getByText("Cześć wszystkim")).toBeTruthy();
     expect(screen.getByText(strings.posts.timeNow)).toBeTruthy();
   });
 
-  it("⋯ triggers onReport with the post", () => {
-    const onReport = jest.fn();
-    render(<PostCard post={basePost} onReport={onReport} />);
+  it("⋯ triggers onMenu with the post", () => {
+    const onMenu = jest.fn();
+    render(<PostCard post={basePost} onMenu={onMenu} />);
     fireEvent.press(
       screen.getByRole("button", { name: strings.posts.moreActions }),
     );
-    expect(onReport).toHaveBeenCalledWith(basePost);
+    expect(onMenu).toHaveBeenCalledWith(basePost);
   });
 
-  it("deleted post → tombstone, no author and no report action", () => {
+  it("deleted post → tombstone, no author and no ⋯ menu", () => {
     const deleted: PostDTO = {
       ...basePost,
       author: null,
       content: "[deleted]",
       deleted: true,
     };
-    render(<PostCard post={deleted} onReport={jest.fn()} />);
+    render(<PostCard post={deleted} onMenu={jest.fn()} />);
     expect(screen.getByText(strings.posts.deleted)).toBeTruthy();
     expect(screen.queryByText("Marta")).toBeNull();
     expect(

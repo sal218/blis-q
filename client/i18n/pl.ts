@@ -184,7 +184,7 @@ export const pl = {
     // Data-minimising helper — the reason is sent to moderators and stored.
     reportReasonHelper:
       "Twoje zgłoszenie trafi do moderatorów. Nie podawaj zbędnych danych osobowych ani wrażliwych.",
-    reportReasonRequired: "Podaj powód zgłoszenia.", // empty-reason validation
+    reportReasonRequired: "Proszę podać powód zgłoszenia.", // empty-reason validation (polite)
     reportSubmit: "Wyślij zgłoszenie", // submit
     reportSuccess: "Dziękujemy. Zgłoszenie zostało wysłane.", // success toast
     // Relative timestamps (abbreviated units avoid Polish plural complexity).
@@ -192,6 +192,18 @@ export const pl = {
     timeMinutes: "{count} min temu",
     timeHours: "{count} godz. temu",
     timeDays: "{count} dni temu",
+    // Compose (members)
+    compose: "Dodaj wpis", // compose entry button
+    composeTitle: "Nowy wpis", // compose modal title
+    composePlaceholder: "Podziel się czymś ze społecznością", // composer placeholder
+    composeSubmit: "Opublikuj", // publish
+    composeRequired: "Napisz coś, aby opublikować wpis.", // empty-content validation (gentle)
+    // Delete-own
+    delete: "Usuń", // delete action
+    deleteConfirmTitle: "Usunąć wpis?", // delete confirm title
+    deleteConfirmBody: "Tej operacji nie można cofnąć.", // delete confirm body
+    // Shared
+    forbidden: "Nie masz uprawnień do tej akcji.", // 403 on create/delete
   },
 
   errors: {

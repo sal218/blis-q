@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listCommunityPosts, reportPost } from "@/lib/api/posts";
+import {
+  listCommunityPosts,
+  reportPost,
+  createPost,
+  deletePost,
+} from "@/lib/api/posts";
 import { postsApiErrorMessage } from "@/lib/messages";
 import type { PostDTO } from "@shared/types";
 
@@ -17,7 +22,9 @@ export type CommunityPostsStatus = "loading" | "ready" | "error";
 
 type LoadMode = "replace" | "refresh" | "more";
 
-export type ReportOutcome = { ok: true } | { ok: false; message: string };
+// Result of a post mutation (report / create / delete) — ok, or a mapped Polish
+// message for the screen to surface.
+export type PostActionOutcome = { ok: true } | { ok: false; message: string };
 
 export type UseCommunityPosts = {
   posts: PostDTO[];
@@ -28,7 +35,9 @@ export type UseCommunityPosts = {
   refresh: () => void;
   loadMore: () => void;
   retry: () => void;
-  report: (postId: string, reason: string) => Promise<ReportOutcome>;
+  report: (postId: string, reason: string) => Promise<PostActionOutcome>;
+  create: (content: string) => Promise<PostActionOutcome>;
+  remove: (postId: string) => Promise<PostActionOutcome>;
 };
 
 export function useCommunityPosts(communityId: string): UseCommunityPosts {
@@ -101,10 +110,56 @@ export function useCommunityPosts(communityId: string): UseCommunityPosts {
   }, [fetchPage, loadingMore, refreshing, status, nextCursor]);
 
   const report = useCallback(
-    async (postId: string, reason: string): Promise<ReportOutcome> => {
+    async (postId: string, reason: string): Promise<PostActionOutcome> => {
       const result = await reportPost(postId, reason);
       if (result.ok) return { ok: true };
       return { ok: false, message: postsApiErrorMessage(result.error) };
+    },
+    [],
+  );
+
+  // Create a post → on success prepend it. Bumping requestSeq invalidates any
+  // in-flight fetch (a refresh that resolves later is dropped), and the
+  // FUNCTIONAL updater means a concurrent create/delete can't clobber this one
+  // off a stale `posts` snapshot.
+  const create = useCallback(
+    async (content: string): Promise<PostActionOutcome> => {
+      const result = await createPost(communityId, content);
+      if (!result.ok) {
+        return { ok: false, message: postsApiErrorMessage(result.error) };
+      }
+      const created = result.data;
+      requestSeq.current++;
+      setPosts((prev) => [created, ...prev]);
+      return { ok: true };
+    },
+    [communityId],
+  );
+
+  // Delete a post → on success mark it deleted IN PLACE (tombstone), matching the
+  // server's masking and what a refresh would show. Same requestSeq bump +
+  // functional updater guarantees as create.
+  const remove = useCallback(
+    async (postId: string): Promise<PostActionOutcome> => {
+      const result = await deletePost(postId);
+      if (!result.ok) {
+        return { ok: false, message: postsApiErrorMessage(result.error) };
+      }
+      requestSeq.current++;
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? {
+                ...p,
+                deleted: true,
+                author: null,
+                content: "[deleted]",
+                imageUrl: null,
+              }
+            : p,
+        ),
+      );
+      return { ok: true };
     },
     [],
   );
@@ -119,5 +174,7 @@ export function useCommunityPosts(communityId: string): UseCommunityPosts {
     loadMore,
     retry,
     report,
+    create,
+    remove,
   };
 }

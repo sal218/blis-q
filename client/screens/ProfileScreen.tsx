@@ -1,12 +1,5 @@
 import { useMemo } from "react";
-import {
-  View,
-  Text,
-  Switch,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-} from "react-native";
+import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { ProfileStackParamList } from "@/navigation/AppTabs";
@@ -15,6 +8,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { signOutGoogle } from "@/lib/googleAuth";
 import { deregisterPushToken } from "@/notifications/usePushNotifications";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
 
@@ -22,7 +16,7 @@ type Props = NativeStackScreenProps<ProfileStackParamList, "ProfileHome">;
 
 export function ProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { colors, mode, toggleMode } = useTheme();
+  const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user, signOut } = useAuth();
 
@@ -53,17 +47,8 @@ export function ProfileScreen({ navigation }: Props) {
 
       <Text style={styles.section}>{strings.profile.appearance}</Text>
       <View style={styles.row}>
-        <Text style={styles.rowLabel}>
-          {mode === "dark"
-            ? strings.profile.themeDark
-            : strings.profile.themeLight}
-        </Text>
-        <Switch
-          accessibilityLabel={strings.profile.theme}
-          value={mode === "dark"}
-          onValueChange={toggleMode}
-          trackColor={{ true: colors.primary, false: colors.border }}
-        />
+        <Text style={styles.rowLabel}>{strings.profile.theme}</Text>
+        <ThemeToggle />
       </View>
 
       <Pressable

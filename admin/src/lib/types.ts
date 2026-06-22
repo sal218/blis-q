@@ -30,3 +30,11 @@ export type ReportDTO = {
   status: ReportStatus;
   createdAt: string;
 };
+
+// Admin-only report view — what GET /api/admin/reports returns (since #22): the
+// public ReportDTO plus the moderation fields (reviewer/time/resolution).
+export type AdminReportDTO = ReportDTO & {
+  reviewedById: string | null;
+  reviewedAt: string | null;
+  resolution: string | null;
+};

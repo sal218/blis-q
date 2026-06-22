@@ -38,3 +38,17 @@ export type AdminReportDTO = ReportDTO & {
   reviewedAt: string | null;
   resolution: string | null;
 };
+
+// Admin-only user view — what GET /api/admin/users(/:id) returns. Mirrors the
+// admin-only AdminUserDTO in shared/types.ts (the admin app has no @shared
+// alias). Includes email (admins manage accounts); never a public surface.
+export type AdminUserDTO = {
+  id: string;
+  email: string;
+  displayName: string;
+  isAdmin: boolean;
+  isPremium: boolean;
+  createdAt: string;
+  bannedAt: string | null;
+  deletedAt: string | null;
+};

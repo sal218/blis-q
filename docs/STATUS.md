@@ -2,11 +2,11 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-20 — user ban/unban (#23) merged + prod `users.banned_at` applied; Sprint-4 backend complete. Next: mobile posts UI + safety features (UI — device-tested before PR)._
+_Last updated: 2026-06-22 — Sprint-4 mobile posts UI (feed #25, composer #26) + admin reports-queue actions (#27) merged. Next: admin users/ban-unban UI (`/autoslice`). Quick-exit/discreet-mode safety is PAUSED (P-17)._
 
 ## Current phase
 
-**Sprint 4 — Community posts + moderation (ROADMAP Sprint 4). Sprint 3 done. Backend slices all merged: posts (#19), db:push/RLS hardening (#20), /autoslice skill (#21), moderation actions (#22), user ban/unban (#23). Next: mobile posts UI + safety features (both UI — `/autoslice` reviews the code but stops at the human gate for device testing before PR), plus a chore to tune `/autoslice` (synchronous Codex review).**
+**Sprint 4 — Community posts + moderation (ROADMAP Sprint 4). Sprint 3 done. Backend all merged (posts #19, db:push/RLS #20, /autoslice #21, moderation #22, user ban/unban #23). Mobile posts UI merged: feed+report (#25), composer+delete-own (#26). Admin reports-queue actions merged (#27). Next: admin users/ban-unban UI (activates the rest of #23), then the deferred bits (mobile mod-delete-others, emergency contacts). Quick-exit + discreet-mode safety is PAUSED pending a client/product decision (P-17).**
 
 ## Merged to `main`
 
@@ -34,12 +34,18 @@ _Last updated: 2026-06-20 — user ban/unban (#23) merged + prod `users.banned_a
 | #21 | `chore/autoslice-skill` — `/autoslice` skill: automated Claude↔Codex review loop (plan + working-tree review via the `codex:codex-rescue` subagent, round caps, human gate before PR) + frozen `CODEX_REVIEWER_BRIEF.md`                                                                                                                                                                                          |
 | #22 | `feat/moderation-actions` — Sprint-4 admin moderation: `PATCH /admin/reports/:id` (resolve/dismiss, atomic one-way, `AdminReportDTO`) + `POST /admin/moderation/remove-content` (post-only, scrub+audit) + admin reports list → `AdminReportDTO`. 13 integration tests                                                                                                                                            |
 | #23 | `feat/user-ban` — Sprint-4 P-15: admin ban/unban + user directory + auth-gate (banned → 403; GDPR export/erasure stay reachable via `isAuthenticatedAllowBanned`) + erasure cascade (clears `bannedAt`, anonymises user-targeted audit `resourceId`). `users.banned_at` additive column. First `/autoslice` run. 27 focused tests. **Prod `users.banned_at` applied + `check:rls` verified (17/17, 0 policies).** |
+| #24 | `chore/status-sync-autoslice-tuning` — STATUS sync + `/autoslice` skill tuning: every Codex subagent call must run synchronously and return the verdict in its final message (fixes the Mode-B background-task hiccup)                                                                                                                                                                                            |
+| #25 | `feat/posts-feed-mobile` — Sprint-4 mobile: community **Feed** (About\|Feed `SegmentedControl` on the community detail) — cursor-paged `FlatList` + pull-to-refresh + load-more + per-post report; stale-response guard; deleted tombstones. Read-only consumption of #19. 110 client tests                                                                                                                       |
+| #26 | `feat/posts-compose-mobile` — Sprint-4 mobile: **composer** (member-gated) + **delete-own** (⋯ → tombstone); race-safe optimistic updates (functional updaters + requestSeq); Profile sun/moon `ThemeToggle`; modal keyboard-avoidance + tap-outside dismiss. 129 client tests                                                                                                                                    |
+| #27 | `feat/admin-moderation-web` — Sprint-4 admin-web: Reports queue **actions** wired to #22 — Rozwiąż/Odrzuć (resolve/dismiss) + Usuń treść (remove-content, post-only, confirm); per-row `Set` busy state; reload-reconciles; Polish error banners                                                                                                                                                                  |
 
-**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed). **🎉 Sprint-3 complete** (communities #13, block/reports #14, theme #15, communities/login mobile #16, admin slice #17). **🎉 Sprint-4 backend complete** (posts #19, db:push/RLS hardening #20, /autoslice #21, moderation actions #22, user ban/unban #23 — all merged).
+**🎉 Sprint-1 auth scope complete** (backend auth #4/#6/#7, mobile auth UI #8, admin sign-in #9). **🎉 Sprint-2 account/GDPR complete** (profile #10, export #11, erasure #12 — P-1/P-2 closed). **🎉 Sprint-3 complete** (communities #13, block/reports #14, theme #15, communities/login mobile #16, admin slice #17). **🎉 Sprint-4 backend complete** (posts #19, db:push/RLS #20, /autoslice #21, moderation #22, user ban/unban #23). **Sprint-4 mobile posts UI** (feed #25, composer #26) + **admin reports-queue actions** (#27) merged.
 
 ## In progress
 
-- _(nothing in flight — between slices.)_ Next: Sprint-4 **mobile posts UI** + **safety features** (both UI — `/autoslice` reviews the code but stops at the human gate for Expo/device testing before PR), plus a small chore to tune `/autoslice` (synchronous Codex review).
+- _(nothing in flight — between slices.)_ Next: **admin users/ban-unban UI** (admin-web, activates the rest of #23). Then deferred Sprint-4 bits: mobile mod-delete-others in the feed, emergency contacts (content-source decision pending), and the P-19 polish.
+- **PAUSED (P-17):** quick-exit + discreet-mode safety UI — kept un-wired (`App.tsx` note) pending a client/product safety decision (a visible trigger may shame users / be a "tell").
+- **Pending device testing:** Android pass for the mobile posts UI (#25/#26) — iOS Expo done; Android deferred by the maintainer.
 - **Backlog (Codex):** "Deactivate account" = a **reversible pause** (not GDPR erasure) — parked in [ROADMAP](ROADMAP.md) **Sprint 4**.
 
 ## Auth endpoints live (`/api/v1/auth/*`)

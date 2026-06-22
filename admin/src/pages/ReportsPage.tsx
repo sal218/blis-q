@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { adminFetch } from "../lib/api";
-import type { OffsetPage, ReportDTO, ReportStatus } from "../lib/types";
+import type { OffsetPage, AdminReportDTO, ReportStatus } from "../lib/types";
 import { DataTable, type Column } from "../components/DataTable";
 import { StatusBadge } from "../components/StatusBadge";
 
-// Reports moderation queue — READ ONLY this slice (docs/API.md §14). Resolve /
-// dismiss actions land in Sprint 4. Filterable by status; offset-paginated.
+// Reports moderation queue + actions (docs/API.md §14). Resolve / dismiss a
+// report (PATCH /admin/reports/:id) and remove a reported post's content (POST
+// /admin/moderation/remove-content, post-only). Filterable by status; offset-
+// paginated. After any action the page reloads so it shows the server's true
+// state (e.g. a 409 "already actioned" simply re-renders the real status).
 
 const STATUSES: { value: "" | ReportStatus; label: string }[] = [
   { value: "", label: "Wszystkie" },
@@ -16,11 +19,23 @@ const STATUSES: { value: "" | ReportStatus; label: string }[] = [
 ];
 
 export function ReportsPage() {
-  const [page, setPage] = useState<OffsetPage<ReportDTO> | null>(null);
+  const [page, setPage] = useState<OffsetPage<AdminReportDTO> | null>(null);
   const [pageNum, setPageNum] = useState(1);
   const [status, setStatus] = useState<"" | ReportStatus>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  // Per-row in-flight set — a Set (not a single id) so concurrent actions on
+  // different rows don't overwrite each other's disabled state.
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+
+  const setBusy = (id: string, busy: boolean) =>
+    setBusyIds((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   const load = useCallback(
     async (targetPage: number, statusFilter: "" | ReportStatus) => {
@@ -29,7 +44,7 @@ export function ReportsPage() {
       try {
         const query = new URLSearchParams({ page: String(targetPage) });
         if (statusFilter) query.set("status", statusFilter);
-        const data = await adminFetch<OffsetPage<ReportDTO>>(
+        const data = await adminFetch<OffsetPage<AdminReportDTO>>(
           "GET",
           `/api/admin/reports?${query.toString()}`,
         );
@@ -48,7 +63,46 @@ export function ReportsPage() {
     load(1, status);
   }, [load, status]);
 
-  const columns: Column<ReportDTO>[] = [
+  // Resolve/dismiss a report. On failure show a banner; always reload so the row
+  // reflects the server's actual state afterwards.
+  async function resolveReport(id: string, next: "resolved" | "dismissed") {
+    setBusy(id, true);
+    setActionError(null);
+    try {
+      await adminFetch("PATCH", `/api/admin/reports/${id}`, { status: next });
+    } catch {
+      setActionError(
+        "Nie udało się zaktualizować zgłoszenia. Odświeżono listę.",
+      );
+    } finally {
+      setBusy(id, false);
+      await load(pageNum, status);
+    }
+  }
+
+  // Remove a reported post's content (post-only). Destructive → confirm first.
+  async function removeContent(report: AdminReportDTO) {
+    if (
+      !window.confirm("Usunąć treść tego wpisu? Tej operacji nie można cofnąć.")
+    ) {
+      return;
+    }
+    setBusy(report.id, true);
+    setActionError(null);
+    try {
+      await adminFetch("POST", "/api/admin/moderation/remove-content", {
+        resourceType: "post",
+        resourceId: report.resourceId,
+      });
+    } catch {
+      setActionError("Nie udało się usunąć treści. Odświeżono listę.");
+    } finally {
+      setBusy(report.id, false);
+      await load(pageNum, status);
+    }
+  }
+
+  const columns: Column<AdminReportDTO>[] = [
     { key: "type", header: "Typ", render: (r) => r.resourceType },
     {
       key: "resource",
@@ -65,6 +119,48 @@ export function ReportsPage() {
       key: "created",
       header: "Data",
       render: (r) => new Date(r.createdAt).toLocaleString("pl-PL"),
+    },
+    {
+      key: "actions",
+      header: "Akcje",
+      render: (r) => {
+        const open = r.status === "pending" || r.status === "reviewing";
+        if (!open) {
+          return (
+            <span style={styles.muted}>
+              {r.resolution ? r.resolution : "—"}
+            </span>
+          );
+        }
+        const busy = busyIds.has(r.id);
+        return (
+          <div style={styles.actions}>
+            <button
+              style={styles.smallButton}
+              disabled={busy}
+              onClick={() => resolveReport(r.id, "resolved")}
+            >
+              Rozwiąż
+            </button>
+            <button
+              style={styles.smallButton}
+              disabled={busy}
+              onClick={() => resolveReport(r.id, "dismissed")}
+            >
+              Odrzuć
+            </button>
+            {r.resourceType === "post" && (
+              <button
+                style={styles.dangerButton}
+                disabled={busy}
+                onClick={() => removeContent(r)}
+              >
+                Usuń treść
+              </button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -88,6 +184,7 @@ export function ReportsPage() {
       </div>
 
       {error && <p style={styles.error}>{error}</p>}
+      {actionError && <p style={styles.error}>{actionError}</p>}
       {loading ? (
         <p style={styles.muted}>Ładowanie…</p>
       ) : (
@@ -141,6 +238,25 @@ const styles: Record<string, CSSProperties> = {
     fontFamily: "inherit",
   },
   code: { fontSize: 12, color: "#6B7280" },
+  actions: { display: "flex", gap: 8, flexWrap: "wrap" },
+  smallButton: {
+    padding: "6px 12px",
+    borderRadius: 8,
+    border: "1px solid #D1D5DB",
+    background: "#FFFFFF",
+    color: "#111827",
+    cursor: "pointer",
+    fontSize: 13,
+  },
+  dangerButton: {
+    padding: "6px 12px",
+    borderRadius: 8,
+    border: "1px solid #DC2626",
+    background: "#FFFFFF",
+    color: "#DC2626",
+    cursor: "pointer",
+    fontSize: 13,
+  },
   pager: { display: "flex", gap: 12, alignItems: "center", marginTop: 16 },
   ghostButton: {
     padding: "10px 16px",

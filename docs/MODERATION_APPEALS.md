@@ -150,7 +150,9 @@ account is restored on success.
 
 ### Schema — new table `appeals` (DPIA-gated)
 - Columns: `id`, `userId`, `moderationActionId`, `status`
-  (`open` | `reviewing` | `granted` | `upheld`), `message` (Zod-bounded user text),
+  (`open` | `reviewing` | `granted` | `upheld`),
+  `message` (user free text — server-side bound `z.string().trim().min(1).max(2000)` on a
+  **strict** body, mirroring the trim/bound text schemas in `server/validation.ts`),
   `reviewedById`, `reviewedAt`, `createdAt`.
 - **Exact `ON DELETE` per FK** (per the per-table rule, COMPLIANCE §5.2; the manual
   erasure cascade is authoritative — FK behaviour is the backstop):
@@ -172,12 +174,14 @@ account is restored on success.
 
 ### Backend
 - `POST /api/v1/account/appeal` — banned user via `isAuthenticatedAllowBanned`;
-  **rate-limited** (fail-closed limiter); Zod-bounded `message`; **one active appeal per
-  user enforced by the partial unique index above** (duplicate / double-tap → 409, no
-  second row). `GET /api/v1/account/appeal` — the user's appeal status.
+  **rate-limited** (fail-closed limiter); strict, trimmed, bounded `message` (above);
+  **one active appeal per user enforced by the partial unique index above** (duplicate /
+  double-tap → 409, no second row). `GET /api/v1/account/appeal` — the user's appeal status.
 - Admin: `GET /admin/appeals` (queue, same offset/filter pattern as the Reports page);
-  `POST /admin/appeals/:id/decision` `{ decision: "grant" | "uphold" }` — a **guarded
-  transactional state transition** (`UPDATE … WHERE status IN ('open','reviewing')`):
+  `POST /admin/appeals/:id/decision` `{ decision: "grant" | "uphold" }` — gated
+  `isAuthenticated → requireAdmin`, **`adminMutationUser` rate-limited** (fail-closed, same
+  as the other admin mutations in `server/routes/admin.ts` / `docs/API.md`), and a
+  **guarded transactional state transition** (`UPDATE … WHERE status IN ('open','reviewing')`):
   `grant` → set status + **unban** (reuse `unbanUser`) + audit + reinstatement email;
   `uphold` → set status + audit + decision email. Idempotent: a second decision on an
   already-decided appeal returns 409.
@@ -199,9 +203,11 @@ Email now (per P-21). The `moderation_action` **push** is already a Sprint 6 roa
   `reviewedAt` (exclude `reviewedById`).
 
 ### Tests
-Appeal submit (banned-only; rate-limit 429; validation 400; one-open-appeal guard 409);
-status read; admin decision (`grant` unbans + guarded transition + audit; `uphold` audits;
-409 on re-decide); export includes appeals; erasure deletes them + nulls reviewer.
+Appeal submit (banned-only; rate-limit 429; validation 400 incl. whitespace-only and
+over-2000-char `message`; one-open-appeal guard 409); status read; admin decision
+(non-admin 403; **`adminMutationUser` 429**; `grant` unbans + guarded transition + audit;
+`uphold` audits; 409 on re-decide); export includes appeals; erasure deletes them + nulls
+reviewer.
 
 ---
 

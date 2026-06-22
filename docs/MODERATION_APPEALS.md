@@ -149,16 +149,32 @@ without `actorId`.
 account is restored on success.
 
 ### Schema — new table `appeals` (DPIA-gated)
-- Columns: `id`, `userId` (→ `users.id`), `moderationActionId` (→ `moderation_actions.id`),
-  `status` (`open` | `reviewing` | `granted` | `upheld`), `message` (Zod-bounded user
-  text), `reviewedById` (→ `users.id`), `reviewedAt`, `createdAt`. Explicit `ON DELETE`.
+- Columns: `id`, `userId`, `moderationActionId`, `status`
+  (`open` | `reviewing` | `granted` | `upheld`), `message` (Zod-bounded user text),
+  `reviewedById`, `reviewedAt`, `createdAt`.
+- **Exact `ON DELETE` per FK** (per the per-table rule, COMPLIANCE §5.2; the manual
+  erasure cascade is authoritative — FK behaviour is the backstop):
+  - `userId` → `users.id` **`ON DELETE CASCADE`** — an appeal is the user's own data
+    (and its `message` is free-text PII); if the user row is ever hard-deleted the
+    appeal goes with it. The manual erasure path `DELETE`s the user's appeals explicitly.
+  - `reviewedById` → `users.id` **`ON DELETE SET NULL`** — preserve the appeal record if
+    the reviewing admin is later erased; the manual erasure path nulls it.
+  - `moderationActionId` → `moderation_actions.id` **`ON DELETE CASCADE`** — an appeal is
+    meaningless without the action it contests; erasing the target user deletes both that
+    user's `moderation_actions` and their `appeals` together, so this is consistent.
+- **One active appeal per user — DB-level guard (not read-before-insert):** a **partial
+  unique index** `CREATE UNIQUE INDEX … ON appeals (user_id) WHERE status IN ('open','reviewing')`.
+  Two concurrent `POST`s cannot both insert — the second hits a unique violation, caught
+  and returned as a deterministic **409 with no second row**. (Express via Drizzle; mirror
+  the guarded-transition pattern used for ban/unban in `server/storage.ts`.)
 - **RLS:** add `ALTER TABLE appeals ENABLE ROW LEVEL SECURITY;` to `supabase/rls.sql`;
   same DPIA-gated `db:push → rls → check:rls` deploy as P-21.
 
 ### Backend
 - `POST /api/v1/account/appeal` — banned user via `isAuthenticatedAllowBanned`;
-  **rate-limited** (fail-closed limiter); Zod-bounded `message`; one open appeal at a
-  time (guard). `GET /api/v1/account/appeal` — the user's appeal status.
+  **rate-limited** (fail-closed limiter); Zod-bounded `message`; **one active appeal per
+  user enforced by the partial unique index above** (duplicate / double-tap → 409, no
+  second row). `GET /api/v1/account/appeal` — the user's appeal status.
 - Admin: `GET /admin/appeals` (queue, same offset/filter pattern as the Reports page);
   `POST /admin/appeals/:id/decision` `{ decision: "grant" | "uphold" }` — a **guarded
   transactional state transition** (`UPDATE … WHERE status IN ('open','reviewing')`):

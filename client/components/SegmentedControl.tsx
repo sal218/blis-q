@@ -33,8 +33,6 @@ export function SegmentedControl({ segments, selectedIndex, onChange }: Props) {
             <Text
               style={[styles.label, active && styles.labelActive]}
               numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.85}
             >
               {label}
             </Text>
@@ -56,7 +54,6 @@ function createStyles(colors: ThemeColors) {
       flex: 1,
       alignItems: "center",
       paddingVertical: spacing.md,
-      paddingHorizontal: spacing.xs,
       borderBottomWidth: 2,
       borderBottomColor: "transparent",
     },
@@ -65,7 +62,10 @@ function createStyles(colors: ThemeColors) {
     },
     label: {
       color: colors.textMuted,
-      fontSize: 15,
+      // Uniform across all three segments — sized so the longest label
+      // ("Bezpieczne miejsca") stays on one line on narrow phones, instead of
+      // per-label auto-shrink (which made that one tab visibly smaller).
+      fontSize: 13,
       fontWeight: "600",
     },
     labelActive: {

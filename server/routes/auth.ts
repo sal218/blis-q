@@ -227,10 +227,10 @@ async function handleLogin(req: Request, res: Response): Promise<Response> {
       await supabaseAdmin.auth.admin
         .signOut(result.data.session.access_token, "global")
         .catch(() => {});
+      // IDs-only: we already have the actor id; no IP/PII in the audit row.
       await storage.writeAuditLog({
         action: "user.login_blocked_suspended",
         actorId: profile.id,
-        ipAddress: req.ip ?? null,
       });
       return res
         .status(403)
@@ -378,10 +378,10 @@ async function handleGoogleSignIn(
       await supabaseAdmin.auth.admin
         .signOut(result.data.session.access_token, "global")
         .catch(() => {});
+      // IDs-only: we already have the actor id; no IP/PII in the audit row.
       await storage.writeAuditLog({
         action: "user.login_blocked_suspended",
         actorId: authUserId,
-        ipAddress: req.ip ?? null,
       });
       return res
         .status(403)

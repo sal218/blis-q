@@ -357,13 +357,16 @@ describe("POST /api/v1/auth/login", () => {
     expect(res.body.user).toBeUndefined();
     // The just-issued Supabase session is revoked so it can't be used out-of-band.
     expect(signOutMock).toHaveBeenCalledWith("at", "global");
-    // Blocked attempt is audited with the actor id (IDs only).
+    // Blocked attempt is audited with the actor id and NO PII (IDs only — the
+    // ip is not recorded for this action).
     const audits = await db
       .select()
       .from(auditLog)
       .where(eq(auditLog.actorId, id));
-    expect(
-      audits.some((a) => a.action === "user.login_blocked_suspended"),
-    ).toBe(true);
+    const suspended = audits.find(
+      (a) => a.action === "user.login_blocked_suspended",
+    );
+    expect(suspended).toBeDefined();
+    expect(suspended?.ipAddress).toBeNull();
   });
 });

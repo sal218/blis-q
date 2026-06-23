@@ -251,6 +251,42 @@ describe("CommunityFeed — ⋯ actions", () => {
     alertSpy.mockRestore();
   });
 
+  it("menu open → post becomes a tombstone on refresh → sheet closes (no stale Delete)", async () => {
+    listMock
+      .mockResolvedValueOnce(okPage([post("p2", "Cudzy")], null))
+      .mockResolvedValueOnce(
+        okPage(
+          [post("p2", "[deleted]", { author: null, deleted: true })],
+          null,
+        ),
+      );
+    renderFeed({ canModerate: true, currentUserId: "me" });
+    await screen.findByText("Cudzy");
+
+    // Open the ⋯ sheet on the other user's post → Delete visible.
+    fireEvent.press(
+      screen.getByRole("button", { name: strings.posts.moreActions }),
+    );
+    expect(
+      screen.getByRole("button", { name: strings.posts.delete }),
+    ).toBeTruthy();
+
+    // A refresh replaces the row with a tombstone while the sheet is open.
+    const list = screen.UNSAFE_getByType(FlatList);
+    await act(async () => {
+      await list.props.refreshControl.props.onRefresh();
+    });
+
+    // The sheet reconciles to the now-deleted row and closes — no stale actions.
+    await screen.findByText(strings.posts.deleted);
+    expect(
+      screen.queryByRole("button", { name: strings.posts.delete }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: strings.posts.report }),
+    ).toBeNull();
+  });
+
   it("report: ⋯ → Report → reason → submit calls reportPost", async () => {
     const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
     listMock.mockResolvedValue(okPage([post("p1", "Wpis")], null));

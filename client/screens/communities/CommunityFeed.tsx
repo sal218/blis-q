@@ -34,12 +34,16 @@ interface CommunityFeedProps {
   // is rendered only when this is true AND currentUserId is non-null.
   canCompose: boolean;
   currentUserId: string | null;
+  // Whether the caller can moderate this community (moderator/admin) → the ⋯
+  // sheet offers Delete on others' posts, not just their own.
+  canModerate: boolean;
 }
 
 export function CommunityFeed({
   communityId,
   canCompose,
   currentUserId,
+  canModerate,
 }: CommunityFeedProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -170,6 +174,7 @@ export function CommunityFeed({
       <PostActionsSheet
         post={menuPost}
         currentUserId={currentUserId}
+        canModerate={canModerate}
         onClose={() => setMenuPost(null)}
         onReport={openReport}
         onDelete={confirmDelete}

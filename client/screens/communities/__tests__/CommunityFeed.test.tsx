@@ -56,7 +56,11 @@ const okPage = (items: PostDTO[], nextCursor: string | null) => ({
 });
 
 function renderFeed(
-  opts: { canCompose?: boolean; currentUserId?: string | null } = {},
+  opts: {
+    canCompose?: boolean;
+    currentUserId?: string | null;
+    canModerate?: boolean;
+  } = {},
 ) {
   // Respect an explicit `currentUserId: null` (??-default would coerce it to "me").
   const currentUserId =
@@ -66,6 +70,7 @@ function renderFeed(
       communityId="c1"
       canCompose={opts.canCompose ?? false}
       currentUserId={currentUserId}
+      canModerate={opts.canModerate ?? false}
     />,
   );
 }
@@ -203,6 +208,47 @@ describe("CommunityFeed — ⋯ actions", () => {
     expect(
       screen.queryByRole("button", { name: strings.posts.delete }),
     ).toBeNull();
+  });
+
+  it("moderator → others' post ⋯ offers Delete", async () => {
+    listMock.mockResolvedValue(okPage([post("p2", "Cudzy")], null));
+    renderFeed({ canModerate: true, currentUserId: "me" });
+    await screen.findByText("Cudzy");
+
+    fireEvent.press(
+      screen.getByRole("button", { name: strings.posts.moreActions }),
+    );
+    expect(
+      screen.getByRole("button", { name: strings.posts.report }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: strings.posts.delete }),
+    ).toBeTruthy();
+  });
+
+  it("moderator deletes another user's post → tombstone", async () => {
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    listMock.mockResolvedValue(okPage([post("p2", "Cudzy wpis")], null));
+    deleteMock.mockResolvedValue({ ok: true, data: { ok: true } });
+    renderFeed({ canModerate: true, currentUserId: "me" });
+    await screen.findByText("Cudzy wpis");
+
+    fireEvent.press(
+      screen.getByRole("button", { name: strings.posts.moreActions }),
+    );
+    fireEvent.press(screen.getByRole("button", { name: strings.posts.delete }));
+
+    const buttons = alertSpy.mock.calls.at(-1)?.[2] as
+      | { text: string; style?: string; onPress?: () => void }[]
+      | undefined;
+    const destructive = buttons?.find((b) => b.style === "destructive");
+    await act(async () => {
+      await destructive?.onPress?.();
+    });
+
+    await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("p2"));
+    expect(await screen.findByText(strings.posts.deleted)).toBeTruthy();
+    alertSpy.mockRestore();
   });
 
   it("report: ⋯ → Report → reason → submit calls reportPost", async () => {

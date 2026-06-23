@@ -6,13 +6,17 @@ import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type { PostDTO } from "@shared/types";
 
 // Bottom-sheet action menu for a post's ⋯ overflow. Report is always offered;
-// Delete only when the post is the caller's own (post.author?.id ===
-// currentUserId) — mod/admin deletion of others' posts is a separate moderation
-// UI. Open when `post` is non-null; the parent owns the report/delete flows.
+// Delete is offered when the post is the caller's own (post.author?.id ===
+// currentUserId) OR the caller can moderate this community (a moderator/admin).
+// `canModerate` must mirror the server's softDeletePost authorization (author or
+// community moderator/admin — NOT global app admin), so the action never 403s.
+// Open when `post` is non-null; the parent owns the report/delete flows.
 
 interface PostActionsSheetProps {
   post: PostDTO | null;
   currentUserId: string | null;
+  // The caller is a moderator/admin of this community → may delete others' posts.
+  canModerate: boolean;
   onClose: () => void;
   onReport: (post: PostDTO) => void;
   onDelete: (post: PostDTO) => void;
@@ -21,6 +25,7 @@ interface PostActionsSheetProps {
 export function PostActionsSheet({
   post,
   currentUserId,
+  canModerate,
   onClose,
   onReport,
   onDelete,
@@ -29,6 +34,7 @@ export function PostActionsSheet({
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const isOwn = post?.author?.id != null && post.author.id === currentUserId;
+  const canDelete = isOwn || canModerate;
 
   return (
     <Modal
@@ -48,7 +54,7 @@ export function PostActionsSheet({
             <Text style={styles.rowText}>{strings.posts.report}</Text>
           </Pressable>
 
-          {isOwn ? (
+          {canDelete ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={strings.posts.delete}

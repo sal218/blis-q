@@ -166,4 +166,61 @@ describe("CommunityDetailScreen", () => {
       screen.queryByRole("button", { name: strings.posts.compose }),
     ).toBeNull();
   });
+
+  // canModerate wiring: a community moderator/admin sees Delete on ANOTHER
+  // author's post; a plain member does not. Exercises the full derivation
+  // (role → canModerate) and propagation (screen → feed → ⋯ sheet).
+  const othersPost = {
+    id: "p1",
+    communityId: "c1",
+    author: { id: "other", displayName: "Ktoś", avatarUrl: null },
+    content: "Cudzy wpis",
+    createdAt: new Date().toISOString(),
+    imageUrl: null,
+    deleted: false,
+  };
+
+  async function openFeedAndMenu() {
+    fireEvent.press(
+      await screen.findByRole("tab", { name: strings.posts.tabFeed }),
+    );
+    await screen.findByText("Cudzy wpis");
+    fireEvent.press(
+      screen.getByRole("button", { name: strings.posts.moreActions }),
+    );
+  }
+
+  it("moderator → Delete shown on another author's post", async () => {
+    getMock.mockResolvedValue({
+      ok: true,
+      data: community({ role: "moderator" }),
+    });
+    listPostsMock.mockResolvedValue({
+      ok: true,
+      data: { data: [othersPost], nextCursor: null },
+    });
+    mockUser = { id: "me" };
+    renderDetail();
+    await openFeedAndMenu();
+    expect(
+      screen.getByRole("button", { name: strings.posts.delete }),
+    ).toBeTruthy();
+  });
+
+  it("plain member → no Delete on another author's post", async () => {
+    getMock.mockResolvedValue({
+      ok: true,
+      data: community({ role: "member" }),
+    });
+    listPostsMock.mockResolvedValue({
+      ok: true,
+      data: { data: [othersPost], nextCursor: null },
+    });
+    mockUser = { id: "me" };
+    renderDetail();
+    await openFeedAndMenu();
+    expect(
+      screen.queryByRole("button", { name: strings.posts.delete }),
+    ).toBeNull();
+  });
 });

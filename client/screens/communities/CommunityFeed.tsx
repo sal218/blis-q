@@ -34,12 +34,16 @@ interface CommunityFeedProps {
   // is rendered only when this is true AND currentUserId is non-null.
   canCompose: boolean;
   currentUserId: string | null;
+  // Whether the caller can moderate this community (moderator/admin) → the ⋯
+  // sheet offers Delete on others' posts, not just their own.
+  canModerate: boolean;
 }
 
 export function CommunityFeed({
   communityId,
   canCompose,
   currentUserId,
+  canModerate,
 }: CommunityFeedProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -63,6 +67,15 @@ export function CommunityFeed({
   const showFullSpinner = status === "loading" && posts.length === 0;
   const showErrorState = status === "error" && posts.length === 0;
   const showCompose = canCompose && currentUserId !== null;
+
+  // Reconcile the open ⋯ sheet against the live list: `menuPost` is a snapshot
+  // taken when the row was tapped, so if a refresh (or another delete) turns that
+  // post into a tombstone — or drops it — while the sheet is open, resolve to the
+  // current row and close the sheet for a deleted/missing post. Prevents a stale
+  // Delete/Report action lingering over an already-deleted post.
+  const activeMenuPost = menuPost
+    ? (posts.find((p) => p.id === menuPost.id && !p.deleted) ?? null)
+    : null;
 
   const submitReport = async (reason: string): Promise<PostActionOutcome> => {
     if (!reportingPost) return { ok: false, message: strings.errors.generic };
@@ -168,8 +181,9 @@ export function CommunityFeed({
         onSubmit={submitCompose}
       />
       <PostActionsSheet
-        post={menuPost}
+        post={activeMenuPost}
         currentUserId={currentUserId}
+        canModerate={canModerate}
         onClose={() => setMenuPost(null)}
         onReport={openReport}
         onDelete={confirmDelete}

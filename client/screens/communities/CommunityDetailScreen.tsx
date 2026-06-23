@@ -73,6 +73,13 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
   const isMember = community.membership !== null;
   // Compose requires membership AND a resolved identity (user.id non-null).
   const canCompose = isMember && !!user?.id;
+  // Moderation (delete others' posts) mirrors the server's softDeletePost
+  // authorization exactly: a community moderator/admin. Deliberately NOT
+  // user.isAdmin — a global app admin who isn't a community mod is not allowed
+  // by DELETE /posts/:id (they use the admin-web remove-content path), so the
+  // UI must not offer a delete the server would 403.
+  const role = community.membership?.role;
+  const canModerate = role === "moderator" || role === "admin";
 
   return (
     <View style={styles.root}>
@@ -127,6 +134,7 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
           communityId={id}
           canCompose={canCompose}
           currentUserId={user?.id ?? null}
+          canModerate={canModerate}
         />
       )}
     </View>

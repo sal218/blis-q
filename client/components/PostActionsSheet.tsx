@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Modal, Text, Pressable, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/contexts/ThemeContext";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
@@ -31,6 +32,7 @@ export function PostActionsSheet({
   onDelete,
 }: PostActionsSheetProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const isOwn = post?.author?.id != null && post.author.id === currentUserId;
@@ -44,7 +46,14 @@ export function PostActionsSheet({
       onRequestClose={onClose}
     >
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet}>
+        <Pressable
+          style={[
+            styles.sheet,
+            // Lift the rows off the bottom edge / home indicator so they're
+            // comfortable to tap (the sheet sat too low on devices with a gesture bar).
+            { paddingBottom: insets.bottom + spacing.lg },
+          ]}
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={strings.posts.report}

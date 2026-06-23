@@ -30,7 +30,12 @@ export function SegmentedControl({ segments, selectedIndex, onChange }: Props) {
             onPress={() => onChange(index)}
             style={[styles.segment, active && styles.segmentActive]}
           >
-            <Text style={[styles.label, active && styles.labelActive]}>
+            <Text
+              style={[styles.label, active && styles.labelActive]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
               {label}
             </Text>
           </Pressable>
@@ -51,6 +56,7 @@ function createStyles(colors: ThemeColors) {
       flex: 1,
       alignItems: "center",
       paddingVertical: spacing.md,
+      paddingHorizontal: spacing.xs,
       borderBottomWidth: 2,
       borderBottomColor: "transparent",
     },

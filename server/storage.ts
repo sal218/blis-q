@@ -73,6 +73,7 @@ export type AccountProfileRow = {
   preferredCity: string | null;
   createdAt: Date;
   deletedAt: Date | null; // route uses this to block soft-deleted accounts
+  bannedAt: Date | null; // route uses this to block suspended accounts at login
 };
 
 // The exact projection the auth middleware needs (server/auth.ts). Kept narrow
@@ -443,6 +444,7 @@ export class DatabaseStorage {
         preferredCity: users.preferredCity,
         createdAt: users.createdAt,
         deletedAt: users.deletedAt,
+        bannedAt: users.bannedAt,
       })
       .from(users)
       .where(eq(users.id, userId))

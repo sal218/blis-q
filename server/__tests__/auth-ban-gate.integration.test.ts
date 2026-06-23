@@ -85,7 +85,10 @@ describe("isAuthenticated — banned gate", () => {
     await isAuthenticated(req(), res as never, next);
     expect(next).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(403);
-    expect(res.body).toEqual({ error: "Account suspended" });
+    expect(res.body).toEqual({
+      error: "Account suspended",
+      code: "account_suspended",
+    });
   });
 
   it("deleted user → 401, next NOT called", async () => {

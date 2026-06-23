@@ -50,6 +50,58 @@ export async function commonApiError(res: Response): Promise<CommonApiError> {
   }
 }
 
+// ── Account-suspension detection (P-20) ─────────────────────────────────────────
+// A 403 whose body carries { code: "account_suspended" } means the caller's
+// account is banned. Rather than have every client map this, we surface it once,
+// globally: the auth layer registers a handler that force-logs-out and shows the
+// suspension screen. A monotonic "generation" makes this fire exactly once and
+// ignores stale in-flight 403s from a superseded session — the generation is
+// bumped on every session boundary (sign-in / sign-out / dismiss).
+let suspensionGeneration = 0;
+let suspendedHandler: (() => void | Promise<void>) | null = null;
+
+// The auth layer registers (and on unmount clears) the force-logout handler.
+export function registerSuspendedHandler(
+  fn: (() => void | Promise<void>) | null,
+): void {
+  suspendedHandler = fn;
+}
+
+// Called by the auth layer on every session boundary so a 403 issued before the
+// boundary cannot trigger suspension afterwards (e.g. a late response landing
+// after the user deliberately signed out).
+export function bumpSuspensionGeneration(): void {
+  suspensionGeneration++;
+}
+
+// Peek the body for the suspension code WITHOUT consuming it (mapError still
+// reads the original Response). res.clone() is absent on some test doubles —
+// treat any failure to peek as "not suspended".
+async function isSuspendedResponse(res: Response): Promise<boolean> {
+  try {
+    const body = (await res.clone().json()) as { code?: unknown };
+    return body?.code === "account_suspended";
+  } catch {
+    return false;
+  }
+}
+
+// Fire the registered handler at most once per suspension event. `gen` is the
+// generation captured when the request was issued: if a boundary has happened
+// since (gen is stale) or a concurrent 403 already consumed this generation,
+// do nothing. Consuming synchronously (before the await) makes concurrent
+// same-generation 403s no-ops. The handler is exception-isolated so a
+// force-logout failure never breaks request()'s `{ ok: false, error }` contract.
+async function handleSuspension(gen: number): Promise<void> {
+  if (gen !== suspensionGeneration) return;
+  suspensionGeneration++;
+  try {
+    await Promise.resolve(suspendedHandler?.()).catch(() => {});
+  } catch {
+    // never propagate
+  }
+}
+
 // Run a request: attach auth, read the success body via `onOk`, or map a non-2xx
 // Response to the client's error via `mapError`. fetch throwing (network) always
 // collapses to { kind: "network" }. No logging anywhere on this path.
@@ -60,6 +112,7 @@ export async function request<T, E>(
   onOk: (res: Response) => Promise<T>,
   mapError: (res: Response) => Promise<E>,
 ): Promise<ApiResult<T, E>> {
+  const gen = suspensionGeneration; // capture at issue time
   let res: Response;
   try {
     res = await fetchWithAuth(method, path, body);
@@ -68,6 +121,9 @@ export async function request<T, E>(
   }
   if (res.ok) {
     return { ok: true, data: await onOk(res) };
+  }
+  if (res.status === 403 && (await isSuspendedResponse(res))) {
+    await handleSuspension(gen);
   }
   return { ok: false, error: await mapError(res) };
 }

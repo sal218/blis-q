@@ -206,6 +206,20 @@ export const pl = {
     forbidden: "Nie masz uprawnień do tej akcji.", // 403 on create/delete
   },
 
+  // Account-suspended screen (P-20): shown when a banned user is blocked — at
+  // login or when an authenticated request returns 403 account_suspended. Tone is
+  // calm and non-shaming (safety-first; this is a vulnerable audience).
+  accountSuspended: {
+    title: "Konto zostało zawieszone", // "Your account has been suspended"
+    // "Access to your account has been temporarily suspended. If you think this
+    // is a mistake, contact us."
+    body: "Dostęp do Twojego konta został tymczasowo zawieszony. Jeśli uważasz, że to pomyłka, skontaktuj się z nami.",
+    appeal: "Skontaktuj się z nami", // "Contact us" (appeal CTA → mailto)
+    // Honest fallback when no support email is configured yet (no dead link).
+    appealUnavailable: "Możliwość odwołania będzie dostępna wkrótce.", // "Appeals will be available soon."
+    backToLogin: "Wróć do logowania", // "Back to login"
+  },
+
   errors: {
     generic: "Coś poszło nie tak. Spróbuj ponownie.",
     network: "Brak połączenia. Sprawdź internet i spróbuj ponownie.",

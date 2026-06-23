@@ -45,11 +45,14 @@ const app = express();
 app.use(express.json());
 registerAuthRoutes(app);
 
-const createUserMock = supabaseAdmin.auth.admin.createUser as unknown as jest.Mock;
-const deleteUserMock = supabaseAdmin.auth.admin.deleteUser as unknown as jest.Mock;
+const createUserMock = supabaseAdmin.auth.admin
+  .createUser as unknown as jest.Mock;
+const deleteUserMock = supabaseAdmin.auth.admin
+  .deleteUser as unknown as jest.Mock;
 const signOutMock = supabaseAdmin.auth.admin.signOut as unknown as jest.Mock;
 const resendMock = supabaseClient.auth.resend as unknown as jest.Mock;
-const signInMock = supabaseClient.auth.signInWithPassword as unknown as jest.Mock;
+const signInMock = supabaseClient.auth
+  .signInWithPassword as unknown as jest.Mock;
 const signupRl = checkSignupRateLimit as unknown as jest.Mock;
 const loginRl = checkLoginRateLimit as unknown as jest.Mock;
 const resendRl = checkResendVerificationRateLimit as unknown as jest.Mock;
@@ -240,7 +243,10 @@ describe("POST /api/v1/auth/resend-verification", () => {
 
   it("deleted account → identical 202, nothing sent", async () => {
     const { id, email } = await seedUser();
-    await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, id));
+    await db
+      .update(users)
+      .set({ deletedAt: new Date() })
+      .where(eq(users.id, id));
 
     const res = await request(app)
       .post("/api/v1/auth/resend-verification")
@@ -301,7 +307,10 @@ describe("POST /api/v1/auth/login", () => {
 
   it("soft-deleted account → 401, revokes the Supabase session, audits with actorId", async () => {
     const { id, email } = await seedUser();
-    await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, id));
+    await db
+      .update(users)
+      .set({ deletedAt: new Date() })
+      .where(eq(users.id, id));
     signInMock.mockResolvedValue({
       data: { user: { id }, session: VALID_SESSION },
       error: null,
@@ -319,8 +328,45 @@ describe("POST /api/v1/auth/login", () => {
       .select()
       .from(auditLog)
       .where(eq(auditLog.actorId, id));
-    expect(
-      failures.some((f) => f.action === "user.login_failed"),
-    ).toBe(true);
+    expect(failures.some((f) => f.action === "user.login_failed")).toBe(true);
+  });
+
+  it("banned account → 403 account_suspended, revokes the session, audits, no DTO leak", async () => {
+    const { id, email } = await seedUser();
+    await db
+      .update(users)
+      .set({ bannedAt: new Date() })
+      .where(eq(users.id, id));
+    signInMock.mockResolvedValue({
+      data: { user: { id }, session: VALID_SESSION },
+      error: null,
+    });
+
+    const res = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email, password: PASSWORD });
+
+    // Valid credentials, but suspended → 403 with the stable client code.
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({
+      error: "Account suspended",
+      code: "account_suspended",
+    });
+    // No session is handed back, and bannedAt never leaks to the client.
+    expect(res.body.session).toBeUndefined();
+    expect(res.body.user).toBeUndefined();
+    // The just-issued Supabase session is revoked so it can't be used out-of-band.
+    expect(signOutMock).toHaveBeenCalledWith("at", "global");
+    // Blocked attempt is audited with the actor id and NO PII (IDs only — the
+    // ip is not recorded for this action).
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.actorId, id));
+    const suspended = audits.find(
+      (a) => a.action === "user.login_blocked_suspended",
+    );
+    expect(suspended).toBeDefined();
+    expect(suspended?.ipAddress).toBeNull();
   });
 });

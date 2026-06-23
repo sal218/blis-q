@@ -154,10 +154,9 @@ async function handleResendVerification(
     if (existing && !existing.deletedAt) {
       const sent = await supabaseClient.auth.resend({ type: "signup", email });
       if (sent.error) {
-        console.error(
-          "[POST /api/v1/auth/resend-verification] send failed",
-          { code: safeErrorCode(sent.error) },
-        );
+        console.error("[POST /api/v1/auth/resend-verification] send failed", {
+          code: safeErrorCode(sent.error),
+        });
       }
     }
 
@@ -216,6 +215,26 @@ async function handleLogin(req: Request, res: Response): Promise<Response> {
         ipAddress: req.ip ?? null,
       });
       return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // Banned (suspended) account: the credentials were valid, but the account is
+    // blocked. Revoke the session Supabase just issued (so it can't be used
+    // out-of-band), audit with the actor id, and return a 403 carrying the stable
+    // `account_suspended` code so the client shows the suspension screen (P-20).
+    // Suspension is revealed only AFTER valid credentials → no enumeration. The
+    // banned state is NOT exposed on the AccountProfile DTO.
+    if (profile.bannedAt) {
+      await supabaseAdmin.auth.admin
+        .signOut(result.data.session.access_token, "global")
+        .catch(() => {});
+      // IDs-only: we already have the actor id; no IP/PII in the audit row.
+      await storage.writeAuditLog({
+        action: "user.login_blocked_suspended",
+        actorId: profile.id,
+      });
+      return res
+        .status(403)
+        .json({ error: "Account suspended", code: "account_suspended" });
     }
 
     const user: AccountProfile = {
@@ -351,6 +370,24 @@ async function handleGoogleSignIn(
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
+    // Banned (suspended) existing account → block like email login does: revoke
+    // the just-issued session, audit, and return the suspension code (P-20). A
+    // first-time Google user (no profile yet) cannot be banned, so this only
+    // applies to an existing resolved profile.
+    if (profile && profile.bannedAt) {
+      await supabaseAdmin.auth.admin
+        .signOut(result.data.session.access_token, "global")
+        .catch(() => {});
+      // IDs-only: we already have the actor id; no IP/PII in the audit row.
+      await storage.writeAuditLog({
+        action: "user.login_blocked_suspended",
+        actorId: authUserId,
+      });
+      return res
+        .status(403)
+        .json({ error: "Account suspended", code: "account_suspended" });
+    }
+
     // First-time Google user — no local account yet.
     if (!profile) {
       // Consent is mandatory before any local record exists (Article 9). Without
@@ -467,10 +504,9 @@ async function handleForgotPassword(
         await sendPasswordResetEmail(email, resetLink);
       } catch (mailErr) {
         // Non-fatal — the token is stored; the user can request another.
-        console.error(
-          "[POST /api/v1/auth/forgot-password] email send failed",
-          { code: safeErrorCode(mailErr) },
-        );
+        console.error("[POST /api/v1/auth/forgot-password] email send failed", {
+          code: safeErrorCode(mailErr),
+        });
       }
       await storage.writeAuditLog({
         action: "user.password_reset_requested",

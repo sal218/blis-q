@@ -38,10 +38,10 @@ const app = express();
 app.use(express.json());
 registerAuthRoutes(app);
 
-const signInIdTokenMock =
-  supabaseClient.auth.signInWithIdToken as unknown as jest.Mock;
-const deleteUserMock =
-  supabaseAdmin.auth.admin.deleteUser as unknown as jest.Mock;
+const signInIdTokenMock = supabaseClient.auth
+  .signInWithIdToken as unknown as jest.Mock;
+const deleteUserMock = supabaseAdmin.auth.admin
+  .deleteUser as unknown as jest.Mock;
 const signOutMock = supabaseAdmin.auth.admin.signOut as unknown as jest.Mock;
 const googleRl = checkGoogleAuthRateLimit as unknown as jest.Mock;
 
@@ -115,11 +115,13 @@ describe("POST /api/v1/auth/google", () => {
     const email = uniqueEmail();
     signInIdTokenMock.mockResolvedValue(googleSession(id, email));
 
-    const res = await request(app).post("/api/v1/auth/google").send({
-      idToken: ID_TOKEN,
-      consentedTypes: ["account_creation"],
-      policyVersion: POLICY_VERSION,
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/google")
+      .send({
+        idToken: ID_TOKEN,
+        consentedTypes: ["account_creation"],
+        policyVersion: POLICY_VERSION,
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.session.accessToken).toBe("at");
@@ -186,11 +188,13 @@ describe("POST /api/v1/auth/google", () => {
     // The rollback delete also fails — the route must still fail closed (500).
     deleteUserMock.mockRejectedValueOnce(new Error("cleanup boom"));
 
-    const res = await request(app).post("/api/v1/auth/google").send({
-      idToken: ID_TOKEN,
-      consentedTypes: ["account_creation"],
-      policyVersion: POLICY_VERSION,
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/google")
+      .send({
+        idToken: ID_TOKEN,
+        consentedTypes: ["account_creation"],
+        policyVersion: POLICY_VERSION,
+      });
 
     expect(res.status).toBe(500);
     expect(deleteUserMock).toHaveBeenCalledWith(id);
@@ -221,7 +225,10 @@ describe("POST /api/v1/auth/google", () => {
 
   it("soft-deleted account → 401, revokes the Supabase session, no auth-user delete", async () => {
     const { id, email } = await seedUser();
-    await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, id));
+    await db
+      .update(users)
+      .set({ deletedAt: new Date() })
+      .where(eq(users.id, id));
     signInIdTokenMock.mockResolvedValue(googleSession(id, email));
 
     const res = await request(app)
@@ -239,6 +246,41 @@ describe("POST /api/v1/auth/google", () => {
       .from(auditLog)
       .where(eq(auditLog.actorId, id));
     expect(failures.some((f) => f.action === "user.login_failed")).toBe(true);
+  });
+
+  it("banned account → 403 account_suspended, revokes the session, audits IDs-only, no DTO leak", async () => {
+    const { id, email } = await seedUser();
+    await db
+      .update(users)
+      .set({ bannedAt: new Date() })
+      .where(eq(users.id, id));
+    signInIdTokenMock.mockResolvedValue(googleSession(id, email));
+
+    const res = await request(app)
+      .post("/api/v1/auth/google")
+      .send({ idToken: ID_TOKEN });
+
+    // Valid Google token, but the existing account is suspended → 403 + code.
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({
+      error: "Account suspended",
+      code: "account_suspended",
+    });
+    expect(res.body.session).toBeUndefined();
+    expect(res.body.user).toBeUndefined();
+    // Session revoked; the real (banned) account is NOT hard-deleted.
+    expect(signOutMock).toHaveBeenCalledWith("at", "global");
+    expect(deleteUserMock).not.toHaveBeenCalled();
+    // Audit row is IDs-only (actor id present, no IP/PII).
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.actorId, id));
+    const suspended = audits.find(
+      (a) => a.action === "user.login_blocked_suspended",
+    );
+    expect(suspended).toBeDefined();
+    expect(suspended?.ipAddress).toBeNull();
   });
 
   it("invalid / forged token → generic 401 + login_failed audit", async () => {
@@ -281,11 +323,13 @@ describe("POST /api/v1/auth/google", () => {
       .spyOn(storage, "registerUser")
       .mockRejectedValueOnce(new Error("boom"));
 
-    const res = await request(app).post("/api/v1/auth/google").send({
-      idToken: ID_TOKEN,
-      consentedTypes: ["account_creation"],
-      policyVersion: POLICY_VERSION,
-    });
+    const res = await request(app)
+      .post("/api/v1/auth/google")
+      .send({
+        idToken: ID_TOKEN,
+        consentedTypes: ["account_creation"],
+        policyVersion: POLICY_VERSION,
+      });
 
     expect(res.status).toBe(500);
     expect(deleteUserMock).toHaveBeenCalledWith(id);

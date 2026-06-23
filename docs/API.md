@@ -48,12 +48,15 @@
 
 Client-facing errors never leak internal detail (stack traces, SQL, file paths). The server logs the full error; the client gets a generic message.
 
+Some errors add an **optional** `code` — a stable, machine-readable discriminator the client keys on (the human-readable `error` may change; `code` does not). Today the only code is `account_suspended` (banned account; see the 403 row below).
+
 | Status | When                                                             | Body                                                                      |
 | ------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `400`  | Validation failure                                               | `{ "error": "Invalid input", "details": ZodIssue[] }`                     |
 | `400`  | Webhook signature invalid                                        | `{ "error": "Invalid signature" }`                                        |
 | `401`  | Missing/invalid token                                            | `{ "error": "Unauthorized" }` / `{ "error": "Invalid or expired token" }` |
 | `403`  | Authenticated but not allowed (non-admin, non-member, non-owner) | `{ "error": "Forbidden" }`                                                |
+| `403`  | Account suspended (banned) — on any authenticated route AND on login (email + Google) for a banned account | `{ "error": "Account suspended", "code": "account_suspended" }` |
 | `404`  | Resource not found (or not visible to caller)                    | `{ "error": "Not found" }`                                                |
 | `409`  | Conflict (e.g. already a member, email in use)                   | `{ "error": "..." }`                                                      |
 | `429`  | Rate limited (fail-closed)                                       | `{ "error": "Rate limit exceeded", "retryAfter": <seconds> }`             |

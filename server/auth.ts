@@ -214,7 +214,12 @@ export async function isAuthenticated(
     // Banned (suspended) accounts are resolved but blocked here. GDPR
     // export/erasure routes use isAuthenticatedAllowBanned to stay reachable.
     if (user.banned) {
-      return res.status(403).json({ error: "Account suspended" });
+      // `code` is a stable, machine-readable discriminator the mobile client
+      // keys on (P-20) to force-logout and show the suspension screen. The
+      // `error` string is unchanged for backward compatibility.
+      return res
+        .status(403)
+        .json({ error: "Account suspended", code: "account_suspended" });
     }
     req.user = user;
     next();

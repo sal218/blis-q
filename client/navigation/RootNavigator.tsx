@@ -10,6 +10,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { usePushNotifications } from "@/notifications/usePushNotifications";
 import { AuthStack } from "@/navigation/AuthStack";
 import { AppTabs } from "@/navigation/AppTabs";
+import { AccountSuspendedScreen } from "@/screens/AccountSuspendedScreen";
 import { linking } from "@/navigation/linking";
 
 // Root of the app's navigation. Bootstraps from the persisted session
@@ -27,7 +28,7 @@ function Splash() {
 }
 
 export function RootNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isSuspended } = useAuth();
   const { colors, mode } = useTheme();
 
   // Register/refresh the push token once authenticated.
@@ -52,7 +53,15 @@ export function RootNavigator() {
       linking={linking}
       fallback={<Splash />}
     >
-      {isLoading ? <Splash /> : isAuthenticated ? <AppTabs /> : <AuthStack />}
+      {isLoading ? (
+        <Splash />
+      ) : isSuspended ? (
+        <AccountSuspendedScreen />
+      ) : isAuthenticated ? (
+        <AppTabs />
+      ) : (
+        <AuthStack />
+      )}
     </NavigationContainer>
   );
 }

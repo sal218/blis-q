@@ -43,7 +43,8 @@ _Last updated: 2026-06-22 — Sprint-4 mobile posts UI (feed #25, composer #26) 
 
 ## In progress
 
-- _(nothing in flight — between slices.)_ Next: **admin users/ban-unban UI** (admin-web, activates the rest of #23). Then deferred Sprint-4 bits: mobile mod-delete-others in the feed, emergency contacts (content-source decision pending), and the P-19 polish.
+- **In flight: `feat/mobile-suspension-ux` (P-20)** — mobile banned-user UX, slice 1 of the Suspension & Appeals feature ([MODERATION_APPEALS.md](MODERATION_APPEALS.md), planned + merged #30). Additive `account_suspended` 403 code + **login gating** (email + Google) → a dedicated suspension screen + force-logout; env-gated appeal-contact link. Codex-validated plan (4 rounds). **Awaiting device test before PR.** Admin users/ban-unban UI shipped (#29).
+- Then deferred Sprint-4 bits: mobile mod-delete-others in the feed, emergency contacts (content-source decision pending), the P-19 polish, and the P-20 follow-ups (export/delete CTAs, deterministic cold-start probe).
 - **PAUSED (P-17):** quick-exit + discreet-mode safety UI — kept un-wired (`App.tsx` note) pending a client/product safety decision (a visible trigger may shame users / be a "tell").
 - **Pending device testing:** Android pass for the mobile posts UI (#25/#26) — iOS Expo done; Android deferred by the maintainer.
 - **Backlog (Codex):** "Deactivate account" = a **reversible pause** (not GDPR erasure) — parked in [ROADMAP](ROADMAP.md) **Sprint 4**.

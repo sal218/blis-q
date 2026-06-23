@@ -37,42 +37,56 @@ shown **in-app only after login**. See the exact wording pinned under P-21.
 **Goal:** a banned user gets a clear suspension screen instead of a broken app. No new
 tables → not DPIA-gated → unblocked today.
 
+**Status: implemented in `feat/mobile-suspension-ux`** (this is the as-built record;
+Codex-validated plan over 4 rounds).
+
 ### Backend (additive, non-breaking)
-- `server/auth.ts` `isAuthenticated` banned branch (currently
-  `return res.status(403).json({ error: "Account suspended" })`, ~line 217) becomes
-  **additive**: `{ error: "Account suspended", code: "account_suspended" }`. The
-  `error` string is unchanged for backward compatibility; `code` is the new stable,
-  machine-readable discriminator.
-- `docs/API.md` error-envelope section documents the `account_suspended` code on the
-  403 for authenticated routes.
-- **Update** the existing assertion in
-  `server/__tests__/auth-ban-gate.integration.test.ts` (~line 81) to expect the new
-  body, and assert export/erasure stay reachable for a banned user (unchanged).
+- `server/auth.ts` `isAuthenticated` banned branch becomes **additive**:
+  `{ error: "Account suspended", code: "account_suspended" }`. The `error` string is
+  unchanged for backward compatibility; `code` is the new stable discriminator.
+- **Login gating (deterministic trigger):** the email login (`handleLogin`) and Google
+  (`handleGoogleSignIn`) handlers gate a banned account the same way they already gate a
+  soft-deleted one — after successful Supabase auth, revoke the just-issued session
+  (`signOut(..., "global")`), write an IDs-only `user.login_blocked_suspended` audit, and
+  return the 403 `code`. Suspension is revealed only **after** valid credentials → no
+  enumeration; `bannedAt` is never added to the `AccountProfile` DTO. (`getAccountProfile`
+  gains `bannedAt` for this gate.) This is what makes the suspension screen appear
+  deterministically — the post-login Home tab is a static placeholder that makes no API
+  call, so a reactive 403 alone would not fire there.
+- `docs/API.md` documents `account_suspended` as an optional discriminator on the 403
+  (authenticated routes **and** login).
+- Tests: `auth-ban-gate` asserts the new body; `auth.integration` asserts banned login →
+  403 `code` + session revoked + audit + no DTO leak.
 
 ### Client
-- `client/lib/api/http.ts` currently maps non-2xx on **status only**. Add a 403 branch
-  that inspects the body for `code === "account_suspended"` and surfaces a distinct
-  `suspended` error kind (a small, contained addition to the shared error mapping — not
-  a rewrite).
-- App-wide handling: when a request returns `suspended`, route to a dedicated
-  **Suspension screen** and force-logout of the normal tab/stack tree (the session is
-  cleared the same way logout does — including push-token deregistration order per the
-  CLAUDE.md gotcha).
+- `client/lib/api/http.ts`: the shared `request()` chokepoint peeks a 403 body for
+  `code === "account_suspended"` (via `res.clone()`) and invokes a registered global
+  handler. A monotonic **suspension generation** (bumped on sign-in/out + dismiss, and
+  consumed synchronously on a hit) makes the handler fire **exactly once** and ignore
+  stale in-flight 403s from a superseded session; the handler is exception-isolated so a
+  force-logout failure never breaks `request()`'s error contract.
+- `AuthContext` registers the handler (best-effort `deregisterPushToken` → `signOutGoogle`
+  → `clearSession` → `setUser(null)` → `setIsSuspended(true)`) and exposes
+  `isSuspended` + `dismissSuspended`.
+- `RootNavigator` renders a top-level `AccountSuspendedScreen` when `isSuspended`.
 - **Suspension screen** (Polish, calm, non-shaming): explains the account is suspended,
-  shows a **contact/email "appeal" link** (the v1 appeal channel — no appeals backend
-  yet), and surfaces the **Export data** and **Delete account** actions (still reachable
-  via `isAuthenticatedAllowBanned`).
+  offers a **contact/email appeal link** (env-gated `SUPPORT_EMAIL`; honest fallback when
+  unset — the v1 appeal channel, no appeals backend yet), and a **back-to-login** action.
 
-### Tests
-- Server: banned 403 carries `code: "account_suspended"`; export + erasure remain
-  reachable for a banned user.
-- Client (jest-expo): the `http` mapper returns the `suspended` kind for a 403 with that
-  code (and *not* for a generic 403); the app routes to the suspension screen on
-  `suspended`.
+### Deferred from P-20 (was in the original sketch)
+- **Export / Delete-account CTAs on the suspension screen** — deferred: there is **no
+  mobile account-management UI anywhere yet** (`ProfileScreen` has none; the GDPR backend
+  routes exist but have no screens). They stay reachable server-side via
+  `isAuthenticatedAllowBanned`; surface them on the suspension screen once that mobile UI
+  is built. **Follow-up.**
+- **Deterministic cold-start/reopen probe** — a session stored before the ban (user
+  banned while the app was away) is handled **reactively** on the first gated screen call;
+  a deterministic check (e.g. a future `GET /me`) is a **follow-up**.
 
 ### Human gate
-UI slice → device test (banned account → suspension screen renders, export/delete
-reachable, appeal link works) before PR.
+UI slice → device test (banned email + Google login → suspension screen; reopened stored
+session → suspension on first gated screen; light/dark; appeal mailto configured/unset;
+back-to-login with no stale screen after logout) before PR.
 
 ---
 

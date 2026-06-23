@@ -7,6 +7,12 @@ import React, {
 } from "react";
 import type { AccountProfile, SessionResponse } from "@shared/types";
 import { loadSession, saveSession, clearSession } from "@/lib/session";
+import {
+  registerSuspendedHandler,
+  bumpSuspensionGeneration,
+} from "@/lib/api/http";
+import { deregisterPushToken } from "@/notifications/usePushNotifications";
+import { signOutGoogle } from "@/lib/googleAuth";
 
 // App-wide auth state. On launch it rehydrates the persisted session from
 // SecureStore (no network — there's no GET /me endpoint yet, tracker P-1) and
@@ -20,8 +26,15 @@ type AuthContextValue = {
   user: AccountProfile | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  // True when the account is suspended (banned). Overrides the auth/app trees in
+  // RootNavigator to show the suspension screen. Set by the global suspension
+  // handler (a 403 account_suspended on login or any authenticated request).
+  isSuspended: boolean;
   signIn: (session: SessionResponse) => Promise<void>;
   signOut: () => Promise<void>;
+  // Leave the suspension screen (back to login). Bumps the suspension generation
+  // so any late 403 from the now-dead session can't re-show it.
+  dismissSuspended: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -29,6 +42,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AccountProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSuspended, setIsSuspended] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -38,14 +52,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
+  // Register the global force-logout handler the HTTP layer calls when a request
+  // returns 403 account_suspended. Each cleanup step is best-effort — we must
+  // ALWAYS end in the suspended state. deregisterPushToken runs first (while a
+  // token may still be attached); its backend route isn't built yet so the
+  // network call is currently a no-op, but it still clears the local token.
+  useEffect(() => {
+    registerSuspendedHandler(async () => {
+      try {
+        await deregisterPushToken();
+      } catch {
+        // ignore
+      }
+      try {
+        await signOutGoogle();
+      } catch {
+        // ignore
+      }
+      try {
+        await clearSession();
+      } catch {
+        // ignore
+      }
+      setUser(null);
+      setIsSuspended(true);
+    });
+    return () => registerSuspendedHandler(null);
+  }, []);
+
   const signIn = useCallback(async (session: SessionResponse) => {
+    bumpSuspensionGeneration(); // new session boundary — invalidate stale 403s
     await saveSession(session);
     setUser(session.user);
+    setIsSuspended(false);
   }, []);
 
   const signOut = useCallback(async () => {
+    bumpSuspensionGeneration(); // boundary — a late suspended 403 must not show
     await clearSession();
     setUser(null);
+  }, []);
+
+  const dismissSuspended = useCallback(() => {
+    bumpSuspensionGeneration();
+    setIsSuspended(false);
   }, []);
 
   return (
@@ -54,8 +104,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         isLoading,
         isAuthenticated: !!user,
+        isSuspended,
         signIn,
         signOut,
+        dismissSuspended,
       }}
     >
       {children}

@@ -109,8 +109,10 @@ the moment a user registers**, regardless of what they post.
 
 - **In transit:** all traffic uses **TLS/HTTPS** between the apps, the API, and the
   backing services (TLS terminated at the hosting layer). **In place.**
-- **At rest:** the database (Supabase / AWS) and file storage (Cloudflare R2)
-  encrypt data at rest with **AES-256**, handled by the providers. **In place.**
+- **At rest:** the database (**Supabase** — whose managed Postgres is hosted on
+  AWS) and file storage (Cloudflare R2) encrypt data at rest with **AES-256**,
+  handled by those providers. We use Supabase directly; we are not a separate AWS
+  customer. **In place.**
 - **Application-level / end-to-end encryption:** **not used** — a deliberate
   decision so moderators can review reported content (see §7). Content is therefore
   readable server-side and protected by the in-transit + at-rest measures above.
@@ -137,6 +139,20 @@ selected.** Other vendors (Google services, email, subscriptions, maps) **may
 involve non-EU or vendor-specific processing** — each needs its own **DPA** and an
 appropriate **transfer mechanism (e.g. SCCs)** confirmed by the controller.
 
+**A few practical notes so this isn't more work than it is:**
+
+- This is a **living list** — vendors can and will change. Swapping or adding a
+  sub-processor does **not** mean redoing the DPIA; it's handled by the
+  **sub-processor terms in the client↔processor DPA** (the controller is notified
+  and the list updated).
+- **Most vendor DPAs are standard terms you _accept_** (often a checkbox or a
+  settings toggle), not bespoke contracts to draft. The one DPA that's actually
+  negotiated/signed is the **client ↔ Pretty Good Company** agreement.
+- Only the vendors **in use now** need their DPA confirmed today. The **planned**
+  ones (RevenueCat, map provider) wait until that feature is actually built.
+
+**In use now:**
+
 | Service                        | Purpose                                                       | Region / notes                            |
 | ------------------------------ | ------------------------------------------------------------- | ----------------------------------------- |
 | Supabase                       | Database, authentication, realtime chat delivery              | Frankfurt (EU)                            |
@@ -147,8 +163,13 @@ appropriate **transfer mechanism (e.g. SCCs)** confirmed by the controller.
 | Firebase Cloud Messaging (FCM) | Push notifications                                            | Google — confirm DPA + transfer mechanism |
 | Google Sign-In                 | Sign-in identity (Google OIDC token, exchanged for a session) | Google — confirm DPA + transfer mechanism |
 | Resend                         | Transactional email                                           | Confirm DPA + transfer mechanism          |
-| RevenueCat                     | Subscription management (premium, planned)                    | Confirm DPA + transfer mechanism          |
-| Map provider (Mapbox / OSM)    | Safe-places map (planned)                                     | Confirm provider + DPA / EU option        |
+
+**Planned (no DPA needed until the feature ships):**
+
+| Service                     | Purpose                                    | Region / notes                     |
+| --------------------------- | ------------------------------------------ | ---------------------------------- |
+| RevenueCat                  | Subscription management (premium, planned) | Confirm DPA + transfer mechanism   |
+| Map provider (Mapbox / OSM) | Safe-places map (planned)                  | Confirm provider + DPA / EU option |
 
 ## 11. Data-subject rights (built into the system)
 

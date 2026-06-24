@@ -1,4 +1,4 @@
-# Blis-Q (Blisko) — Podsumowanie przetwarzania danych na potrzeby DPIA
+# Blis-Q — Podsumowanie przetwarzania danych na potrzeby DPIA
 
 > _To jest tłumaczenie dokumentu roboczego (oryginał w języku angielskim:
 > `DPIA_INPUT.md`), przygotowane dla wygody. W razie wątpliwości prosimy o kontakt._

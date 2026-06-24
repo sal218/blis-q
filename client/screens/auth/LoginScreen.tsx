@@ -35,7 +35,7 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { signIn } = useAuth();
+  const { signIn, sessionExpired } = useAuth();
   const google = useGoogleSignIn({ onSignedIn: signIn });
   const form = useEmailLogin();
   // Lift the form just enough to keep the Log in button (ctaRef) above the
@@ -66,7 +66,12 @@ export function LoginScreen({ navigation }: AuthScreenProps<"Login">) {
             </Text>
           </View>
 
-          <FormError message={form.formError} />
+          <FormError
+            message={
+              form.formError ??
+              (sessionExpired ? strings.errors.sessionExpired : null)
+            }
+          />
 
           <IconInput
             icon={

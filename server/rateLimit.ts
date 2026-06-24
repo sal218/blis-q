@@ -47,6 +47,7 @@ const limiters = {
   adminLoginEmail: makeLimiter(5, "15 m"),
   signupIp: makeLimiter(5, "1 h"),
   googleAuthIp: makeLimiter(10, "15 m"), // mirrors login IP limit
+  refreshIp: makeLimiter(30, "15 m"), // token refresh — IP-keyed (no auth user yet)
   passwordResetIp: makeLimiter(5, "15 m"),
   passwordResetEmail: makeLimiter(3, "15 m"),
   resendVerificationIp: makeLimiter(5, "15 m"),
@@ -155,6 +156,14 @@ export async function checkGoogleAuthRateLimit(req: {
   ip?: string;
 }): Promise<RateLimitResult> {
   return check(limiters.googleAuthIp, `google-auth:ip:${getIp(req)}`);
+}
+
+// Token refresh — IP-keyed, since the request carries only a refresh token and
+// no authenticated user identity (the user is resolved from the rotated session).
+export async function checkRefreshRateLimit(req: {
+  ip?: string;
+}): Promise<RateLimitResult> {
+  return check(limiters.refreshIp, `refresh:ip:${getIp(req)}`);
 }
 
 export async function checkPasswordResetRateLimit(

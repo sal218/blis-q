@@ -6,10 +6,17 @@ import React, {
   useCallback,
 } from "react";
 import type { AccountProfile, SessionResponse } from "@shared/types";
-import { loadSession, saveSession, clearSession } from "@/lib/session";
+import {
+  loadSession,
+  saveSession,
+  clearSession,
+  refreshSession,
+} from "@/lib/session";
 import {
   registerSuspendedHandler,
   bumpSuspensionGeneration,
+  registerRefreshHandler,
+  registerSessionExpiredHandler,
 } from "@/lib/api/http";
 import { deregisterPushToken } from "@/notifications/usePushNotifications";
 import { signOutGoogle } from "@/lib/googleAuth";
@@ -30,6 +37,10 @@ type AuthContextValue = {
   // RootNavigator to show the suspension screen. Set by the global suspension
   // handler (a 403 account_suspended on login or any authenticated request).
   isSuspended: boolean;
+  // True when a session expired and an automatic token refresh failed (P-10):
+  // the user has been signed out and the login screen shows a "session expired"
+  // notice. Cleared on the next successful signIn.
+  sessionExpired: boolean;
   signIn: (session: SessionResponse) => Promise<void>;
   signOut: () => Promise<void>;
   // Leave the suspension screen (back to login). Bumps the suspension generation
@@ -43,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AccountProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSuspended, setIsSuspended] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -77,7 +89,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setIsSuspended(true);
     });
-    return () => registerSuspendedHandler(null);
+
+    // P-10: when an authenticated request 401s, the HTTP layer asks for a token
+    // refresh; if it fails, it fires the expired-session handler. Bump the
+    // suspension generation FIRST (session boundary) so a stale in-flight 403
+    // can't flip the UX into the suspended state after we've expired the session.
+    registerRefreshHandler(() => refreshSession());
+    registerSessionExpiredHandler(async () => {
+      bumpSuspensionGeneration();
+      try {
+        await clearSession();
+      } catch {
+        // ignore
+      }
+      setUser(null);
+      setSessionExpired(true);
+    });
+
+    return () => {
+      registerSuspendedHandler(null);
+      registerRefreshHandler(null);
+      registerSessionExpiredHandler(null);
+    };
   }, []);
 
   const signIn = useCallback(async (session: SessionResponse) => {
@@ -85,6 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await saveSession(session);
     setUser(session.user);
     setIsSuspended(false);
+    setSessionExpired(false);
   }, []);
 
   const signOut = useCallback(async () => {
@@ -105,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         isSuspended,
+        sessionExpired,
         signIn,
         signOut,
         dismissSuspended,

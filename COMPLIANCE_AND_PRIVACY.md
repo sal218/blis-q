@@ -1,8 +1,8 @@
 # Compliance & Privacy Reference — Blisko
 
-> **Who this file is for:** Pretty Good Company (the development team building Blisko), Claude Code working in this repository, and the client (the data controller). It defines the legal context, technical obligations, responsibility split, and concrete engineering requirements for GDPR compliance on Blisko.
+> **Who this file is for:** Ladly Media FZ-LLC (the development team building Blisko), Claude Code working in this repository, and the client (the data controller). It defines the legal context, technical obligations, responsibility split, and concrete engineering requirements for GDPR compliance on Blisko.
 >
-> **Parties:** The **client** is the **data controller** — they operate Blisko, own the product, and determine what data is collected and why. **Pretty Good Company — the development team (contractors) — is the data processor**, building and operating the system on the client's instructions.
+> **Parties:** The **client** is the **data controller** — they operate Blisko, own the product, and determine what data is collected and why. **Ladly Media FZ-LLC — the development team (contractors) — is the data processor**, building and operating the system on the client's instructions.
 >
 > This file should be consulted before designing any feature that touches user data — schema design, API endpoints, auth flows, messaging, profiles, or analytics.
 
@@ -57,20 +57,22 @@ The only realistic legal basis for Blisko is **Article 9(2)(a): explicit consent
 
 ## 3. Responsibility Split — Developer vs. Client
 
-### The client is the data controller. Pretty Good Company (the development team) is the data processor.
+### The client is the data controller. Ladly Media FZ-LLC (the development team) is the data processor.
 
 This is a legal classification under GDPR Article 4. It is not a preference or a negotiation point.
 
 - **Data controller** = the entity that determines the purposes and means of processing. That is **the client** — they operate Blisko, define what data is collected and why, and bear the primary legal obligations.
-- **Data processor** = the entity that processes data on behalf of the controller. That is **Pretty Good Company (the development team)** — it builds the system but acts on the client's instructions.
+- **Data processor** = the entity that processes data on behalf of the controller. That is **Ladly Media FZ-LLC (the development team)** — it builds the system but acts on the client's instructions.
 
-**Before any user data is handled, a Data Processing Agreement (DPA) must be signed between Pretty Good Company (the processor) and the client (the controller).** This is a legal requirement under GDPR Article 28. It protects both parties and specifies what data is processed, for what purpose, and what security measures are in place.
+**Before any user data is handled, a Data Processing Agreement (DPA) must be signed between Ladly Media FZ-LLC (the processor) and the client (the controller).** This is a legal requirement under GDPR Article 28. It protects both parties and specifies what data is processed, for what purpose, and what security measures are in place.
+
+**International transfer note:** Ladly Media FZ-LLC is established **outside the EU/EEA** (Middle East). The controller→processor data flow is therefore an international transfer, and the DPA must include an appropriate **transfer mechanism (e.g. Standard Contractual Clauses)**. This is a controller/legal-counsel decision; flagged here so it is not overlooked.
 
 ---
 
 ### Client (data controller) responsibilities — legal/operational
 
-These are the client's obligations as data controller. Pretty Good Company (the development team) does not perform these tasks but must confirm they are being addressed before launch.
+These are the client's obligations as data controller. Ladly Media FZ-LLC (the development team) does not perform these tasks but must confirm they are being addressed before launch.
 
 | Obligation                                                           | Status needed before launch           |
 | -------------------------------------------------------------------- | ------------------------------------- |
@@ -409,7 +411,7 @@ Use this before launch and before any beta testing begins.
 
 ### Client must have completed:
 
-- [ ] DPA signed between Pretty Good Company (the development team / processor) and the client (the controller)
+- [ ] DPA signed between Ladly Media FZ-LLC (the development team / processor) and the client (the controller)
 - [ ] Privacy policy reviewed by legal counsel and accessible in the app
 - [ ] Explicit consent UI reviewed and approved
 - [ ] DPIA conducted and documented (covers Article 9 data, location data, vulnerable persons, large-scale processing)
@@ -450,4 +452,4 @@ Use this before launch and before any beta testing begins.
 
 ---
 
-_Last updated: June 2026 (corrected the controller/processor roles — the **client** is the data controller; **Pretty Good Company / the development team** is the data processor). Review this document when: adding new data collection features, changing data retention policies, changing the legal basis for processing, when the privacy policy is updated, or when new map/location services are integrated._
+_Last updated: June 2026 (corrected the controller/processor roles — the **client** is the data controller; **Ladly Media FZ-LLC / the development team** is the data processor). Review this document when: adding new data collection features, changing data retention policies, changing the legal basis for processing, when the privacy policy is updated, or when new map/location services are integrated._

@@ -2,11 +2,11 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-22 — Sprint-4 mobile posts UI (feed #25, composer #26) + admin reports-queue actions (#27) merged. Next: admin users/ban-unban UI (`/autoslice`). Quick-exit/discreet-mode safety is PAUSED (P-17)._
+_Last updated: 2026-06-24 — admin users/ban-unban UI (#29), mobile suspension UX + login gating (P-20, #31), and moderator delete-others in the feed (#32) merged. In flight: `feat/mobile-token-refresh` (P-10). Quick-exit/discreet-mode safety is PAUSED (P-17)._
 
 ## Current phase
 
-**Sprint 4 — Community posts + moderation (ROADMAP Sprint 4). Sprint 3 done. Backend all merged (posts #19, db:push/RLS #20, /autoslice #21, moderation #22, user ban/unban #23). Mobile posts UI merged: feed+report (#25), composer+delete-own (#26). Admin reports-queue actions merged (#27). Next: admin users/ban-unban UI (activates the rest of #23), then the deferred bits (mobile mod-delete-others, emergency contacts). Quick-exit + discreet-mode safety is PAUSED pending a client/product decision (P-17).**
+**Sprint 4 — Community posts + moderation (ROADMAP Sprint 4). Sprint 3 done. Backend all merged (posts #19, db:push/RLS #20, /autoslice #21, moderation #22, user ban/unban #23). Mobile posts UI merged: feed+report (#25), composer+delete-own (#26). Admin moderation UI merged: reports-queue actions (#27), users/ban-unban (#29). Mobile suspension UX + login gating merged (P-20, #31); moderator delete-others in the feed merged (#32). In flight: mobile session-token refresh (P-10). Remaining Sprint-4 bits: emergency contacts (client/DPIA-blocked), P-19 polish, Android device test. Quick-exit + discreet-mode safety is PAUSED pending a client/product decision (P-17).**
 
 ## Merged to `main`
 

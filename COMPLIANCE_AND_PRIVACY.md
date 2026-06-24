@@ -1,8 +1,8 @@
 # Compliance & Privacy Reference — Blisko
 
-> **Who this file is for:** The development team building Blisko, Claude Code working in this repository, and the client (Pretty Good Company). It defines the legal context, technical obligations, responsibility split, and concrete engineering requirements for GDPR compliance on Blisko.
+> **Who this file is for:** Pretty Good Company (the development team building Blisko), Claude Code working in this repository, and the client (the data controller). It defines the legal context, technical obligations, responsibility split, and concrete engineering requirements for GDPR compliance on Blisko.
 >
-> **Parties:** Pretty Good Company is the client and the data controller — they operate Blisko and own the product. The development team (contractors) are the data processors — they build the system on behalf of the client.
+> **Parties:** The **client** is the **data controller** — they operate Blisko, own the product, and determine what data is collected and why. **Pretty Good Company — the development team (contractors) — is the data processor**, building and operating the system on the client's instructions.
 >
 > This file should be consulted before designing any feature that touches user data — schema design, API endpoints, auth flows, messaging, profiles, or analytics.
 
@@ -12,9 +12,10 @@
 
 Blisko is a community platform explicitly serving Poland's LGBT+ community. Under GDPR, **sexual orientation is Article 9 special category data** — the highest protection tier in EU data protection law.
 
-The classification is important: it is not derived from what users *say* in the app. The mere fact that someone creates an account on Blisko implies their sexual orientation or gender identity. The client (the data controller) is processing Article 9 data from the moment the first user registers. This is not a future concern — it applies from day one.
+The classification is important: it is not derived from what users _say_ in the app. The mere fact that someone creates an account on Blisko implies their sexual orientation or gender identity. The client (the data controller) is processing Article 9 data from the moment the first user registers. This is not a future concern — it applies from day one.
 
 Additionally:
+
 - Blisko collects location data (safe place discovery feature)
 - Blisko serves a population that is a **vulnerable group** in Poland's current political context
 - Blisko may store private messages between users
@@ -46,6 +47,7 @@ Using Blisko constitutes data that reveals a person's sexual orientation or gend
 **Legal basis for processing:**
 
 The only realistic legal basis for Blisko is **Article 9(2)(a): explicit consent**. This means:
+
 - Consent must be freely given, specific, informed, and unambiguous
 - Consent must be given through a clear affirmative action — not pre-ticked boxes, not "by using this app you agree"
 - Users must be able to withdraw consent as easily as they gave it
@@ -55,32 +57,32 @@ The only realistic legal basis for Blisko is **Article 9(2)(a): explicit consent
 
 ## 3. Responsibility Split — Developer vs. Client
 
-### Pretty Good Company (the client) is the data controller. The development team is the data processor.
+### The client is the data controller. Pretty Good Company (the development team) is the data processor.
 
 This is a legal classification under GDPR Article 4. It is not a preference or a negotiation point.
 
-- **Data controller** = the entity that determines the purposes and means of processing. That is **Pretty Good Company** — they operate Blisko, define what data is collected and why, and bear the primary legal obligations.
-- **Data processor** = the entity that processes data on behalf of the controller. That is **the development team** — they build the system but act on the client's instructions.
+- **Data controller** = the entity that determines the purposes and means of processing. That is **the client** — they operate Blisko, define what data is collected and why, and bear the primary legal obligations.
+- **Data processor** = the entity that processes data on behalf of the controller. That is **Pretty Good Company (the development team)** — it builds the system but acts on the client's instructions.
 
-**Before any user data is handled, a Data Processing Agreement (DPA) must be signed between the development team and Pretty Good Company.** This is a legal requirement under GDPR Article 28. It protects both parties and specifies what data is processed, for what purpose, and what security measures are in place.
+**Before any user data is handled, a Data Processing Agreement (DPA) must be signed between Pretty Good Company (the processor) and the client (the controller).** This is a legal requirement under GDPR Article 28. It protects both parties and specifies what data is processed, for what purpose, and what security measures are in place.
 
 ---
 
-### Client (Pretty Good Company) responsibilities — legal/operational
+### Client (data controller) responsibilities — legal/operational
 
-These are Pretty Good Company's obligations as data controller. The development team does not perform these tasks but must confirm they are being addressed before launch.
+These are the client's obligations as data controller. Pretty Good Company (the development team) does not perform these tasks but must confirm they are being addressed before launch.
 
-| Obligation | Status needed before launch |
-|---|---|
-| Privacy policy drafted and legally reviewed | Required |
-| Cookie/consent notice (web) | Required |
-| Legal basis documented for each processing activity | Required |
-| Data Processing Agreement signed with the development team | Required before dev handles user data |
-| DPIA conducted and documented | Required (see Section 4) |
-| UODO registration / assessment of DPO requirement | Required |
-| DPO appointed (likely required at scale with Article 9 data) | Evaluate in Phase 1 |
-| Incident response process defined (who calls UODO within 72hr) | Required before launch |
-| Data subject request handling process (erasure, access, portability) | Required before launch |
+| Obligation                                                           | Status needed before launch           |
+| -------------------------------------------------------------------- | ------------------------------------- |
+| Privacy policy drafted and legally reviewed                          | Required                              |
+| Cookie/consent notice (web)                                          | Required                              |
+| Legal basis documented for each processing activity                  | Required                              |
+| Data Processing Agreement signed with the development team           | Required before dev handles user data |
+| DPIA conducted and documented                                        | Required (see Section 4)              |
+| UODO registration / assessment of DPO requirement                    | Required                              |
+| DPO appointed (likely required at scale with Article 9 data)         | Evaluate in Phase 1                   |
+| Incident response process defined (who calls UODO within 72hr)       | Required before launch                |
+| Data subject request handling process (erasure, access, portability) | Required before launch                |
 
 ---
 
@@ -88,17 +90,17 @@ These are Pretty Good Company's obligations as data controller. The development 
 
 The development team builds the systems that make the client's compliance obligations technically enforceable. If these are not built, the client cannot comply — even with the best legal framework.
 
-| Requirement | Implementation |
-|---|---|
-| Consent collection mechanism | UI + backend that meets GDPR standards |
-| Consent records storage | `consent_records` table (see Section 5) |
+| Requirement                     | Implementation                                 |
+| ------------------------------- | ---------------------------------------------- |
+| Consent collection mechanism    | UI + backend that meets GDPR standards         |
+| Consent records storage         | `consent_records` table (see Section 5)        |
 | Right to erasure implementation | Deletion/anonymisation cascade (see Section 5) |
-| Audit logging | `audit_log` table for significant actions |
-| Data retention enforcement | Scheduled cleanup jobs |
-| Data export (portability) | User data export endpoint |
-| Breach detection capability | Sentry, log drains, monitoring alerts |
-| Encryption posture | Decisions documented and implemented |
-| Schema designed for deletion | Every table has defined ON DELETE behaviour |
+| Audit logging                   | `audit_log` table for significant actions      |
+| Data retention enforcement      | Scheduled cleanup jobs                         |
+| Data export (portability)       | User data export endpoint                      |
+| Breach detection capability     | Sentry, log drains, monitoring alerts          |
+| Encryption posture              | Decisions documented and implemented           |
+| Schema designed for deletion    | Every table has defined ON DELETE behaviour    |
 
 ---
 
@@ -171,6 +173,7 @@ CREATE INDEX idx_consent_records_type_version ON consent_records(consent_type, p
 ```
 
 **Enforcement rules:**
+
 - A user cannot complete registration without a `consent_records` row being created
 - When the privacy policy version changes, users whose `consent_records.policy_version` pre-dates the new version must be prompted to re-consent on next login
 - Withdrawing consent (`withdrawn_at` populated) for `account_creation` triggers the account deletion flow
@@ -189,21 +192,22 @@ Option B — Anonymisation: clear all PII fields, retain anonymised content. Bet
 
 **Anonymisation means, for each table:**
 
-| Table | Fields to clear | Fields to retain |
-|---|---|---|
-| `users` | email, display_name, avatar_url, location, date_of_birth | id (for referential integrity), created_at |
-| `messages` | Replace content with `[deleted]`, clear sender details | Timestamps, community_id (for thread integrity) |
-| `community_memberships` | Delete the row | — |
-| `event_rsvps` | Delete the row | — |
-| `posts` | Replace content with `[deleted]`, clear author details | Timestamps, community_id |
-| `reports` | Keep for moderation audit, anonymise reporter | Report content, resolution |
-| `consent_records` | Delete all rows | — (deletion itself is the record) |
-| `device_push_tokens` | Delete all rows | — |
-| `audit_log` | Keep for security, anonymise user reference | Action, timestamps |
+| Table                   | Fields to clear                                          | Fields to retain                                |
+| ----------------------- | -------------------------------------------------------- | ----------------------------------------------- |
+| `users`                 | email, display_name, avatar_url, location, date_of_birth | id (for referential integrity), created_at      |
+| `messages`              | Replace content with `[deleted]`, clear sender details   | Timestamps, community_id (for thread integrity) |
+| `community_memberships` | Delete the row                                           | —                                               |
+| `event_rsvps`           | Delete the row                                           | —                                               |
+| `posts`                 | Replace content with `[deleted]`, clear author details   | Timestamps, community_id                        |
+| `reports`               | Keep for moderation audit, anonymise reporter            | Report content, resolution                      |
+| `consent_records`       | Delete all rows                                          | — (deletion itself is the record)               |
+| `device_push_tokens`    | Delete all rows                                          | —                                               |
+| `audit_log`             | Keep for security, anonymise user reference              | Action, timestamps                              |
 
 **Every table that stores user-linked data must have its ON DELETE behaviour explicitly defined in the migration.** No implicit defaults. No undocumented behaviour.
 
 **The deletion endpoint** (`DELETE /api/account`) must:
+
 1. Verify the requesting user owns the account (not `req.body.userId` — use `req.user.id` from `isAuthenticated`)
 2. Revoke all active Supabase auth sessions for that user
 3. Deactivate all push tokens
@@ -241,6 +245,7 @@ CREATE INDEX idx_audit_log_created_at ON audit_log(created_at);
 ```
 
 **What to log:**
+
 - User registration, login success, login failure
 - Password reset requests and completions
 - Account deletion
@@ -250,6 +255,7 @@ CREATE INDEX idx_audit_log_created_at ON audit_log(created_at);
 - Admin actions
 
 **What NOT to log:**
+
 - Message content
 - Passwords or tokens (ever)
 - Full request bodies
@@ -281,6 +287,7 @@ Users have the right to receive their personal data in a portable format. Build 
 `GET /api/account/export`
 
 Response: a JSON payload containing everything linked to the authenticated user's account:
+
 - Profile data
 - List of communities joined and when
 - Posts and messages authored (content + timestamps)
@@ -295,6 +302,7 @@ This can be triggered by the user (self-serve) or by the client in response to a
 ### 5.6 Encryption Posture
 
 **What is already handled (no action required):**
+
 - Data at rest: Supabase (AWS) encrypts with AES-256. R2 (Cloudflare) encrypts at rest. Both are handled by the providers.
 - Data in transit: TLS between all services. Fly.io terminates TLS. All API calls use HTTPS. Enforced at infrastructure level.
 
@@ -312,6 +320,7 @@ The correct model for Blisko is the **Discord model**: messages are stored in pl
 
 **What this means for the privacy policy (client's responsibility):**
 The privacy policy must clearly disclose that:
+
 - Messages are stored on Blisko's servers
 - Message content may be reviewed by moderators in response to reports
 - The development team (as data processor) has technical access to database content
@@ -326,6 +335,7 @@ The privacy policy must clearly disclose that:
 GDPR requires notification to the supervisory authority (UODO) within 72 hours of a breach discovery. This requires both process and technical tooling.
 
 **Technical requirements:**
+
 - **Sentry** — application error monitoring with alerts to the team. Catch anomalous error spikes that could indicate a breach or attack.
 - **Fly.io log drains** — export application logs to persistent storage (e.g. Logtail, Papertrail). You cannot investigate a breach if logs were not retained.
 - **Supabase audit logs** — enabled on Pro tier. Tracks auth events (login, password reset, token usage) at the Supabase layer.
@@ -341,16 +351,19 @@ A documented incident response plan that answers: who is notified first, who con
 The safe place discovery feature (find LGBT-friendly cafés, clubs, NGOs, support services on a map) involves location data. Location data is one of the four DPIA triggers for Blisko (see Section 4). These engineering rules are non-negotiable.
 
 **Data minimisation for location:**
+
 - Location must be requested at the **point of use** — when the user explicitly opens the map or safe places feature. Never request location at app launch or in the background.
 - GPS coordinates must **not be persisted to the database** unless the user explicitly saves a "home area" preference.
 - Search queries ("find places near me") should be executed with ephemeral coordinates — coordinates are used for a single query and discarded. They are not stored in the database, not written to logs, and not included in analytics events.
 - If storing a user's preferred region, store at **city-level granularity only** (e.g., "Warsaw") — never store precise GPS coordinates as a user preference.
 
 **Safe places data (venues, NGOs, services):**
+
 - The `safe_places` table stores curated venue data (name, address, category, coordinates). This is not user-generated per-row — it is admin/editor-curated.
 - User interaction with safe places (views, saves, check-ins) may be collected only with explicit consent and must be deletable as part of the account erasure procedure.
 
 **Map library:**
+
 - Choose a map provider with GDPR-compliant data processing terms. Google Maps sends usage data to Google — if used, document this in the privacy policy and ensure a DPA is in place with Google. An alternative is Mapbox (has EU data processing options) or OpenStreetMap-based (no user data sharing by default).
 - Tile requests to map providers do not contain user identity, but do contain IP addresses. Document the map provider's data processing in the privacy policy.
 
@@ -373,6 +386,7 @@ Blisko's community group chat introduces specific privacy requirements beyond st
 - **Connection lifecycle**: The Realtime channel is subscribed only when the community chat screen is active and the app is in the foreground. The subscription is removed when the user navigates away or the app backgrounds. This is mandatory — not a performance optimisation. See `TRANSFER_CONTEXT_EVENTAB_TO_BLISKO.md` Section 3.9 for the full connection lifecycle code pattern.
 
 **Why this approach:**
+
 - PostgreSQL remains the source of truth for all message history (GDPR-friendly — deletion is straightforward)
 - No proprietary message storage system that complicates erasure compliance
 - Moderation works: messages are readable by the server (see Section 5.6 encryption decision)
@@ -394,7 +408,8 @@ Blisko's community group chat introduces specific privacy requirements beyond st
 Use this before launch and before any beta testing begins.
 
 ### Client must have completed:
-- [ ] DPA signed between the development team and Pretty Good Company (the client)
+
+- [ ] DPA signed between Pretty Good Company (the development team / processor) and the client (the controller)
 - [ ] Privacy policy reviewed by legal counsel and accessible in the app
 - [ ] Explicit consent UI reviewed and approved
 - [ ] DPIA conducted and documented (covers Article 9 data, location data, vulnerable persons, large-scale processing)
@@ -404,6 +419,7 @@ Use this before launch and before any beta testing begins.
 - [ ] Map provider DPA in place (Google Maps / Mapbox / other — see Section 5.8)
 
 ### Development team must have built:
+
 - [ ] `consent_records` table in schema
 - [ ] Consent collection on registration (cannot skip or pre-tick)
 - [ ] `audit_log` table in schema with defined retention
@@ -423,15 +439,15 @@ Use this before launch and before any beta testing begins.
 
 ## 8. Key Contacts and Authorities
 
-| Entity | Role | Notes |
-|---|---|---|
-| UODO (Urząd Ochrony Danych Osobowych) | Polish supervisory authority | Must be notified of breaches within 72 hours. May need registration. |
-| EDPB (European Data Protection Board) | EU-level guidance body | Publishes guidance on Article 9, DPIAs, special category data processing |
-| Supabase DPA | Available from Supabase support | Required — document receipt |
-| Cloudflare DPA | Available at cloudflare.com/gdpr | Required for R2 usage |
-| Upstash DPA | Available from Upstash support | Required for Redis usage |
-| Fly.io DPA | Available at fly.io/legal | Required for API server hosting |
+| Entity                                | Role                             | Notes                                                                    |
+| ------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ |
+| UODO (Urząd Ochrony Danych Osobowych) | Polish supervisory authority     | Must be notified of breaches within 72 hours. May need registration.     |
+| EDPB (European Data Protection Board) | EU-level guidance body           | Publishes guidance on Article 9, DPIAs, special category data processing |
+| Supabase DPA                          | Available from Supabase support  | Required — document receipt                                              |
+| Cloudflare DPA                        | Available at cloudflare.com/gdpr | Required for R2 usage                                                    |
+| Upstash DPA                           | Available from Upstash support   | Required for Redis usage                                                 |
+| Fly.io DPA                            | Available at fly.io/legal        | Required for API server hosting                                          |
 
 ---
 
-*Last updated: May 2026. Review this document when: adding new data collection features, changing data retention policies, changing the legal basis for processing, when the privacy policy is updated, or when new map/location services are integrated.*
+_Last updated: June 2026 (corrected the controller/processor roles — the **client** is the data controller; **Pretty Good Company / the development team** is the data processor). Review this document when: adding new data collection features, changing data retention policies, changing the legal basis for processing, when the privacy policy is updated, or when new map/location services are integrated._

@@ -31,9 +31,12 @@ processing too, so planned features are included below — but for accuracy:
 - **Data controller — the client.** Operates Blis-Q, owns the product, decides
   what data is collected and why. Holds the primary legal obligations, including
   the DPIA.
-- **Data processor — the development team.** Builds and operates the system on the
-  client's instructions. A **Data Processing Agreement (Art. 28)** must be signed
-  between the two parties before any real user data is handled.
+- **Data processor — Ladly Media FZ-LLC (the development team).** Builds and
+  operates the system on the client's instructions. A **Data Processing Agreement
+  (Art. 28)** must be signed between the controller and the processor before any
+  real user data is handled. **The processor is established outside the EU/EEA (in
+  the Middle East)** — so the controller→processor data flow is itself an
+  international transfer that needs an appropriate mechanism (e.g. SCCs); see §14.
 
 ## 3. Why a DPIA is mandatory (the high-risk triggers)
 
@@ -147,7 +150,8 @@ appropriate **transfer mechanism (e.g. SCCs)** confirmed by the controller.
   and the list updated).
 - **Most vendor DPAs are standard terms you _accept_** (often a checkbox or a
   settings toggle), not bespoke contracts to draft. The one DPA that's actually
-  negotiated/signed is the **client ↔ Pretty Good Company** agreement.
+  negotiated/signed is the **client ↔ Ladly Media FZ-LLC (the processor)**
+  agreement.
 - Only the vendors **in use now** need their DPA confirmed today. The **planned**
   ones (RevenueCat, map provider) wait until that feature is actually built.
 
@@ -211,8 +215,10 @@ So we can finalise the build correctly, the DPIA / controller should confirm:
 3. **Age / minors:** is the app **adults-only (18+)**, or will it allow minors and
    collect date of birth? (Children are a vulnerable category, and Poland's digital-
    consent age is 16 — this affects the consent flow and the DPIA.)
-4. **Transfer mechanisms / DPAs** for the non-EU vendors in §10 (Google/FCM, Google
-   Sign-In, Resend, RevenueCat, map provider).
+4. **International transfers** — an appropriate mechanism (e.g. SCCs) for **(a) the
+   controller→processor flow**, since the processor (**Ladly Media FZ-LLC**) is
+   established outside the EU/EEA, **and (b) the non-EU vendors** in §10 (Google/FCM,
+   Google Sign-In, Resend, RevenueCat, map provider).
 5. The **inactivity / retention periods** (§12) for the privacy policy.
 6. The **map provider** choice + its DPA (§6).
 7. Whether a **DPO** is required, and **UODO** registration / assessment.

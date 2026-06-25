@@ -224,6 +224,8 @@ export const pl = {
     generic: "Coś poszło nie tak. Spróbuj ponownie.",
     network: "Brak połączenia. Sprawdź internet i spróbuj ponownie.",
     invalidCredentials: "Nieprawidłowy e-mail lub hasło.",
+    // Shown on the login screen after an expired session couldn't be refreshed (P-10).
+    sessionExpired: "Twoja sesja wygasła. Zaloguj się ponownie.", // "Your session expired. Please log in again."
     rateLimited: "Zbyt wiele prób. Spróbuj ponownie za {seconds} s.",
     emailInvalid: "Podaj poprawny adres e-mail.",
     passwordTooShort: "Hasło musi mieć co najmniej {min} znaków.",

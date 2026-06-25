@@ -19,7 +19,11 @@ jest.mock("../supabase", () => ({
     },
   },
   supabaseClient: {
-    auth: { resend: jest.fn(), signInWithPassword: jest.fn() },
+    auth: {
+      resend: jest.fn(),
+      signInWithPassword: jest.fn(),
+      refreshSession: jest.fn(),
+    },
   },
 }));
 
@@ -27,6 +31,7 @@ jest.mock("../rateLimit", () => ({
   checkSignupRateLimit: jest.fn(),
   checkLoginRateLimit: jest.fn(),
   checkResendVerificationRateLimit: jest.fn(),
+  checkRefreshRateLimit: jest.fn(),
 }));
 
 import { registerAuthRoutes } from "../routes/auth";
@@ -35,6 +40,7 @@ import {
   checkSignupRateLimit,
   checkLoginRateLimit,
   checkResendVerificationRateLimit,
+  checkRefreshRateLimit,
 } from "../rateLimit";
 import { storage } from "../storage";
 import { db, pool } from "../db";
@@ -53,9 +59,11 @@ const signOutMock = supabaseAdmin.auth.admin.signOut as unknown as jest.Mock;
 const resendMock = supabaseClient.auth.resend as unknown as jest.Mock;
 const signInMock = supabaseClient.auth
   .signInWithPassword as unknown as jest.Mock;
+const refreshMock = supabaseClient.auth.refreshSession as unknown as jest.Mock;
 const signupRl = checkSignupRateLimit as unknown as jest.Mock;
 const loginRl = checkLoginRateLimit as unknown as jest.Mock;
 const resendRl = checkResendVerificationRateLimit as unknown as jest.Mock;
+const refreshRl = checkRefreshRateLimit as unknown as jest.Mock;
 
 const POLICY_VERSION = "2026-06-08";
 const PASSWORD = "supersecret123";
@@ -103,6 +111,7 @@ beforeEach(() => {
   signupRl.mockResolvedValue({ allowed: true });
   loginRl.mockResolvedValue({ allowed: true });
   resendRl.mockResolvedValue({ allowed: true });
+  refreshRl.mockResolvedValue({ allowed: true });
 });
 
 afterEach(async () => {
@@ -368,5 +377,119 @@ describe("POST /api/v1/auth/login", () => {
     );
     expect(suspended).toBeDefined();
     expect(suspended?.ipAddress).toBeNull();
+  });
+});
+
+describe("POST /api/v1/auth/refresh", () => {
+  it("valid refresh token → 200 rotated session; refreshSession called with { refresh_token }", async () => {
+    const { id } = await seedUser();
+    refreshMock.mockResolvedValue({
+      data: { user: { id }, session: VALID_SESSION },
+      error: null,
+    });
+
+    const res = await request(app)
+      .post("/api/v1/auth/refresh")
+      .send({ refreshToken: "the-refresh-token" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.session.accessToken).toBe("at");
+    expect(res.body.session.refreshToken).toBe("rt");
+    expect(res.body.user.id).toBe(id);
+    // The stored refresh token is passed through to Supabase under `refresh_token`.
+    expect(refreshMock).toHaveBeenCalledWith({
+      refresh_token: "the-refresh-token",
+    });
+  });
+
+  it("invalid / expired refresh token → generic 401 + login_failed audit", async () => {
+    refreshMock.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: "invalid refresh token" },
+    });
+
+    const res = await request(app)
+      .post("/api/v1/auth/refresh")
+      .send({ refreshToken: "bad" });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: "Invalid credentials" });
+    const failures = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.action, "user.login_failed"));
+    expect(failures.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("deleted account → 401, revokes the rotated session, audits with actorId", async () => {
+    const { id } = await seedUser();
+    await db
+      .update(users)
+      .set({ deletedAt: new Date() })
+      .where(eq(users.id, id));
+    refreshMock.mockResolvedValue({
+      data: { user: { id }, session: VALID_SESSION },
+      error: null,
+    });
+
+    const res = await request(app)
+      .post("/api/v1/auth/refresh")
+      .send({ refreshToken: "x" });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: "Invalid credentials" });
+    // The newly issued (rotated) session is revoked.
+    expect(signOutMock).toHaveBeenCalledWith("at", "global");
+    const failures = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.actorId, id));
+    expect(failures.some((f) => f.action === "user.login_failed")).toBe(true);
+  });
+
+  it("banned account → 403 account_suspended, revokes the rotated session, audits IDs-only, no leak", async () => {
+    const { id } = await seedUser();
+    await db
+      .update(users)
+      .set({ bannedAt: new Date() })
+      .where(eq(users.id, id));
+    refreshMock.mockResolvedValue({
+      data: { user: { id }, session: VALID_SESSION },
+      error: null,
+    });
+
+    const res = await request(app)
+      .post("/api/v1/auth/refresh")
+      .send({ refreshToken: "x" });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({
+      error: "Account suspended",
+      code: "account_suspended",
+    });
+    expect(res.body.session).toBeUndefined();
+    expect(res.body.user).toBeUndefined();
+    expect(signOutMock).toHaveBeenCalledWith("at", "global");
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.actorId, id));
+    const suspended = audits.find(
+      (a) => a.action === "user.login_blocked_suspended",
+    );
+    expect(suspended).toBeDefined();
+    expect(suspended?.ipAddress).toBeNull();
+  });
+
+  it("rate-limited → 429, refresh never attempted", async () => {
+    refreshRl.mockResolvedValueOnce({ allowed: false, retryAfter: 60 });
+
+    const res = await request(app)
+      .post("/api/v1/auth/refresh")
+      .send({ refreshToken: "x" });
+
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBe(60);
+    expect(refreshMock).not.toHaveBeenCalled();
   });
 });

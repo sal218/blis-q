@@ -10,6 +10,7 @@ import {
   resendVerificationSchema,
   passwordResetRequestSchema,
   resetPasswordSchema,
+  refreshSchema,
 } from "../validation";
 import {
   checkSignupRateLimit,
@@ -17,6 +18,7 @@ import {
   checkGoogleAuthRateLimit,
   checkResendVerificationRateLimit,
   checkPasswordResetRateLimit,
+  checkRefreshRateLimit,
 } from "../rateLimit";
 import type { AccountProfile, SessionResponse } from "@shared/types";
 
@@ -31,6 +33,7 @@ const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 export function registerAuthRoutes(app: Express): void {
   app.post("/api/v1/auth/signup", handleSignup);
   app.post("/api/v1/auth/login", handleLogin);
+  app.post("/api/v1/auth/refresh", handleRefresh);
   app.post("/api/v1/auth/google", handleGoogleSignIn);
   app.post("/api/v1/auth/resend-verification", handleResendVerification);
   app.post("/api/v1/auth/forgot-password", handleForgotPassword);
@@ -260,6 +263,101 @@ async function handleLogin(req: Request, res: Response): Promise<Response> {
     return res.status(200).json(body);
   } catch (err) {
     console.error("[POST /api/v1/auth/login] unexpected error", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// Token refresh (docs/API.md §4, tracker P-10). Exchanges a stored Supabase
+// refresh token for a fresh session so an expired access token doesn't dead-end.
+// Applies the SAME deleted/banned gates as login — we never hand a fresh token to
+// a deleted or suspended account — and returns the banned `account_suspended`
+// code so the client's suspension screen shows even via the refresh path.
+async function handleRefresh(req: Request, res: Response): Promise<Response> {
+  try {
+    const parsed = refreshSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const { refreshToken } = parsed.data;
+
+    const rate = await checkRefreshRateLimit(req);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const result = await supabaseClient.auth.refreshSession({
+      refresh_token: refreshToken,
+    });
+
+    // Invalid/expired/revoked refresh token → generic 401 (no enumeration).
+    if (result.error || !result.data.session || !result.data.user) {
+      await storage.writeAuditLog({
+        action: "user.login_failed",
+        ipAddress: req.ip ?? null,
+      });
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const profile = await storage.getAccountProfile(result.data.user.id);
+    if (!profile || profile.deletedAt) {
+      // Revoke the session Supabase just issued so the rotated token can't be
+      // used out-of-band, and audit the blocked attempt with the actor id.
+      await supabaseAdmin.auth.admin
+        .signOut(result.data.session.access_token, "global")
+        .catch(() => {});
+      await storage.writeAuditLog({
+        action: "user.login_failed",
+        actorId: result.data.user.id,
+        ipAddress: req.ip ?? null,
+      });
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // Banned (suspended) account → block like login: revoke the just-issued
+    // session, audit (IDs only), and return the `account_suspended` code (P-20).
+    // bannedAt is never exposed on the AccountProfile DTO.
+    if (profile.bannedAt) {
+      await supabaseAdmin.auth.admin
+        .signOut(result.data.session.access_token, "global")
+        .catch(() => {});
+      await storage.writeAuditLog({
+        action: "user.login_blocked_suspended",
+        actorId: profile.id,
+      });
+      return res
+        .status(403)
+        .json({ error: "Account suspended", code: "account_suspended" });
+    }
+
+    const user: AccountProfile = {
+      id: profile.id,
+      email: profile.email,
+      displayName: profile.displayName,
+      avatarUrl: profile.avatarUrl,
+      isPremium: profile.isPremium,
+      isAdmin: profile.isAdmin,
+      preferredCity: profile.preferredCity,
+      createdAt: profile.createdAt.toISOString(),
+    };
+    const body: SessionResponse = {
+      user,
+      session: {
+        accessToken: result.data.session.access_token,
+        refreshToken: result.data.session.refresh_token,
+        expiresAt: new Date(
+          (result.data.session.expires_at ?? 0) * 1000,
+        ).toISOString(),
+      },
+    };
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[POST /api/v1/auth/refresh] unexpected error", {
       code: safeErrorCode(err),
     });
     return res.status(500).json({ error: "Internal Server Error" });

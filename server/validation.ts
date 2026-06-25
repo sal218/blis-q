@@ -62,6 +62,15 @@ export const loginSchema = z
   })
   .strict();
 
+// Token refresh (docs/API.md §4, tracker P-10). The mobile app posts its stored
+// Supabase refresh token; the backend exchanges it for a fresh session. Bounded
+// to a sane max so a malformed/huge body is rejected at the boundary.
+export const refreshSchema = z
+  .object({
+    refreshToken: z.string().min(1).max(2048),
+  })
+  .strict();
+
 // Google Sign-In (docs/API.md §4). The mobile app obtains a Google OIDC ID
 // token and posts it here; the backend exchanges it for a Supabase session via
 // signInWithIdToken (Option A — Supabase owns Supabase sessions). `accessToken`

@@ -74,3 +74,44 @@ export async function clearSession(): Promise<void> {
     SecureStore.deleteItemAsync(PROFILE_KEY),
   ]);
 }
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "";
+
+export type RefreshOutcome = "ok" | "suspended" | "failed";
+
+// Exchange the stored refresh token for a fresh session (tracker P-10). Uses a
+// PLAIN fetch — NOT the typed request() layer — so it can never re-enter the
+// 401→refresh interceptor that calls it. Returns:
+//   "ok"        — refreshed + persisted; the caller can retry the original request
+//   "suspended" — the account is banned (403 account_suspended) → suspension screen
+//   "failed"    — no token / invalid-expired-revoked refresh token / network / other
+// Never throws.
+export async function refreshSession(): Promise<RefreshOutcome> {
+  try {
+    const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+    if (!refreshToken) return "failed";
+
+    const res = await fetch(`${API_URL}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (res.ok) {
+      const session = (await res.json()) as SessionResponse;
+      await saveSession(session);
+      return "ok";
+    }
+    if (res.status === 403) {
+      try {
+        const body = (await res.json()) as { code?: unknown };
+        if (body?.code === "account_suspended") return "suspended";
+      } catch {
+        // unparseable body → fall through to "failed"
+      }
+    }
+    return "failed";
+  } catch {
+    return "failed";
+  }
+}

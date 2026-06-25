@@ -102,6 +102,58 @@ async function handleSuspension(gen: number): Promise<void> {
   }
 }
 
+// ── Token refresh on 401 (P-10) ─────────────────────────────────────────────────
+// When an authenticated request 401s (expired access token), try ONE refresh and
+// retry the original request once. Refresh + expired-session handling are
+// registered by the auth layer. A single in-flight promise makes concurrent 401s
+// share one refresh attempt.
+type RefreshOutcome = "ok" | "suspended" | "failed";
+let refreshHandler: (() => Promise<RefreshOutcome>) | null = null;
+let sessionExpiredHandler: (() => void | Promise<void>) | null = null;
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+export function registerRefreshHandler(
+  fn: (() => Promise<RefreshOutcome>) | null,
+): void {
+  refreshHandler = fn;
+}
+
+export function registerSessionExpiredHandler(
+  fn: (() => void | Promise<void>) | null,
+): void {
+  sessionExpiredHandler = fn;
+}
+
+// Single-flight: concurrent 401s share one refresh attempt.
+function runRefresh(): Promise<RefreshOutcome> {
+  if (!refreshHandler) return Promise.resolve("failed");
+  if (!refreshInFlight) {
+    refreshInFlight = Promise.resolve(refreshHandler())
+      .catch((): RefreshOutcome => "failed")
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
+// Fire the registered expired-session handler (force-logout → login + notice),
+// exception-isolated so it never breaks request()'s error contract.
+async function runSessionExpired(): Promise<void> {
+  try {
+    await Promise.resolve(sessionExpiredHandler?.()).catch(() => {});
+  } catch {
+    // never propagate
+  }
+}
+
+// Auth endpoints (login/google/signup/forgot/reset/resend/refresh) — their 401
+// means bad credentials, NOT an expired session, so they are excluded from the
+// refresh-on-401 path.
+function isAuthPath(path: string): boolean {
+  return path.startsWith("/api/v1/auth/");
+}
+
 // Run a request: attach auth, read the success body via `onOk`, or map a non-2xx
 // Response to the client's error via `mapError`. fetch throwing (network) always
 // collapses to { kind: "network" }. No logging anywhere on this path.
@@ -119,11 +171,34 @@ export async function request<T, E>(
   } catch {
     return { ok: false, error: { kind: "network" } };
   }
+
+  // 401 on an authenticated endpoint → try a single token refresh + one retry.
+  if (res.status === 401 && !isAuthPath(path)) {
+    const outcome = await runRefresh();
+    if (outcome === "ok") {
+      try {
+        res = await fetchWithAuth(method, path, body); // retry ONCE
+      } catch {
+        return { ok: false, error: { kind: "network" } };
+      }
+    } else if (outcome === "suspended") {
+      // The refresh itself returned 403 account_suspended → show suspension.
+      await handleSuspension(gen);
+    } else {
+      // Refresh failed → the session is gone; route to login with a notice.
+      await runSessionExpired();
+    }
+  }
+
+  // Suspension check on the FINAL response (initial OR retried) — covers a retry
+  // that itself returns 403 account_suspended (e.g. banned mid-session). The
+  // generation guard makes handleSuspension fire at most once.
+  if (!res.ok && res.status === 403 && (await isSuspendedResponse(res))) {
+    await handleSuspension(gen);
+  }
+
   if (res.ok) {
     return { ok: true, data: await onOk(res) };
-  }
-  if (res.status === 403 && (await isSuspendedResponse(res))) {
-    await handleSuspension(gen);
   }
   return { ok: false, error: await mapError(res) };
 }

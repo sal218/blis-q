@@ -2,11 +2,11 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-22 — Sprint-4 mobile posts UI (feed #25, composer #26) + admin reports-queue actions (#27) merged. Next: admin users/ban-unban UI (`/autoslice`). Quick-exit/discreet-mode safety is PAUSED (P-17)._
+_Last updated: 2026-06-24 — admin users/ban-unban UI (#29), mobile suspension UX + login gating (P-20, #31), and moderator delete-others in the feed (#32) merged. In flight: `feat/mobile-token-refresh` (P-10). Quick-exit/discreet-mode safety is PAUSED (P-17)._
 
 ## Current phase
 
-**Sprint 4 — Community posts + moderation (ROADMAP Sprint 4). Sprint 3 done. Backend all merged (posts #19, db:push/RLS #20, /autoslice #21, moderation #22, user ban/unban #23). Mobile posts UI merged: feed+report (#25), composer+delete-own (#26). Admin reports-queue actions merged (#27). Next: admin users/ban-unban UI (activates the rest of #23), then the deferred bits (mobile mod-delete-others, emergency contacts). Quick-exit + discreet-mode safety is PAUSED pending a client/product decision (P-17).**
+**Sprint 4 — Community posts + moderation (ROADMAP Sprint 4). Sprint 3 done. Backend all merged (posts #19, db:push/RLS #20, /autoslice #21, moderation #22, user ban/unban #23). Mobile posts UI merged: feed+report (#25), composer+delete-own (#26). Admin moderation UI merged: reports-queue actions (#27), users/ban-unban (#29). Mobile suspension UX + login gating merged (P-20, #31); moderator delete-others in the feed merged (#32). In flight: mobile session-token refresh (P-10). Remaining Sprint-4 bits: emergency contacts (client/DPIA-blocked), P-19 polish, Android device test. Quick-exit + discreet-mode safety is PAUSED pending a client/product decision (P-17).**
 
 ## Merged to `main`
 
@@ -43,8 +43,8 @@ _Last updated: 2026-06-22 — Sprint-4 mobile posts UI (feed #25, composer #26) 
 
 ## In progress
 
-- **In flight: `feat/mobile-suspension-ux` (P-20)** — mobile banned-user UX, slice 1 of the Suspension & Appeals feature (design note [MODERATION_APPEALS.md](MODERATION_APPEALS.md) was merged as the plan of record in #30; **this slice is on its branch, not yet merged**). Additive `account_suspended` 403 code + **login gating** (email + Google) → a dedicated suspension screen + force-logout; env-gated appeal-contact link. Codex-validated plan (4 rounds), Mode B review in progress. **Awaiting device test before PR.** Admin users/ban-unban UI shipped (#29).
-- **In flight: `feat/mobile-mod-delete-posts`** — mobile **moderator delete-others** in the community feed. Client-only: `PostActionsSheet` gains a `canModerate` prop (Delete shown when own **or** community moderator/admin, matching `softDeletePost` exactly — not `user.isAdmin`); `CommunityDetailScreen` derives it from `membership.role`. Reuses the existing delete flow. Codex-validated plan; **awaiting device test before PR.** Moderation-specific copy deferred (P-23).
+- **In flight: `feat/mobile-token-refresh` (P-10)** — mobile session-token refresh. New `POST /api/v1/auth/refresh` (rotates the session; reuses login's deleted/banned gates) + the shared `request()` chokepoint auto-refreshes on a 401 (single-flight, one retry; auth paths excluded), and on refresh failure signs out to login with a "session expired" notice. Codex-validated plan (4 rounds). **Awaiting device test before PR.** Cold-start refresh deferred (P-10 follow-up).
+- **Merged since:** mobile suspension UX / login gating (P-20, #31); moderator delete-others in the feed (#32). Admin users/ban-unban UI (#29).
 - Then deferred Sprint-4 bits: emergency contacts (content-source decision pending), the P-19 polish, P-20 follow-ups (export/delete CTAs, deterministic cold-start probe), and Android device test of the posts UI.
 - **PAUSED (P-17):** quick-exit + discreet-mode safety UI — kept un-wired (`App.tsx` note) pending a client/product safety decision (a visible trigger may shame users / be a "tell").
 - **Pending device testing:** Android pass for the mobile posts UI (#25/#26) — iOS Expo done; Android deferred by the maintainer.

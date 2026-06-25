@@ -6,9 +6,9 @@ import type { AccountProfile, SessionResponse } from "@shared/types";
 // (an Article 9 signal), so it gets the same protection as the tokens.
 //
 // There is no GET /me endpoint yet (tracker P-1), so on launch we rehydrate the
-// AccountProfile straight from here rather than re-fetching it. The refresh
-// token is stored now but NOT yet exercised — token refresh is deferred
-// (tracked before-beta); see docs/STATUS.md.
+// AccountProfile straight from here rather than re-fetching it. The refresh token
+// IS exercised (tracker P-10): refreshSession() exchanges it — mid-session via the
+// 401 interceptor (lib/api/http), and on cold start via loadSession() below.
 
 export const ACCESS_TOKEN_KEY = "blis-q.session-token"; // also read by fetchWithAuth
 export const REFRESH_TOKEN_KEY = "blis-q.refresh-token";
@@ -33,35 +33,60 @@ export async function saveSession(session: SessionResponse): Promise<void> {
   ]);
 }
 
-// Restore a persisted session on launch, or null if none/partial/corrupt/expired.
+// Restore a persisted session on launch, or null if signed out.
 //
-// Until token refresh exists (tracker P-10), an EXPIRED access token must be
-// treated as signed out — otherwise a stale cached profile would route the user
-// into the authenticated tree with a token the backend will reject. A missing or
-// unparseable expiry is treated the same way (fail safe). Expired/invalid state
-// is cleared so it can't be retried.
+// Cold-start refresh (tracker P-10): on a GENUINELY expired access token (a valid,
+// PAST expiry) with a refresh token present, we exchange the refresh token via
+// refreshSession() instead of signing out — so a returning user stays logged in
+// across app restarts. A missing/unparseable expiry, a missing token, a corrupt
+// profile, or a failed/suspended refresh is treated as signed out (fail safe);
+// the store is cleared on the expired-but-unrefreshable path so it can't be
+// retried. A banned user's cold-start refresh returns "suspended" → null here →
+// they land on login and are re-gated to the suspension screen on re-login (P-20).
 export async function loadSession(): Promise<StoredSession | null> {
   try {
-    const [accessToken, refreshToken, expiresAt, profileRaw] =
-      await Promise.all([
-        SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
-        SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
-        SecureStore.getItemAsync(EXPIRES_KEY),
-        SecureStore.getItemAsync(PROFILE_KEY),
-      ]);
-    if (!accessToken || !refreshToken || !profileRaw) return null;
+    const stored = await readStoredSession();
+    if (!stored) return null; // partial/none/corrupt → signed out (nothing to clear)
 
-    const expiryMs = Date.parse(expiresAt ?? "");
-    if (Number.isNaN(expiryMs) || expiryMs <= Date.now()) {
-      // Missing/invalid/past expiry → not usable until refresh exists. Clear it.
+    const expiryMs = Date.parse(stored.expiresAt);
+    if (Number.isNaN(expiryMs)) {
+      // Untrustworthy expiry → sign out.
       await clearSession();
       return null;
     }
 
+    if (expiryMs <= Date.now()) {
+      // Access token expired but the refresh token is still here → exchange it
+      // (cold-start). refreshSession() persists the rotated session on success;
+      // we re-read and return it. A failed/suspended refresh signs the user out.
+      const outcome = await refreshSession();
+      if (outcome === "ok") return await readStoredSession();
+      await clearSession();
+      return null;
+    }
+
+    return stored; // valid + not expired
+  } catch {
+    // Corrupt/unreadable store → treat as signed out rather than crash.
+    return null;
+  }
+}
+
+// Pure read of the four session keys into a StoredSession, or null if any token/
+// the profile is missing or the profile is unparseable. Does NOT check expiry
+// (callers decide) and never clears.
+async function readStoredSession(): Promise<StoredSession | null> {
+  const [accessToken, refreshToken, expiresAt, profileRaw] = await Promise.all([
+    SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
+    SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
+    SecureStore.getItemAsync(EXPIRES_KEY),
+    SecureStore.getItemAsync(PROFILE_KEY),
+  ]);
+  if (!accessToken || !refreshToken || !profileRaw) return null;
+  try {
     const user = JSON.parse(profileRaw) as AccountProfile;
     return { user, accessToken, refreshToken, expiresAt: expiresAt ?? "" };
   } catch {
-    // Corrupt/unreadable store → treat as signed out rather than crash.
     return null;
   }
 }

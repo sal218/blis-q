@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { ScrollView, StyleSheet } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useTheme } from "@/contexts/ThemeContext";
 import { TextField } from "@/components/forms/TextField";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { FormError } from "@/components/forms/FormError";
@@ -15,7 +14,7 @@ import {
   communityApiErrorMessage,
 } from "@/lib/messages";
 import { strings } from "@/i18n";
-import { spacing, type ThemeColors } from "@/constants/theme";
+import { spacing } from "@/constants/theme";
 import type { EventsStackParamList } from "@/navigation/AppTabs";
 
 // Create-community form. Validates name/description against the (trimmed) client
@@ -26,8 +25,7 @@ import type { EventsStackParamList } from "@/navigation/AppTabs";
 type Props = NativeStackScreenProps<EventsStackParamList, "CreateCommunity">;
 
 export function CreateCommunityScreen({ navigation }: Props) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const styles = useMemo(() => createStyles(), []);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -96,11 +94,12 @@ export function CreateCommunityScreen({ navigation }: Props) {
   );
 }
 
-function createStyles(colors: ThemeColors) {
+function createStyles() {
   return StyleSheet.create({
     root: {
       flex: 1,
-      backgroundColor: colors.background,
+      // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
+      backgroundColor: "transparent",
     },
     content: {
       padding: spacing.lg,

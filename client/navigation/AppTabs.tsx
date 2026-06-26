@@ -56,7 +56,7 @@ function EventsStack() {
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.text,
-        contentStyle: { backgroundColor: colors.background },
+        contentStyle: { backgroundColor: "transparent" },
       }}
     >
       <EventsStackNav.Screen
@@ -85,7 +85,7 @@ function ProfileStack() {
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.text,
-        contentStyle: { backgroundColor: colors.background },
+        contentStyle: { backgroundColor: "transparent" },
       }}
     >
       <ProfileStackNav.Screen

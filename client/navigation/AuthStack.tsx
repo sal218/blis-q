@@ -1,6 +1,5 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { AuthStackParamList } from "@/navigation/types";
-import { useTheme } from "@/contexts/ThemeContext";
 import { SignUpScreen } from "@/screens/auth/SignUpScreen";
 import { CheckEmailScreen } from "@/screens/auth/CheckEmailScreen";
 import { LoginScreen } from "@/screens/auth/LoginScreen";
@@ -15,13 +14,13 @@ import { ResetPasswordScreen } from "@/screens/auth/ResetPasswordScreen";
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 export function AuthStack() {
-  const { colors } = useTheme();
   return (
     <Stack.Navigator
       initialRouteName="Login"
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: colors.background },
+        // Transparent so the app-wide ScreenBackground shows through.
+        contentStyle: { backgroundColor: "transparent" },
         animation: "slide_from_right",
       }}
     >

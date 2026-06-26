@@ -14,7 +14,6 @@ import type { AppTabsParamList } from "@/navigation/AppTabs";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useHomeCommunities } from "@/hooks/useHomeCommunities";
-import { ScreenBackground } from "@/components/ScreenBackground";
 import { SectionHeader } from "@/components/SectionHeader";
 import { CommunityRailCard } from "@/components/CommunityRailCard";
 import { strings, format } from "@/i18n";
@@ -50,88 +49,83 @@ export function HomeScreen({ navigation }: Props) {
     navigation.navigate("Events", { screen: "EventsHome" });
 
   return (
-    <View style={styles.root}>
-      <ScreenBackground />
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={{
-          paddingTop: insets.top + spacing.lg,
-          paddingBottom: insets.bottom + spacing.xl,
-        }}
-      >
-        <View style={styles.header}>
-          <Text style={styles.greeting}>{greeting}</Text>
-          <Text style={styles.subtitle}>{strings.home.subtitle}</Text>
-        </View>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={{
+        paddingTop: insets.top + spacing.lg,
+        paddingBottom: insets.bottom + spacing.xl,
+      }}
+    >
+      <View style={styles.header}>
+        <Text style={styles.greeting}>{greeting}</Text>
+        <Text style={styles.subtitle}>{strings.home.subtitle}</Text>
+      </View>
 
-        <View style={styles.section}>
-          <SectionHeader
-            title={strings.home.yourCommunities}
-            onSeeAll={goToCommunities}
+      <View style={styles.section}>
+        <SectionHeader
+          title={strings.home.yourCommunities}
+          onSeeAll={goToCommunities}
+        />
+        {status === "loading" ? (
+          <ActivityIndicator
+            color={colors.primary}
+            style={styles.railLoading}
           />
-          {status === "loading" ? (
-            <ActivityIndicator
-              color={colors.primary}
-              style={styles.railLoading}
-            />
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.rail}
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.rail}
+          >
+            {communities.map((c) => (
+              <CommunityRailCard
+                key={c.id}
+                community={c}
+                onPress={openCommunity}
+              />
+            ))}
+            {status === "ready" && communities.length === 0 ? (
+              <Text style={styles.emptyText}>{strings.home.noCommunities}</Text>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.home.yourCommunities}
+              onPress={goToCommunities}
+              style={({ pressed }) => [
+                styles.addCard,
+                pressed && styles.pressed,
+              ]}
             >
-              {communities.map((c) => (
-                <CommunityRailCard
-                  key={c.id}
-                  community={c}
-                  onPress={openCommunity}
-                />
-              ))}
-              {status === "ready" && communities.length === 0 ? (
-                <Text style={styles.emptyText}>
-                  {strings.home.noCommunities}
-                </Text>
-              ) : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={strings.home.yourCommunities}
-                onPress={goToCommunities}
-                style={({ pressed }) => [
-                  styles.addCard,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <View style={styles.addButton}>
-                  <Ionicons name="add" size={28} color="#FFFFFF" />
-                </View>
-              </Pressable>
-            </ScrollView>
-          )}
-        </View>
+              <View style={styles.addButton}>
+                <Ionicons name="add" size={28} color="#FFFFFF" />
+              </View>
+            </Pressable>
+          </ScrollView>
+        )}
+      </View>
 
-        <PlaceholderSection
-          title={strings.home.upcomingEvents}
-          icon="calendar-outline"
-          message={strings.home.eventsEmpty}
-          styles={styles}
-          colors={colors}
-        />
-        <PlaceholderSection
-          title={strings.home.nearbyPlaces}
-          icon="location-outline"
-          message={strings.home.placesEmpty}
-          styles={styles}
-          colors={colors}
-        />
-        <PlaceholderSection
-          title={strings.home.latestActivity}
-          icon="newspaper-outline"
-          message={strings.home.activityEmpty}
-          styles={styles}
-          colors={colors}
-        />
-      </ScrollView>
-    </View>
+      <PlaceholderSection
+        title={strings.home.upcomingEvents}
+        icon="calendar-outline"
+        message={strings.home.eventsEmpty}
+        styles={styles}
+        colors={colors}
+      />
+      <PlaceholderSection
+        title={strings.home.nearbyPlaces}
+        icon="location-outline"
+        message={strings.home.placesEmpty}
+        styles={styles}
+        colors={colors}
+      />
+      <PlaceholderSection
+        title={strings.home.latestActivity}
+        icon="newspaper-outline"
+        message={strings.home.activityEmpty}
+        styles={styles}
+        colors={colors}
+      />
+    </ScrollView>
   );
 }
 
@@ -165,11 +159,7 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: {
       flex: 1,
-      backgroundColor: colors.background,
-    },
-    scroll: {
-      flex: 1,
-      // Transparent so the ScreenBackground (gradient in dark mode) shows through.
+      // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
       backgroundColor: "transparent",
     },
     header: {

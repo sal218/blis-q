@@ -135,10 +135,8 @@ async function handleCreate(req: Request, res: Response): Promise<Response> {
     Promise.resolve()
       .then(() => broadcastNewMessage(id, dto))
       .catch((err) => {
-        console.error("[chat broadcast]", {
-          communityId: id,
-          code: safeErrorCode(err),
-        });
+        // Code only — never the payload (carries message content).
+        console.error("[chat broadcast]", { code: safeErrorCode(err) });
       });
 
     return res.status(201).json(dto);

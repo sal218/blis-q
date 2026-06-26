@@ -27,8 +27,9 @@ export function chatChannel(communityId: string): string {
 }
 
 // Publish a new message on the community's private chat channel. Throws on a
-// non-2xx response so the caller's best-effort wrapper can swallow it; the throw
-// message carries the HTTP status only (never the message content).
+// non-2xx response so the caller's best-effort wrapper can swallow it; the thrown
+// error carries the HTTP status as `.code` (so safeErrorCode logs the status, not
+// "unknown") and NOTHING else — never the message content.
 export async function broadcastNewMessage(
   communityId: string,
   message: MessageDTO,
@@ -56,6 +57,10 @@ export async function broadcastNewMessage(
   });
 
   if (!res.ok) {
-    throw new Error(`realtime broadcast failed: ${res.status}`);
+    const err = new Error("realtime broadcast failed") as Error & {
+      code: string;
+    };
+    err.code = String(res.status); // safeErrorCode picks this up; no content
+    throw err;
   }
 }

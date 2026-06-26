@@ -63,3 +63,14 @@ export const radius = {
   lg: 16,
   full: 9999,
 } as const;
+
+// Soft elevation for cards (the modern, airy look in the mockups). iOS reads the
+// shadow* props; Android reads elevation. Apply to surfaces that should "lift"
+// off the background (home sections, content cards).
+export const shadow = {
+  shadowColor: "#000000",
+  shadowOpacity: 0.08,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 3,
+} as const;

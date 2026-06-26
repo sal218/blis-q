@@ -36,7 +36,7 @@ export function CommunityRailCard({
         uri={community.imageUrl}
         name={community.name}
         size={TILE}
-        borderRadius={radius.md}
+        borderRadius={radius.lg}
       />
       <View style={styles.scrim}>
         <Text style={styles.name} numberOfLines={1}>
@@ -57,7 +57,7 @@ function createStyles(_colors: ThemeColors) {
     tile: {
       width: TILE,
       height: TILE,
-      borderRadius: radius.md,
+      borderRadius: radius.lg,
       overflow: "hidden",
       marginRight: spacing.md,
     },

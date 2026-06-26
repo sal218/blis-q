@@ -45,7 +45,11 @@ export const pl = {
     upcomingEvents: "Nadchodzące wydarzenia", // "Upcoming events"
     nearbyPlaces: "Bezpieczne miejsca w pobliżu", // "Nearby safe places"
     latestActivity: "Najnowsze ze społeczności", // "Latest from your communities"
-    comingSoon: "Wkrótce.", // "Coming soon." (placeholder sections)
+    // Polished empty states for the sections whose data doesn't exist yet.
+    eventsEmpty: "Wydarzenia pojawią się wkrótce.", // "Events will appear soon."
+    placesEmpty: "Bezpieczne miejsca pojawią się wkrótce.", // "Safe places will appear soon."
+    activityEmpty: "Aktywność pojawi się wkrótce.", // "Activity will appear soon."
+    profileA11y: "Profil", // a11y label for the header avatar button
   },
 
   // Chat tab — placeholder this slice (design ref: chat-screen.png).

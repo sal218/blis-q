@@ -1,4 +1,4 @@
-import { Text } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -115,7 +115,13 @@ export function AppTabs() {
         component={HomeScreen}
         options={{
           title: strings.tabs.home,
-          tabBarIcon: ({ color }) => <Text style={{ color }}>🏠</Text>,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "home" : "home-outline"}
+              size={size}
+              color={color}
+            />
+          ),
         }}
       />
       <Tabs.Screen
@@ -123,7 +129,13 @@ export function AppTabs() {
         component={EventsStack}
         options={{
           title: strings.tabs.events,
-          tabBarIcon: ({ color }) => <Text style={{ color }}>📅</Text>,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "calendar" : "calendar-outline"}
+              size={size}
+              color={color}
+            />
+          ),
         }}
       />
       <Tabs.Screen
@@ -131,7 +143,13 @@ export function AppTabs() {
         component={ChatScreen}
         options={{
           title: strings.tabs.chat,
-          tabBarIcon: ({ color }) => <Text style={{ color }}>💬</Text>,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "chatbubble" : "chatbubble-outline"}
+              size={size}
+              color={color}
+            />
+          ),
         }}
       />
       <Tabs.Screen
@@ -139,7 +157,13 @@ export function AppTabs() {
         component={ProfileStack}
         options={{
           title: strings.tabs.profile,
-          tabBarIcon: ({ color }) => <Text style={{ color }}>👤</Text>,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "person" : "person-outline"}
+              size={size}
+              color={color}
+            />
+          ),
         }}
       />
     </Tabs.Navigator>

@@ -16,7 +16,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useHomeCommunities } from "@/hooks/useHomeCommunities";
 import { SectionHeader } from "@/components/SectionHeader";
 import { CommunityRailCard } from "@/components/CommunityRailCard";
-import { Avatar } from "@/components/Avatar";
 import { strings, format } from "@/i18n";
 import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
 
@@ -57,24 +56,9 @@ export function HomeScreen({ navigation }: Props) {
         paddingBottom: insets.bottom + spacing.xl,
       }}
     >
-      <View style={styles.headerRow}>
-        <View style={styles.headerText}>
-          <Text style={styles.greeting}>{greeting}</Text>
-          <Text style={styles.subtitle}>{strings.home.subtitle}</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={strings.home.profileA11y}
-          onPress={() => navigation.navigate("ProfileTab")}
-          style={({ pressed }) => pressed && styles.pressed}
-        >
-          <Avatar
-            uri={user?.avatarUrl ?? null}
-            name={name ?? "?"}
-            size={44}
-            borderRadius={radius.full}
-          />
-        </Pressable>
+      <View style={styles.header}>
+        <Text style={styles.greeting}>{greeting}</Text>
+        <Text style={styles.subtitle}>{strings.home.subtitle}</Text>
       </View>
 
       <View style={styles.section}>
@@ -112,7 +96,9 @@ export function HomeScreen({ navigation }: Props) {
                 pressed && styles.pressed,
               ]}
             >
-              <Ionicons name="add" size={40} color={colors.primary} />
+              <View style={styles.addButton}>
+                <Ionicons name="add" size={28} color="#FFFFFF" />
+              </View>
             </Pressable>
           </ScrollView>
         )}
@@ -175,16 +161,9 @@ function createStyles(colors: ThemeColors) {
       flex: 1,
       backgroundColor: colors.background,
     },
-    headerRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
+    header: {
       paddingHorizontal: spacing.lg,
       marginBottom: spacing.lg,
-    },
-    headerText: {
-      flex: 1,
-      marginRight: spacing.md,
     },
     greeting: {
       color: colors.text,
@@ -215,7 +194,7 @@ function createStyles(colors: ThemeColors) {
     },
     addCard: {
       width: 150,
-      height: 150,
+      height: 190,
       borderRadius: radius.lg,
       borderWidth: 1.5,
       borderColor: colors.border,
@@ -223,6 +202,14 @@ function createStyles(colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: colors.surface,
+    },
+    addButton: {
+      width: 52,
+      height: 52,
+      borderRadius: radius.md,
+      backgroundColor: colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
     },
     pressed: {
       opacity: 0.85,

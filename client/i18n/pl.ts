@@ -49,7 +49,6 @@ export const pl = {
     eventsEmpty: "Wydarzenia pojawią się wkrótce.", // "Events will appear soon."
     placesEmpty: "Bezpieczne miejsca pojawią się wkrótce.", // "Safe places will appear soon."
     activityEmpty: "Aktywność pojawi się wkrótce.", // "Activity will appear soon."
-    profileA11y: "Profil", // a11y label for the header avatar button
   },
 
   // Chat tab — placeholder this slice (design ref: chat-screen.png).

@@ -32,10 +32,20 @@ export const pl = {
     profile: "Profil",
   },
 
-  // Home tab — placeholder this slice (design ref: home-screen.png).
+  // Home tab (design ref: home-screen.png). Greeting + "your communities" rail
+  // (live) + placeholder sections for events/safe-places/activity (Wkrótce).
   home: {
     title: "Strona główna",
-    comingSoon: "Twój kanał społeczności pojawi się wkrótce.",
+    greeting: "Cześć, {name} 👋", // "Hi, {name} 👋"
+    greetingNoName: "Cześć 👋", // greeting when no display name is set
+    subtitle: "Oto co dzieje się w Twojej społeczności.", // "Here's what's happening in your community."
+    yourCommunities: "Twoje społeczności", // "Your communities"
+    seeAll: "Zobacz wszystkie", // "See all"
+    noCommunities: "Nie należysz jeszcze do żadnej społeczności.", // "You're not in any community yet."
+    upcomingEvents: "Nadchodzące wydarzenia", // "Upcoming events"
+    nearbyPlaces: "Bezpieczne miejsca w pobliżu", // "Nearby safe places"
+    latestActivity: "Najnowsze ze społeczności", // "Latest from your communities"
+    comingSoon: "Wkrótce.", // "Coming soon." (placeholder sections)
   },
 
   // Chat tab — placeholder this slice (design ref: chat-screen.png).

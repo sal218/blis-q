@@ -43,8 +43,8 @@ _Last updated: 2026-06-24 — admin users/ban-unban UI (#29), mobile suspension 
 
 ## In progress
 
-- **In flight: `feat/cold-start-refresh` (P-10 follow-up)** — client-only: `loadSession()` now refreshes a genuinely-expired access token on app launch (instead of signing out) so a returning user stays logged in across restarts. Codex-validated plan. **Awaiting device test before PR.**
-- **Merged since:** mobile session-token refresh (P-10 mid-session path, #35); mobile suspension UX / login gating (P-20, #31); moderator delete-others in the feed (#32); admin users/ban-unban UI (#29); DPIA docs + processor entity (Ladly Media FZ-LLC) + Polish translation (#33/#34).
+- **In flight: `feat/home-screen-shell`** — first slice of a **UI pass** (build screens to the `assets/*.png` mockups, screen by screen, on reusable components). Home rebuilt from `home-screen.png`: greeting + a **live "Twoje społeczności" rail** (new `SectionHeader` + `CommunityRailCard` + `useHomeCommunities`) with **placeholder "Wkrótce" sections** for events/safe-places/activity (no data yet). Codex-validated plan. **Awaiting device test before PR.**
+- **Merged since:** cold-start refresh (P-10, #36); mobile session-token refresh (P-10 mid-session, #35); mobile suspension UX / login gating (P-20, #31); moderator delete-others in the feed (#32); admin users/ban-unban UI (#29); DPIA docs + processor entity (Ladly Media FZ-LLC) + Polish translation (#33/#34).
 - Then deferred Sprint-4 bits: emergency contacts (content-source decision pending), the P-19 polish, P-20 follow-ups (export/delete CTAs, deterministic cold-start probe), and Android device test of the posts UI.
 - **PAUSED (P-17):** quick-exit + discreet-mode safety UI — kept un-wired (`App.tsx` note) pending a client/product safety decision (a visible trigger may shame users / be a "tell").
 - **Pending device testing:** Android pass for the mobile posts UI (#25/#26) — iOS Expo done; Android deferred by the maintainer.

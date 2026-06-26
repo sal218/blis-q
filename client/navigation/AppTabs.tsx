@@ -1,4 +1,5 @@
 import { Text } from "react-native";
+import type { NavigatorScreenParams } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -20,7 +21,9 @@ import { strings } from "@/i18n";
 
 export type AppTabsParamList = {
   Home: undefined;
-  Events: undefined;
+  // NavigatorScreenParams so other tabs (e.g. Home) can deep-link into the Events
+  // stack, e.g. navigate("Events", { screen: "CommunityDetail", params: { id } }).
+  Events: NavigatorScreenParams<EventsStackParamList>;
   Chat: undefined;
   ProfileTab: undefined;
 };

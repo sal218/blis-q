@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   House,
   CalendarMinus,
@@ -103,6 +104,7 @@ function ProfileStack() {
 
 export function AppTabs() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Tabs.Navigator
       screenOptions={{
@@ -112,8 +114,11 @@ export function AppTabs() {
         tabBarStyle: {
           backgroundColor: colors.background,
           borderTopColor: colors.border,
-          // Nudge icons + labels down off the top hairline so they don't crowd it.
-          paddingTop: 8,
+          // A bit taller than the default, with the icon + label vertically
+          // centered above the home-indicator safe area (symmetric padding).
+          height: 60 + insets.bottom,
+          paddingTop: 6,
+          paddingBottom: insets.bottom + 6,
         },
       }}
     >

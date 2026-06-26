@@ -146,6 +146,7 @@ export function CommunityFeed({
       ) : null}
       <FlatList
         testID="posts-feed"
+        showsVerticalScrollIndicator={false}
         data={posts}
         keyExtractor={(post) => post.id}
         renderItem={({ item }: { item: PostDTO }) => (

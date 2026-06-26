@@ -50,6 +50,7 @@ export function BlockedUsersScreen() {
     <View style={styles.root}>
       <FlatList
         data={blocks}
+        showsVerticalScrollIndicator={false}
         keyExtractor={(user) => user.id}
         contentContainerStyle={
           blocks.length === 0 ? styles.listEmpty : styles.listContent

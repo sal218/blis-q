@@ -32,6 +32,7 @@ export function ProfileScreen({ navigation }: Props) {
   return (
     <ScrollView
       style={styles.root}
+      showsVerticalScrollIndicator={false}
       contentContainerStyle={{
         paddingTop: insets.top + spacing.xl,
         paddingBottom: insets.bottom + spacing.xl,

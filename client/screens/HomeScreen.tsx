@@ -51,6 +51,7 @@ export function HomeScreen({ navigation }: Props) {
   return (
     <ScrollView
       style={styles.root}
+      showsVerticalScrollIndicator={false}
       contentContainerStyle={{
         paddingTop: insets.top + spacing.lg,
         paddingBottom: insets.bottom + spacing.xl,

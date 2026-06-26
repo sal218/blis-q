@@ -107,6 +107,7 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
       {segment === ABOUT ? (
         <ScrollView
           style={styles.about}
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.aboutContent}
         >
           {community.description ? (

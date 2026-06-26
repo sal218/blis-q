@@ -34,6 +34,7 @@ export function AuthScreen({ title, subtitle, children }: Props) {
     >
       <ScrollView
         style={styles.flex}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
           {

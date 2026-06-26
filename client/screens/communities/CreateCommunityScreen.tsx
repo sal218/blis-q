@@ -65,6 +65,7 @@ export function CreateCommunityScreen({ navigation }: Props) {
   return (
     <ScrollView
       style={styles.root}
+      showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >

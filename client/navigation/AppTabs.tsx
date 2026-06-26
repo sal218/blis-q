@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { FontAwesome6 } from "@expo/vector-icons";
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -115,12 +115,8 @@ export function AppTabs() {
         component={HomeScreen}
         options={{
           title: strings.tabs.home,
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "home" : "home-outline"}
-              size={size}
-              color={color}
-            />
+          tabBarIcon: ({ color, size }) => (
+            <FontAwesome6 name="house" size={size} color={color} solid />
           ),
         }}
       />
@@ -129,12 +125,8 @@ export function AppTabs() {
         component={EventsStack}
         options={{
           title: strings.tabs.events,
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "calendar-clear" : "calendar-clear-outline"}
-              size={size}
-              color={color}
-            />
+          tabBarIcon: ({ color, size }) => (
+            <FontAwesome6 name="calendar" size={size} color={color} solid />
           ),
         }}
       />
@@ -143,12 +135,8 @@ export function AppTabs() {
         component={ChatScreen}
         options={{
           title: strings.tabs.chat,
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "chatbox" : "chatbox-outline"}
-              size={size}
-              color={color}
-            />
+          tabBarIcon: ({ color, size }) => (
+            <FontAwesome6 name="comment-dots" size={size} color={color} solid />
           ),
         }}
       />
@@ -157,12 +145,8 @@ export function AppTabs() {
         component={ProfileStack}
         options={{
           title: strings.tabs.profile,
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "person" : "person-outline"}
-              size={size}
-              color={color}
-            />
+          tabBarIcon: ({ color, size }) => (
+            <FontAwesome6 name="user" size={size} color={color} solid />
           ),
         }}
       />

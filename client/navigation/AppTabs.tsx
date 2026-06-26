@@ -112,6 +112,8 @@ export function AppTabs() {
         tabBarStyle: {
           backgroundColor: colors.background,
           borderTopColor: colors.border,
+          // Nudge icons + labels down off the top hairline so they don't crowd it.
+          paddingTop: 8,
         },
       }}
     >

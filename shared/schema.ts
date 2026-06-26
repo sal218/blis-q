@@ -200,8 +200,14 @@ export const messages = pgTable(
       .defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
+  // Feed index for cursor pagination by community, newest-first, with id as the
+  // keyset tie-breaker for the (createdAt, id) ordering (mirrors idx_posts_community).
   (t) => ({
-    byCommunity: index("idx_messages_community").on(t.communityId, t.createdAt),
+    byCommunity: index("idx_messages_community").on(
+      t.communityId,
+      t.createdAt,
+      t.id,
+    ),
   }),
 );
 

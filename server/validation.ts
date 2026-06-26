@@ -231,8 +231,18 @@ export const postReportSchema = z
 
 // ── Chat (communityId comes from the path) ────────────────────────────────────
 
+// Chat message create: text-only, trimmed server-side so a whitespace-only body
+// collapses to "" and fails .min(1) → 400 (mirrors postCreateBodySchema).
 export const createMessageSchema = z
-  .object({ content: z.string().min(1).max(MAX_MESSAGE_LENGTH) })
+  .object({ content: z.string().trim().min(1).max(MAX_MESSAGE_LENGTH) })
+  .strict();
+
+// POST /messages/:id/report body — just the reason (resourceType/resourceId come
+// from the path). Trimmed; mirrors postReportSchema.
+export const messageReportSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(MAX_REPORT_REASON_LENGTH),
+  })
   .strict();
 
 // ── Events / RSVP (communityId comes from /communities/:id/events) ────────────

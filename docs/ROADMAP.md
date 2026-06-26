@@ -130,6 +130,16 @@ All EU-region, **regions are irreversible at creation** (TRANSFER §3.1):
 - **Admin (👨‍💻):** view reported messages in moderation.
 - **Infra:** 🔒 verify current Supabase Realtime concurrent-connection limits/pricing before assuming scale (CLAUDE.md gotcha).
 - **Tests:** message persistence + message erasure (content cleared on account deletion).
+- **Delivery note (slicing):** built backend-first. **Backend slice** (`feat/community-chat-backend`): the HTTP messages API (`GET/POST /communities/:id/messages`, `DELETE /messages/:id`, `POST /messages/:id/report`), member-gated read+write, cursor + block filter, atomic guarded soft-delete, `server/realtime.ts` publish helper (private `chat:{communityId}` channel, post-commit best-effort broadcast). **Mobile slice** (after): the Messages inbox + thread, the `useCommunityChat` live hook + mandatory connection lifecycle + client-side block-filter of live messages, **and** the Realtime subscription authorization (private channels: client `setAuth` with the user JWT; RLS policy on Supabase's internal `realtime.messages` + a `SECURITY DEFINER` membership check — app-table zero-policy unchanged). UI rich features (reactions, images, pins, presence, search, unread) layer in after the baseline thread.
+
+### Direct messages (1:1) — dedicated later chat slice (in v1, **not** Sprint 5)
+
+1:1 DMs **are in the launch product**, built as their own **safety/DPIA-gated** slice **after** community chat (reuses the Broadcast + Postgres foundation on a `dm:{conversationId}` channel). Social model stays community-centric — **no friend graph** (TRANSFER §3.9 / line 469 deliberately did not port Even Tab's friend system). Scope:
+
+- **Contact model:** community-gated **message requests** — you may DM only someone you share a community with; the first message lands in a **requests** inbox (accept / decline / block) before the thread opens. The "connection" is just an accepted conversation thread.
+- **Safety from day one:** block both directions; report a specific DM message → existing moderation queue; moderator access to reported DM content is **report-gated + audited + DPIA/privacy-policy-disclosed** (reported message + small context only, no browsing all DMs); admin remove content / ban; rate limits; erasure + export coverage; **no E2EE** (moderation needs server-readable reported content); **no screenshot uploads** in v1 (prefer the stored message).
+- **Schema/DPIA:** new `conversations` + `direct_messages` tables (plaintext, explicit ON DELETE, sender SET NULL / content `[deleted]` on erasure) + `new_direct_message` push (sender alias only, never content). **Schema not locked before the DPIA covers DMs.**
+- **Deferred entirely (post-v1):** ad-hoc group chats (hand-picked private groups) — the one shape that would need friend/group machinery.
 
 ## Sprint 6 — Events + RSVP + reminders + notifications complete (≈ Aug 18 – 29)
 

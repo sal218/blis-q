@@ -1,4 +1,11 @@
-import { Text } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  House,
+  CalendarMinus,
+  ChatsTeardrop,
+  User,
+} from "@/components/icons/PhosphorIcons";
+import type { NavigatorScreenParams } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -20,7 +27,9 @@ import { strings } from "@/i18n";
 
 export type AppTabsParamList = {
   Home: undefined;
-  Events: undefined;
+  // NavigatorScreenParams so other tabs (e.g. Home) can deep-link into the Events
+  // stack, e.g. navigate("Events", { screen: "CommunityDetail", params: { id } }).
+  Events: NavigatorScreenParams<EventsStackParamList>;
   Chat: undefined;
   ProfileTab: undefined;
 };
@@ -47,7 +56,7 @@ function EventsStack() {
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.text,
-        contentStyle: { backgroundColor: colors.background },
+        contentStyle: { backgroundColor: "transparent" },
       }}
     >
       <EventsStackNav.Screen
@@ -76,7 +85,7 @@ function ProfileStack() {
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.text,
-        contentStyle: { backgroundColor: colors.background },
+        contentStyle: { backgroundColor: "transparent" },
       }}
     >
       <ProfileStackNav.Screen
@@ -95,6 +104,7 @@ function ProfileStack() {
 
 export function AppTabs() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Tabs.Navigator
       screenOptions={{
@@ -104,6 +114,11 @@ export function AppTabs() {
         tabBarStyle: {
           backgroundColor: colors.background,
           borderTopColor: colors.border,
+          // A bit taller than the default, with the icon + label vertically
+          // centered above the home-indicator safe area (symmetric padding).
+          height: 60 + insets.bottom,
+          paddingTop: 6,
+          paddingBottom: insets.bottom + 6,
         },
       }}
     >
@@ -112,7 +127,7 @@ export function AppTabs() {
         component={HomeScreen}
         options={{
           title: strings.tabs.home,
-          tabBarIcon: ({ color }) => <Text style={{ color }}>🏠</Text>,
+          tabBarIcon: ({ color, size }) => <House size={size} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -120,7 +135,9 @@ export function AppTabs() {
         component={EventsStack}
         options={{
           title: strings.tabs.events,
-          tabBarIcon: ({ color }) => <Text style={{ color }}>📅</Text>,
+          tabBarIcon: ({ color, size }) => (
+            <CalendarMinus size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -128,7 +145,9 @@ export function AppTabs() {
         component={ChatScreen}
         options={{
           title: strings.tabs.chat,
-          tabBarIcon: ({ color }) => <Text style={{ color }}>💬</Text>,
+          tabBarIcon: ({ color, size }) => (
+            <ChatsTeardrop size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -136,7 +155,7 @@ export function AppTabs() {
         component={ProfileStack}
         options={{
           title: strings.tabs.profile,
-          tabBarIcon: ({ color }) => <Text style={{ color }}>👤</Text>,
+          tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
         }}
       />
     </Tabs.Navigator>

@@ -34,6 +34,7 @@ export function AuthScreen({ title, subtitle, children }: Props) {
     >
       <ScrollView
         style={styles.flex}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
           {
@@ -55,7 +56,8 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     flex: {
       flex: 1,
-      backgroundColor: colors.background,
+      // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
+      backgroundColor: "transparent",
     },
     content: {
       flexGrow: 1,

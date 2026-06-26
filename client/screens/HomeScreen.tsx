@@ -1,23 +1,157 @@
 import { useMemo } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  StyleSheet,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import type { AppTabsParamList } from "@/navigation/AppTabs";
 import { useTheme } from "@/contexts/ThemeContext";
-import { ComingSoon } from "@/components/ComingSoon";
-import { strings } from "@/i18n";
-import { spacing, type ThemeColors } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { useHomeCommunities } from "@/hooks/useHomeCommunities";
+import { SectionHeader } from "@/components/SectionHeader";
+import { CommunityRailCard } from "@/components/CommunityRailCard";
+import { strings, format } from "@/i18n";
+import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
 
-// Home tab — placeholder this slice. Design target: assets/home-screen.png
-// (greeting + "your communities" + upcoming events + nearby safe places feed).
-// The real feed lands in a later slice; this keeps the IA tab in place.
+// Home tab (design ref: assets/home-screen.png). Greeting + a live
+// "Your communities" rail; events / safe-places / activity are polished empty
+// states until their data exists (events Sprint 6, safe places Sprint 7;
+// cross-community activity feed — P-13). Communities live under the Events tab,
+// so taps deep-link into the Events stack. Light = mockup, dark = brand purple.
 
-export function HomeScreen() {
+type Props = BottomTabScreenProps<AppTabsParamList, "Home">;
+type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+
+export function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { user } = useAuth();
+  const { communities, status } = useHomeCommunities();
+
+  const name = user?.displayName?.trim();
+  const greeting = name
+    ? format(strings.home.greeting, { name })
+    : strings.home.greetingNoName;
+
+  const openCommunity = (id: string) =>
+    navigation.navigate("Events", {
+      screen: "CommunityDetail",
+      params: { id },
+    });
+  const goToCommunities = () =>
+    navigation.navigate("Events", { screen: "EventsHome" });
+
   return (
-    <View style={[styles.root, { paddingTop: insets.top + spacing.lg }]}>
-      <Text style={styles.title}>{strings.home.title}</Text>
-      <ComingSoon message={strings.home.comingSoon} />
+    <ScrollView
+      style={styles.root}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{
+        paddingTop: insets.top + spacing.lg,
+        paddingBottom: insets.bottom + spacing.xl,
+      }}
+    >
+      <View style={styles.header}>
+        <Text style={styles.greeting}>{greeting}</Text>
+        <Text style={styles.subtitle}>{strings.home.subtitle}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader
+          title={strings.home.yourCommunities}
+          onSeeAll={goToCommunities}
+        />
+        {status === "loading" ? (
+          <ActivityIndicator
+            color={colors.primary}
+            style={styles.railLoading}
+          />
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.rail}
+          >
+            {communities.map((c) => (
+              <CommunityRailCard
+                key={c.id}
+                community={c}
+                onPress={openCommunity}
+              />
+            ))}
+            {status === "ready" && communities.length === 0 ? (
+              <Text style={styles.emptyText}>{strings.home.noCommunities}</Text>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.home.yourCommunities}
+              onPress={goToCommunities}
+              style={({ pressed }) => [
+                styles.addCard,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.addButton}>
+                <Ionicons name="add" size={28} color="#FFFFFF" />
+              </View>
+            </Pressable>
+          </ScrollView>
+        )}
+      </View>
+
+      <PlaceholderSection
+        title={strings.home.upcomingEvents}
+        icon="calendar-outline"
+        message={strings.home.eventsEmpty}
+        styles={styles}
+        colors={colors}
+      />
+      <PlaceholderSection
+        title={strings.home.nearbyPlaces}
+        icon="location-outline"
+        message={strings.home.placesEmpty}
+        styles={styles}
+        colors={colors}
+      />
+      <PlaceholderSection
+        title={strings.home.latestActivity}
+        icon="newspaper-outline"
+        message={strings.home.activityEmpty}
+        styles={styles}
+        colors={colors}
+      />
+    </ScrollView>
+  );
+}
+
+// A section whose data doesn't exist yet → header + a soft-shadow card with a
+// muted icon and message (matches the mockup's card aesthetic).
+function PlaceholderSection({
+  title,
+  icon,
+  message,
+  styles,
+  colors,
+}: {
+  title: string;
+  icon: IoniconName;
+  message: string;
+  styles: ReturnType<typeof createStyles>;
+  colors: ThemeColors;
+}) {
+  return (
+    <View style={styles.section}>
+      <SectionHeader title={title} />
+      <View style={styles.placeholderCard}>
+        <Ionicons name={icon} size={28} color={colors.textMuted} />
+        <Text style={styles.placeholderText}>{message}</Text>
+      </View>
     </View>
   );
 }
@@ -26,13 +160,74 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: {
       flex: 1,
-      backgroundColor: colors.background,
-      paddingHorizontal: spacing.lg,
+      // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
+      backgroundColor: "transparent",
     },
-    title: {
+    header: {
+      paddingHorizontal: spacing.lg,
+      marginBottom: spacing.lg,
+    },
+    greeting: {
       color: colors.text,
-      fontSize: 28,
+      fontSize: 26,
       fontWeight: "800",
+    },
+    subtitle: {
+      color: colors.textMuted,
+      fontSize: 15,
+      marginTop: spacing.xs,
+    },
+    section: {
+      paddingHorizontal: spacing.lg,
+      marginBottom: spacing.xl,
+    },
+    rail: {
+      paddingRight: spacing.lg,
+      paddingVertical: spacing.xs,
+    },
+    railLoading: {
+      alignSelf: "flex-start",
+    },
+    emptyText: {
+      color: colors.textMuted,
+      fontSize: 14,
+      alignSelf: "center",
+      marginRight: spacing.md,
+    },
+    addCard: {
+      width: 150,
+      height: 190,
+      borderRadius: radius.lg,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      borderStyle: "dashed",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface,
+    },
+    addButton: {
+      width: 52,
+      height: 52,
+      borderRadius: radius.md,
+      backgroundColor: colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    pressed: {
+      opacity: 0.85,
+    },
+    placeholderCard: {
+      backgroundColor: colors.surface,
+      borderRadius: radius.lg,
+      paddingVertical: spacing.xl,
+      paddingHorizontal: spacing.lg,
+      alignItems: "center",
+      gap: spacing.sm,
+      ...shadow,
+    },
+    placeholderText: {
+      color: colors.textMuted,
+      fontSize: 14,
     },
   });
 }

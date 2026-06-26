@@ -20,8 +20,9 @@ import { linking } from "@/navigation/linking";
 
 function Splash() {
   const { colors } = useTheme();
+  // Transparent so the app-wide ScreenBackground shows behind the spinner.
   return (
-    <View style={[styles.splash, { backgroundColor: colors.background }]}>
+    <View style={styles.splash}>
       <ActivityIndicator color={colors.primary} size="large" />
     </View>
   );
@@ -39,7 +40,10 @@ export function RootNavigator() {
     colors: {
       ...(mode === "dark" ? DarkTheme : DefaultTheme).colors,
       primary: colors.primary,
-      background: colors.background,
+      // Transparent so the app-wide ScreenBackground (rendered behind the
+      // NavigationContainer) shows through every scene. Screen roots and stack
+      // contentStyles are transparent too.
+      background: "transparent",
       card: colors.surface,
       text: colors.text,
       border: colors.border,

@@ -84,6 +84,7 @@ export function CommunitiesSection({
       ) : (
         <FlatList
           testID="communities-list"
+          showsVerticalScrollIndicator={false}
           data={communities}
           keyExtractor={(community) => community.id}
           renderItem={({ item }: { item: CommunityDTO }) => (

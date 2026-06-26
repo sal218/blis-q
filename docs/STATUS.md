@@ -43,8 +43,8 @@ _Last updated: 2026-06-24 — admin users/ban-unban UI (#29), mobile suspension 
 
 ## In progress
 
-- **In flight: `feat/cold-start-refresh` (P-10 follow-up)** — client-only: `loadSession()` now refreshes a genuinely-expired access token on app launch (instead of signing out) so a returning user stays logged in across restarts. Codex-validated plan. **Awaiting device test before PR.**
-- **Merged since:** mobile session-token refresh (P-10 mid-session path, #35); mobile suspension UX / login gating (P-20, #31); moderator delete-others in the feed (#32); admin users/ban-unban UI (#29); DPIA docs + processor entity (Ladly Media FZ-LLC) + Polish translation (#33/#34).
+- **In Codex Mode B review: `feat/home-screen-shell`** — first slice of a **UI pass** (build screens to the `assets/*.png` mockups, screen by screen, on reusable components). Home rebuilt from `home-screen.png`: greeting + a **live "Twoje społeczności" rail** (new `SectionHeader` + portrait `CommunityRailCard` + `useHomeCommunities`) with **placeholder "Wkrótce" sections** for events/safe-places/activity (no data yet). Also in this slice: **Phosphor SVG bottom-tab icons** (P-11 done; adds `react-native-svg@15.12.1` — native, dev-client rebuild required), an **app-wide dark-mode gradient background** (`ScreenBackground`; nav theme + all screen roots transparent so it shows through everywhere), and hidden vertical scroll indicators. Codex-validated plan; **device-tested & approved** by the human.
+- **Merged since:** cold-start refresh (P-10, #36); mobile session-token refresh (P-10 mid-session, #35); mobile suspension UX / login gating (P-20, #31); moderator delete-others in the feed (#32); admin users/ban-unban UI (#29); DPIA docs + processor entity (Ladly Media FZ-LLC) + Polish translation (#33/#34).
 - Then deferred Sprint-4 bits: emergency contacts (content-source decision pending), the P-19 polish, P-20 follow-ups (export/delete CTAs, deterministic cold-start probe), and Android device test of the posts UI.
 - **PAUSED (P-17):** quick-exit + discreet-mode safety UI — kept un-wired (`App.tsx` note) pending a client/product safety decision (a visible trigger may shame users / be a "tell").
 - **Pending device testing:** Android pass for the mobile posts UI (#25/#26) — iOS Expo done; Android deferred by the maintainer.
@@ -82,7 +82,7 @@ All infra is under the `blisqadmin@gmail.com` project account (PGC-owned) — **
 - **P-7**: Drizzle `pgTable` extra-config deprecation sweep.
 - **P-8** (before beta): force-logout other sessions on password reset.
 - **P-9**: ✅ addressed in this branch (reset deep-link token captured + scrubbed from nav/web state, never logged); re-verify when universal/App Links land.
-- **P-10** (before beta): mobile token refresh not wired (refresh token stored but unused).
+- **P-10**: ✅ mobile token refresh wired — mid-session (#35) + cold-start (#36); the stored refresh token is exchanged via `POST /api/v1/auth/refresh`. Non-blocking follow-ups remain (transient-offline cold-start outcome, cold-start suspension surface, P-8 pairing).
 
 ## ⛔ Remaining blockers (must clear before beta / real users / launch)
 
@@ -92,7 +92,7 @@ Tracked here so they stay explicit (per Codex), not just implied by the roadmap.
 
 - 🔴 **GDPR erasure + export** (P-1/P-2) — export `GET /api/account/export` ✅ merged (#11); erasure `DELETE /api/account` cascade **in review** (this branch). Once merged, P-1/P-2 close. **Hard gate before any beta testers** (testers are real users).
 - 🟡 **Reset-session revocation** (P-8) — password reset doesn't force-logout other Supabase sessions. Before beta.
-- 🟡 **Mobile token refresh** (P-10) — refresh token stored but unused; expired session = silent re-login. Before beta.
+- ✅ **Mobile token refresh** (P-10) — wired: mid-session (#35) + cold-start (#36). Non-blocking follow-ups remain (transient-offline outcome, cold-start suspension surface, P-8 pairing).
 - 🟠 **RevenueCat webhook** (P-3) — before any payments (Sprint 8).
 - 🟡 **Branded Resend email** (P-6) + 🟢 Drizzle extra-config sweep (P-7).
 

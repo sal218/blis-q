@@ -32,6 +32,7 @@ export function ProfileScreen({ navigation }: Props) {
   return (
     <ScrollView
       style={styles.root}
+      showsVerticalScrollIndicator={false}
       contentContainerStyle={{
         paddingTop: insets.top + spacing.xl,
         paddingBottom: insets.bottom + spacing.xl,
@@ -76,7 +77,8 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: {
       flex: 1,
-      backgroundColor: colors.background,
+      // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
+      backgroundColor: "transparent",
     },
     title: {
       color: colors.text,

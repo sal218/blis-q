@@ -50,6 +50,7 @@ export function BlockedUsersScreen() {
     <View style={styles.root}>
       <FlatList
         data={blocks}
+        showsVerticalScrollIndicator={false}
         keyExtractor={(user) => user.id}
         contentContainerStyle={
           blocks.length === 0 ? styles.listEmpty : styles.listContent
@@ -97,7 +98,8 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: {
       flex: 1,
-      backgroundColor: colors.background,
+      // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
+      backgroundColor: "transparent",
     },
     centered: {
       alignItems: "center",

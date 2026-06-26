@@ -125,8 +125,13 @@ export function AppTabs() {
         component={EventsStack}
         options={{
           title: strings.tabs.events,
-          tabBarIcon: ({ color, size }) => (
-            <FontAwesome6 name="calendar" size={size} color={color} solid />
+          tabBarIcon: ({ color, size, focused }) => (
+            <FontAwesome6
+              name="calendar"
+              size={size}
+              color={color}
+              solid={focused}
+            />
           ),
         }}
       />
@@ -135,8 +140,13 @@ export function AppTabs() {
         component={ChatScreen}
         options={{
           title: strings.tabs.chat,
-          tabBarIcon: ({ color, size }) => (
-            <FontAwesome6 name="comment-dots" size={size} color={color} solid />
+          tabBarIcon: ({ color, size, focused }) => (
+            <FontAwesome6
+              name="message"
+              size={size}
+              color={color}
+              solid={focused}
+            />
           ),
         }}
       />
@@ -145,8 +155,13 @@ export function AppTabs() {
         component={ProfileStack}
         options={{
           title: strings.tabs.profile,
-          tabBarIcon: ({ color, size }) => (
-            <FontAwesome6 name="user" size={size} color={color} solid />
+          tabBarIcon: ({ color, size, focused }) => (
+            <FontAwesome6
+              name="user"
+              size={size}
+              color={color}
+              solid={focused}
+            />
           ),
         }}
       />

@@ -131,7 +131,7 @@ export function AppTabs() {
           title: strings.tabs.events,
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
-              name={focused ? "calendar" : "calendar-outline"}
+              name={focused ? "calendar-clear" : "calendar-clear-outline"}
               size={size}
               color={color}
             />
@@ -145,7 +145,7 @@ export function AppTabs() {
           title: strings.tabs.chat,
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
-              name={focused ? "chatbubble" : "chatbubble-outline"}
+              name={focused ? "chatbox" : "chatbox-outline"}
               size={size}
               color={color}
             />

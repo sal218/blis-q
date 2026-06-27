@@ -5,15 +5,16 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { ComingSoon } from "@/components/ComingSoon";
+import { EventsList } from "@/screens/events/EventsList";
 import { CommunitiesSection } from "@/screens/communities/CommunitiesSection";
 import { strings } from "@/i18n";
 import { spacing, type ThemeColors } from "@/constants/theme";
 import type { EventsStackParamList } from "@/navigation/AppTabs";
 
 // Events tab landing screen. A segmented control switches between three
-// subsections in this order: Events · Safe places · Communities. Only
-// Communities is built this slice; the other two are themed placeholders
-// (design refs: events-screen.png, event-safeplace-screen.png).
+// subsections in this order: Events · Safe places · Communities. Events and
+// Communities are built; Safe places stays a themed placeholder (Sprint 7,
+// design refs: events-screen.png, event-safeplace-screen.png).
 
 type Props = NativeStackScreenProps<EventsStackParamList, "EventsHome">;
 
@@ -43,7 +44,9 @@ export function EventsScreen({ navigation }: Props) {
       />
       <View style={styles.body}>
         {segment === SEGMENT_EVENTS && (
-          <ComingSoon message={strings.events.eventsComingSoon} />
+          <EventsList
+            onOpenEvent={(id) => navigation.navigate("EventDetail", { id })}
+          />
         )}
         {segment === SEGMENT_SAFE_PLACES && (
           <ComingSoon message={strings.events.safePlacesComingSoon} />

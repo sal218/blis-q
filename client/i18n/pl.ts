@@ -86,15 +86,41 @@ export const pl = {
     deleteConfirmBody: "Tej operacji nie można cofnąć.", // "This can't be undone."
   },
 
-  // Events tab: a segmented section (Events / Safe places / Communities). Only
-  // Communities is built this slice; the other two are placeholders.
+  // Events tab: a segmented section (Events / Safe places / Communities). Events
+  // + Communities are built; Safe places stays a placeholder (Sprint 7, P-13).
   events: {
-    title: "Wydarzenia",
+    title: "Wydarzenia", // "Events"
     tabEvents: "Wydarzenia",
-    tabSafePlaces: "Bezpieczne miejsca",
-    tabCommunities: "Społeczności",
-    eventsComingSoon: "Wydarzenia pojawią się wkrótce.",
+    tabSafePlaces: "Bezpieczne miejsca", // "Safe places"
+    tabCommunities: "Społeczności", // "Communities"
     safePlacesComingSoon: "Bezpieczne miejsca pojawią się wkrótce.",
+
+    // Feed (the Events segment)
+    searchPlaceholder: "Szukaj wydarzeń", // "Search events"
+    empty: "Nie ma jeszcze żadnych nadchodzących wydarzeń.", // "No upcoming events yet."
+    emptySearch: "Brak wyników dla tego wyszukiwania.", // "No results for this search."
+    loadError: "Nie udało się załadować wydarzeń.", // "Couldn't load events."
+    retry: "Spróbuj ponownie", // "Try again"
+    goingCount: "{count} idzie", // "{count} going"
+
+    // Detail
+    detailLoadError: "Nie udało się załadować wydarzenia.", // "Couldn't load the event."
+    whenLabel: "Kiedy", // "When"
+    whereLabel: "Gdzie", // "Where"
+    aboutLabel: "O wydarzeniu", // "About"
+    noLocation: "Miejsce zostanie podane", // "Location to be announced"
+    noDescription: "Brak opisu.", // "No description."
+
+    // RSVP
+    rsvpPrompt: "Twoja odpowiedź", // "Your RSVP"
+    rsvpGoing: "Pójdę", // "Going"
+    rsvpInterested: "Interesuje mnie", // "Interested"
+    rsvpNotGoing: "Nie pójdę", // "Not going"
+    rsvpError: "Nie udało się zapisać odpowiedzi. Spróbuj ponownie.", // "Couldn't save your RSVP."
+
+    // API error copy
+    notAvailable: "To wydarzenie nie jest już dostępne.", // "This event is no longer available."
+    rsvpForbidden: "Dołącz do społeczności, aby potwierdzić udział.", // "Join the community to RSVP."
   },
 
   profile: {

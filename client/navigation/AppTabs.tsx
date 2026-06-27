@@ -11,6 +11,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { EventsScreen } from "@/screens/events/EventsScreen";
+import { EventDetailScreen } from "@/screens/events/EventDetailScreen";
 import { CommunityDetailScreen } from "@/screens/communities/CommunityDetailScreen";
 import { CreateCommunityScreen } from "@/screens/communities/CreateCommunityScreen";
 import { ChatInboxScreen } from "@/screens/chat/ChatInboxScreen";
@@ -47,6 +48,7 @@ export type AppTabsParamList = {
 
 export type EventsStackParamList = {
   EventsHome: undefined;
+  EventDetail: { id: string };
   CommunityDetail: { id: string };
   CreateCommunity: undefined;
   ChatThread: ChatThreadParams;
@@ -85,6 +87,11 @@ function EventsStack() {
         name="EventsHome"
         component={EventsScreen}
         options={{ headerShown: false }}
+      />
+      <EventsStackNav.Screen
+        name="EventDetail"
+        component={EventDetailScreen}
+        options={{ title: "" }}
       />
       <EventsStackNav.Screen
         name="CommunityDetail"

@@ -1,4 +1,8 @@
-import { formatInboxTime } from "@/lib/relativeTime";
+import {
+  formatInboxTime,
+  formatEventDateBadge,
+  formatEventTimeRange,
+} from "@/lib/relativeTime";
 import { strings } from "@/i18n";
 
 // Use timezone-independent local date strings (no trailing "Z") so getHours()
@@ -24,5 +28,40 @@ describe("formatInboxTime", () => {
 
   it("invalid date → empty string", () => {
     expect(formatInboxTime("not-a-date", NOW)).toBe("");
+  });
+});
+
+// Local (no-Z) datetimes → getDay()/getHours() are timezone-independent.
+describe("formatEventDateBadge", () => {
+  it("returns the Polish weekday abbrev + day-of-month", () => {
+    // 2026-07-04 is a Saturday → SOB; 2026-07-05 is a Sunday → NDZ.
+    expect(formatEventDateBadge("2026-07-04T16:00:00")).toEqual({
+      weekday: "SOB",
+      day: "4",
+    });
+    expect(formatEventDateBadge("2026-07-05T09:00:00")).toEqual({
+      weekday: "NDZ",
+      day: "5",
+    });
+  });
+
+  it("invalid date → empty fields", () => {
+    expect(formatEventDateBadge("nope")).toEqual({ weekday: "", day: "" });
+  });
+});
+
+describe("formatEventTimeRange", () => {
+  it("start–end when there is an end time", () => {
+    expect(
+      formatEventTimeRange("2026-07-04T16:00:00", "2026-07-04T18:30:00"),
+    ).toBe("16:00 – 18:30");
+  });
+
+  it("just the start when there is no end time", () => {
+    expect(formatEventTimeRange("2026-07-04T16:05:00", null)).toBe("16:05");
+  });
+
+  it("invalid start → empty string", () => {
+    expect(formatEventTimeRange("nope", null)).toBe("");
   });
 });

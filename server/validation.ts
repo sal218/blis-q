@@ -247,25 +247,47 @@ export const messageReportSchema = z
 
 // ── Events / RSVP (communityId comes from /communities/:id/events) ────────────
 
+// Text fields are trimmed server-side so a whitespace-only title collapses to ""
+// and fails .min(1) → 400 (mirrors postCreateBodySchema). endsAt (when present)
+// must be strictly after startsAt. NOTE: this refine only fires when BOTH dates
+// are in the body — a one-sided PATCH is range-checked against the MERGED
+// existing/proposed value in the route (storage.updateEvent), the authoritative
+// guard.
 export const createEventSchema = z
   .object({
-    title: z.string().min(1).max(MAX_EVENT_TITLE_LENGTH),
-    description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
-    location: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+    title: z.string().trim().min(1).max(MAX_EVENT_TITLE_LENGTH),
+    description: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
+    location: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
     startsAt: z.string().datetime(),
     endsAt: z.string().datetime().optional(),
   })
-  .strict();
+  .strict()
+  .refine((d) => !d.endsAt || new Date(d.endsAt) > new Date(d.startsAt), {
+    message: "endsAt must be after startsAt",
+    path: ["endsAt"],
+  });
 
 export const updateEventSchema = z
   .object({
-    title: z.string().min(1).max(MAX_EVENT_TITLE_LENGTH).optional(),
-    description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
-    location: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+    title: z.string().trim().min(1).max(MAX_EVENT_TITLE_LENGTH).optional(),
+    description: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
+    location: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
     startsAt: z.string().datetime().optional(),
     endsAt: z.string().datetime().optional(),
   })
-  .strict();
+  .strict()
+  // PATCH must change something — an empty body is a 400, not a silent no-op
+  // (mirrors adminUpdateCommunitySchema; prevents a phantom event.updated audit).
+  .refine((d) => Object.values(d).some((v) => v !== undefined), {
+    message: "At least one field is required",
+  })
+  // Range check when both dates are in the same body; the merged-candidate check
+  // in storage.updateEvent covers one-sided PATCHes.
+  .refine(
+    (d) =>
+      !d.startsAt || !d.endsAt || new Date(d.endsAt) > new Date(d.startsAt),
+    { message: "endsAt must be after startsAt", path: ["endsAt"] },
+  );
 
 export const rsvpSchema = z
   .object({ status: z.enum(["going", "interested", "not_going"]) })
@@ -296,11 +318,12 @@ export const adminReportResolveSchema = z
   })
   .strict();
 
-// POST /api/admin/moderation/remove-content — post-only this slice (message
-// removal lands with chat, Sprint 5). resourceId is the target post id.
+// POST /api/admin/moderation/remove-content — posts and events (message removal
+// lands with chat, Sprint 5). resourceId is the target post/event id; the route
+// branches to storage.adminRemovePost / adminRemoveEvent on resourceType.
 export const adminRemoveContentSchema = z
   .object({
-    resourceType: z.literal("post"),
+    resourceType: z.enum(["post", "event"]),
     resourceId: z.string().uuid(),
   })
   .strict();

@@ -106,25 +106,42 @@ export const communityMemberships = pgTable(
 // ── events ────────────────────────────────────────────────────────────────────
 // location is free text (venue name/address). Pin coordinates for events are a
 // DPIA-pending decision — not stored yet. createdById SET NULL on anonymisation.
-export const events = pgTable("events", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  communityId: uuid("community_id")
-    .notNull()
-    .references(() => communities.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  description: text("description"),
-  location: text("location"),
-  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
-  endsAt: timestamp("ends_at", { withTimezone: true }),
-  imageUrl: text("image_url"),
-  createdById: uuid("created_by_id").references(() => users.id, {
-    onDelete: "set null",
+// reminderSentAt is the idempotency marker for the slice-3 reminder cron: NULL =
+// not sent. It has NO default so newly-created/existing rows read as not-yet-sent
+// (a default of now() would wrongly mark every event as already reminded). The
+// cron flips it via a guarded UPDATE ... WHERE reminder_sent_at IS NULL.
+export const events = pgTable(
+  "events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    communityId: uuid("community_id")
+      .notNull()
+      .references(() => communities.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    location: text("location"),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    imageUrl: text("image_url"),
+    createdById: uuid("created_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => ({
+    // Global upcoming-events feed: keyset-paginated on (startsAt, id).
+    byStart: index("idx_events_starts_at").on(t.startsAt, t.id),
+    // A single community's events, soonest-first.
+    byCommunityStart: index("idx_events_community_start").on(
+      t.communityId,
+      t.startsAt,
+    ),
   }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+);
 
 // ── event_rsvps ───────────────────────────────────────────────────────────────
 // Both FKs cascade: erasure deletes the row (§5.2).

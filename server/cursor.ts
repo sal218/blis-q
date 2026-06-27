@@ -32,3 +32,31 @@ export function decodeCursor(value: string): Cursor | null {
     return null;
   }
 }
+
+// The upcoming-events feed is ordered ASCENDING by (startsAt, id) — soonest
+// first — not by recency, so it gets its own cursor type to keep the ordering
+// field explicit and un-mixable with the recency Cursor above. Same opaque
+// base64url(`<startsAt ISO>|<id>`) wire format; decode is equally defensive.
+export type EventCursor = { startsAt: Date; id: string };
+
+export function encodeEventCursor(cursor: EventCursor): string {
+  const raw = `${cursor.startsAt.toISOString()}|${cursor.id}`;
+  return Buffer.from(raw, "utf8").toString("base64url");
+}
+
+export function decodeEventCursor(value: string): EventCursor | null {
+  try {
+    const raw = Buffer.from(value, "base64url").toString("utf8");
+    const sep = raw.indexOf("|");
+    if (sep <= 0) return null;
+    const iso = raw.slice(0, sep);
+    const id = raw.slice(sep + 1);
+    if (!UUID_RE.test(id)) return null;
+    const startsAt = new Date(iso);
+    if (Number.isNaN(startsAt.getTime())) return null;
+    if (startsAt.toISOString() !== iso) return null;
+    return { startsAt, id };
+  } catch {
+    return null;
+  }
+}

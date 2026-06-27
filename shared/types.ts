@@ -154,7 +154,9 @@ export type EventDTO = {
   endsAt: string | null;
   imageUrl: string | null;
   createdAt: string;
+  goingCount: number; // attendees with status "going" (aggregate; no identities)
   rsvp: { status: RsvpStatus } | null; // caller's RSVP, if any
+  deleted: boolean; // tombstone: title → "[deleted]", creator hidden
 };
 
 export type SafePlaceDTO = {

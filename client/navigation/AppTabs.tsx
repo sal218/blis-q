@@ -10,28 +10,38 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { HomeScreen } from "@/screens/HomeScreen";
-import { ChatScreen } from "@/screens/ChatScreen";
 import { EventsScreen } from "@/screens/events/EventsScreen";
 import { CommunityDetailScreen } from "@/screens/communities/CommunityDetailScreen";
 import { CreateCommunityScreen } from "@/screens/communities/CreateCommunityScreen";
+import { ChatInboxScreen } from "@/screens/chat/ChatInboxScreen";
 import { ChatThreadScreen } from "@/screens/chat/ChatThreadScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { BlockedUsersScreen } from "@/screens/BlockedUsersScreen";
 import { strings } from "@/i18n";
 
 // Authenticated app shell. Post-login IA: bottom tabs Home · Events · Chat ·
-// Profile. Home/Chat are placeholders this slice. The Events tab is a stack:
-// its landing screen hosts a segmented control (Events / Safe places /
-// Communities) and pushes Community detail/create on top. Profile is a stack so
-// it can host the blocked-users screen. (There is intentionally no Communities
-// tab — communities live under Events → Communities.)
+// Profile. The Events tab is a stack: its landing screen hosts a segmented
+// control (Events / Safe places / Communities) and pushes Community detail/create
+// on top. The Chat tab is a stack: the Messages inbox pushes the chat thread.
+// Profile is a stack so it can host the blocked-users screen. (There is
+// intentionally no Communities tab — communities live under Events → Communities.)
+
+// Shared route params for the chat thread — registered in BOTH the Events stack
+// (reached from a community) and the Chat stack (reached from the inbox), so the
+// screen is reused. canModerate snapshots the caller's community role so the
+// thread offers delete on others' messages (the server still enforces).
+export type ChatThreadParams = {
+  communityId: string;
+  communityName: string;
+  canModerate: boolean;
+};
 
 export type AppTabsParamList = {
   Home: undefined;
   // NavigatorScreenParams so other tabs (e.g. Home) can deep-link into the Events
   // stack, e.g. navigate("Events", { screen: "CommunityDetail", params: { id } }).
   Events: NavigatorScreenParams<EventsStackParamList>;
-  Chat: undefined;
+  Chat: NavigatorScreenParams<ChatStackParamList>;
   ProfileTab: undefined;
 };
 
@@ -39,15 +49,12 @@ export type EventsStackParamList = {
   EventsHome: undefined;
   CommunityDetail: { id: string };
   CreateCommunity: undefined;
-  // Community chat thread (P-24a). Reached from CommunityDetail for now; the
-  // Messages inbox / Chat-tab root is P-24b. canModerate snapshots the caller's
-  // community role so the thread offers delete on others' messages (server still
-  // enforces).
-  ChatThread: {
-    communityId: string;
-    communityName: string;
-    canModerate: boolean;
-  };
+  ChatThread: ChatThreadParams;
+};
+
+export type ChatStackParamList = {
+  ChatInbox: undefined;
+  ChatThread: ChatThreadParams;
 };
 
 export type ProfileStackParamList = {
@@ -57,6 +64,7 @@ export type ProfileStackParamList = {
 
 const Tabs = createBottomTabNavigator<AppTabsParamList>();
 const EventsStackNav = createNativeStackNavigator<EventsStackParamList>();
+const ChatStackNav = createNativeStackNavigator<ChatStackParamList>();
 const ProfileStackNav = createNativeStackNavigator<ProfileStackParamList>();
 
 function EventsStack() {
@@ -94,6 +102,31 @@ function EventsStack() {
         options={{ title: "" }}
       />
     </EventsStackNav.Navigator>
+  );
+}
+
+function ChatStack() {
+  const { colors } = useTheme();
+  return (
+    <ChatStackNav.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.background },
+        headerTintColor: colors.text,
+        contentStyle: { backgroundColor: "transparent" },
+        headerBackButtonDisplayMode: "minimal",
+      }}
+    >
+      <ChatStackNav.Screen
+        name="ChatInbox"
+        component={ChatInboxScreen}
+        options={{ headerShown: false }}
+      />
+      <ChatStackNav.Screen
+        name="ChatThread"
+        component={ChatThreadScreen}
+        options={{ title: "" }}
+      />
+    </ChatStackNav.Navigator>
   );
 }
 
@@ -165,7 +198,7 @@ export function AppTabs() {
       />
       <Tabs.Screen
         name="Chat"
-        component={ChatScreen}
+        component={ChatStack}
         options={{
           title: strings.tabs.chat,
           tabBarIcon: ({ color, size }) => (

@@ -427,6 +427,64 @@ describe("POST /api/v1/messages/:id/report", () => {
   });
 });
 
+describe("GET /api/v1/chats (Messages inbox)", () => {
+  it("returns joined communities + last-message preview; messageless → null; not-joined excluded", async () => {
+    const owner = await seedUser();
+    const withMsg = await seedCommunity(owner); // owner = admin member
+    const empty = await seedCommunity(owner); // joined, no messages
+    const other = await seedUser();
+    const notMine = await seedCommunity(other); // owner NOT a member
+    const mid = await seedMessage(withMsg, owner);
+    mockUser = { id: owner };
+
+    const res = await request(app).get("/api/v1/chats");
+    expect(res.status).toBe(200);
+    const byId: Record<string, { role: string; lastMessage: unknown }> =
+      Object.fromEntries(
+        res.body.map((c: { community: { id: string } }) => [c.community.id, c]),
+      );
+    expect(Object.keys(byId).sort()).toEqual([withMsg, empty].sort()); // joined only
+    expect(byId[notMine]).toBeUndefined();
+    expect(byId[withMsg].role).toBe("admin");
+    expect((byId[withMsg].lastMessage as { id: string }).id).toBe(mid);
+    expect(byId[empty].lastMessage).toBeNull();
+  });
+
+  it("empty array when the caller belongs to no communities", async () => {
+    const u = await seedUser();
+    mockUser = { id: u };
+    const res = await request(app).get("/api/v1/chats");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it("block-filters the preview, then masks a deleted last message", async () => {
+    const caller = await seedUser();
+    const blocked = await seedUser();
+    const cid = await seedCommunity(caller);
+    await storage.joinCommunity(cid, blocked);
+    const mine = await seedMessage(cid, caller); // older, by caller
+    await seedMessage(cid, blocked); // newest, by blocked → excluded from preview
+    await storage.blockUser(caller, blocked);
+    mockUser = { id: caller };
+
+    const res = await request(app).get("/api/v1/chats");
+    const item = res.body.find(
+      (x: { community: { id: string } }) => x.community.id === cid,
+    );
+    expect(item.lastMessage.id).toBe(mine); // fell back to the non-blocked one
+
+    await storage.softDeleteMessage(mine, caller);
+    const res2 = await request(app).get("/api/v1/chats");
+    const item2 = res2.body.find(
+      (x: { community: { id: string } }) => x.community.id === cid,
+    );
+    expect(item2.lastMessage.deleted).toBe(true);
+    expect(item2.lastMessage.content).toBe("[deleted]");
+    expect(item2.lastMessage.sender).toBeNull();
+  });
+});
+
 describe("GDPR coverage for chat messages", () => {
   it("erasure scrubs the user's messages; export includes them", async () => {
     const owner = await seedUser();

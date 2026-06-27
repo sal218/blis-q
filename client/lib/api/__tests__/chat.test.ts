@@ -4,6 +4,7 @@ jest.mock("@/lib/auth", () => ({ fetchWithAuth: jest.fn() }));
 
 import { fetchWithAuth } from "@/lib/auth";
 import {
+  listChats,
   listCommunityMessages,
   sendMessage,
   deleteMessage,
@@ -79,6 +80,31 @@ describe("chat API client — listCommunityMessages", () => {
     });
     fetchMock.mockRejectedValueOnce(new Error("offline"));
     expect(await listCommunityMessages("c1")).toEqual({
+      ok: false,
+      error: { kind: "network" },
+    });
+  });
+});
+
+describe("chat API client — listChats (inbox)", () => {
+  it("200 → ok with ChatSummaryDTO[]; GET /api/v1/chats (no params)", async () => {
+    const inbox = [
+      {
+        community: { id: "c1", name: "Queer Creatives", imageUrl: null },
+        role: "member",
+        lastMessage: null,
+      },
+    ];
+    fetchMock.mockResolvedValue(res(200, inbox));
+    expect(await listChats()).toEqual({ ok: true, data: inbox });
+    expect(fetchMock).toHaveBeenCalledWith("GET", "/api/v1/chats", undefined);
+  });
+
+  it("5xx → server; throw → network", async () => {
+    fetchMock.mockResolvedValueOnce(res(500, {}));
+    expect(await listChats()).toEqual({ ok: false, error: { kind: "server" } });
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    expect(await listChats()).toEqual({
       ok: false,
       error: { kind: "network" },
     });

@@ -12,7 +12,6 @@ import {
   StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
@@ -23,15 +22,19 @@ import {
 } from "@/hooks/useCommunityChat";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
-import type { EventsStackParamList } from "@/navigation/AppTabs";
+import type { ChatThreadParams } from "@/navigation/AppTabs";
 import type { MessageDTO } from "@shared/types";
 
 // Community chat THREAD (design ref: chat-groupchat-details-screen.png). An
 // inverted message list (newest at the bottom) + an inline composer. History is
 // HTTP; new messages arrive live via useCommunityChat. Reached from a community
-// for now (the Messages inbox / Chat-tab root is P-24b). Member-gated server-side.
+// (Events stack) AND from the Messages inbox (Chat stack) — so it's typed against
+// the shared params + only the navigation it uses (setOptions), stack-agnostic.
 
-type Props = NativeStackScreenProps<EventsStackParamList, "ChatThread">;
+type Props = {
+  route: { params: ChatThreadParams };
+  navigation: { setOptions: (options: { title?: string }) => void };
+};
 
 const MAX_MESSAGE_LENGTH = 2000;
 

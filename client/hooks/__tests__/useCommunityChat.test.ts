@@ -145,6 +145,29 @@ describe("useCommunityChat — live messages", () => {
     });
     expect(result.current.messages.map((m) => m.id)).toEqual(["m1"]);
   });
+
+  it("re-filters an early broadcast once the (delayed) block list resolves", async () => {
+    let resolveBlocks!: (v: unknown) => void;
+    blocksMock.mockReturnValue(
+      new Promise((r) => {
+        resolveBlocks = r;
+      }),
+    );
+    const hook = renderHook(() => useCommunityChat("c1", "me"));
+    await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+
+    // Block list still pending → a broadcast from a (to-be) blocked sender shows.
+    await act(async () => {
+      channel.__handler({ payload: msg("early", "blocked") });
+    });
+    expect(hook.result.current.messages.map((m) => m.id)).toEqual(["early"]);
+
+    // Block list resolves → the already-shown blocked message is removed.
+    await act(async () => {
+      resolveBlocks({ ok: true, data: [{ id: "blocked" }] });
+    });
+    await waitFor(() => expect(hook.result.current.messages).toHaveLength(0));
+  });
 });
 
 describe("useCommunityChat — optimistic send", () => {

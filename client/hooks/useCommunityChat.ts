@@ -71,6 +71,12 @@ export function useCommunityChat(
   const blockedIds = useRef<Set<string>>(new Set());
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isFocused = useRef(false);
+  // Guards for the async subscribe (it awaits setRealtimeAuth before creating the
+  // channel): `subscribing` prevents a duplicate channel from a concurrent call;
+  // `wantSub` records the latest intent so a blur/background during the await
+  // cancels the in-flight subscribe instead of leaking an unremovable channel.
+  const subscribing = useRef(false);
+  const wantSub = useRef(false);
 
   const isBlocked = (m: MessageDTO): boolean =>
     !!m.sender?.id && blockedIds.current.has(m.sender.id);
@@ -111,7 +117,14 @@ export function useCommunityChat(
   // client-side filtering this session.
   const loadBlockedIds = useCallback(async () => {
     const result = await listBlocks();
-    if (result.ok) blockedIds.current = new Set(result.data.map((u) => u.id));
+    if (!result.ok) return;
+    const ids = new Set(result.data.map((u) => u.id));
+    blockedIds.current = ids;
+    // A live message from a blocked sender may have arrived before the block
+    // list loaded — drop any already-shown ones now.
+    setMessages((prev) =>
+      prev.filter((m) => !(m.sender?.id && ids.has(m.sender.id))),
+    );
   }, []);
 
   useEffect(() => {
@@ -143,8 +156,17 @@ export function useCommunityChat(
   }, [communityId]);
 
   const subscribe = useCallback(async () => {
-    if (channelRef.current) return;
-    await setRealtimeAuth(); // private-channel auth needs the user JWT
+    wantSub.current = true;
+    if (channelRef.current || subscribing.current) return;
+    subscribing.current = true;
+    try {
+      await setRealtimeAuth(); // private-channel auth needs the user JWT
+    } finally {
+      subscribing.current = false;
+    }
+    // If a blur/background cancelled us during the await (or a channel already
+    // exists), bail — don't leak/duplicate a channel.
+    if (!wantSub.current || channelRef.current) return;
     const channel = supabase.channel(`chat:${communityId}`, {
       config: { private: true },
     });
@@ -158,6 +180,7 @@ export function useCommunityChat(
   }, [communityId, handleIncoming, gapFill]);
 
   const unsubscribe = useCallback(() => {
+    wantSub.current = false; // cancels any in-flight subscribe past its await
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;

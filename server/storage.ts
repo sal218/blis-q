@@ -177,6 +177,19 @@ export type PostRow = {
   deletedAt: Date | null;
 };
 
+// One chat message row joined with its sender's public fields. The route masks
+// deleted messages (content → "[deleted]", sender → null) when building the DTO.
+export type MessageRow = {
+  id: string;
+  communityId: string;
+  senderId: string | null;
+  senderDisplayName: string | null;
+  senderAvatarUrl: string | null;
+  content: string;
+  createdAt: Date;
+  deletedAt: Date | null;
+};
+
 // One row of the admin reports queue. `status`/`resourceType` are DB text
 // columns; the route narrows them to the DTO unions.
 export type ReportRow = {
@@ -1603,6 +1616,229 @@ export class DatabaseStorage {
         resourceId: row.id,
         ipAddress: ipAddress ?? null,
       });
+    });
+  }
+
+  // ── Community chat messages (docs/API.md §9) ────────────────────────────────
+
+  // True if the user is a member of the (non-deleted) community. Used to gate
+  // chat read + report (chat is the in-group conversation, stricter than posts).
+  async isCommunityMember(
+    communityId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({ userId: communityMemberships.userId })
+      .from(communityMemberships)
+      .where(
+        and(
+          eq(communityMemberships.communityId, communityId),
+          eq(communityMemberships.userId, userId),
+        ),
+      )
+      .limit(1);
+    return !!row;
+  }
+
+  // Persist a chat message. Requires a non-deleted community AND sender
+  // membership (send is member-gated). NOT audited per-message (chat is
+  // high-volume; only message.deleted + report.submitted are audited). The
+  // route broadcasts the DTO post-commit, best-effort.
+  async createMessage(
+    communityId: string,
+    senderId: string,
+    content: string,
+  ): Promise<
+    | { status: "created"; message: MessageRow }
+    | { status: "not_found" }
+    | { status: "forbidden" }
+  > {
+    if (!(await this.communityExists(communityId))) {
+      return { status: "not_found" };
+    }
+    if (!(await this.isCommunityMember(communityId, senderId))) {
+      return { status: "forbidden" };
+    }
+
+    const [inserted] = await db
+      .insert(messages)
+      .values({ communityId, senderId, content })
+      .returning({
+        id: messages.id,
+        communityId: messages.communityId,
+        senderId: messages.senderId,
+        content: messages.content,
+        createdAt: messages.createdAt,
+        deletedAt: messages.deletedAt,
+      });
+
+    const [sender] = await db
+      .select({ displayName: users.displayName, avatarUrl: users.avatarUrl })
+      .from(users)
+      .where(eq(users.id, senderId))
+      .limit(1);
+
+    return {
+      status: "created",
+      message: {
+        ...inserted,
+        senderDisplayName: sender?.displayName ?? null,
+        senderAvatarUrl: sender?.avatarUrl ?? null,
+      },
+    };
+  }
+
+  // One page of a community's chat, newest-first, keyset-paginated on
+  // (createdAt, id). Hides messages from users the caller has blocked. Deleted
+  // messages are returned as-is (the route masks them).
+  async listMessages(input: {
+    communityId: string;
+    callerId: string;
+    limit: number;
+    cursor?: { createdAt: Date; id: string } | null;
+  }): Promise<{
+    rows: MessageRow[];
+    nextCursor: { createdAt: Date; id: string } | null;
+  }> {
+    const blockedIds = await this.getBlockedUserIds(input.callerId);
+
+    const conditions: (SQL | undefined)[] = [
+      eq(messages.communityId, input.communityId),
+    ];
+    if (blockedIds.length) {
+      // senderId IS NULL (anonymised) is never "blocked".
+      conditions.push(
+        or(
+          isNull(messages.senderId),
+          notInArray(messages.senderId, blockedIds),
+        ),
+      );
+    }
+    if (input.cursor) {
+      conditions.push(
+        or(
+          lt(messages.createdAt, input.cursor.createdAt),
+          and(
+            eq(messages.createdAt, input.cursor.createdAt),
+            lt(messages.id, input.cursor.id),
+          ),
+        ),
+      );
+    }
+
+    const rows = await db
+      .select({
+        id: messages.id,
+        communityId: messages.communityId,
+        senderId: messages.senderId,
+        senderDisplayName: users.displayName,
+        senderAvatarUrl: users.avatarUrl,
+        content: messages.content,
+        createdAt: messages.createdAt,
+        deletedAt: messages.deletedAt,
+      })
+      .from(messages)
+      .leftJoin(users, eq(users.id, messages.senderId))
+      .where(and(...conditions))
+      .orderBy(desc(messages.createdAt), desc(messages.id))
+      .limit(input.limit + 1);
+
+    const hasMore = rows.length > input.limit;
+    const page = hasMore ? rows.slice(0, input.limit) : rows;
+    const last = page[page.length - 1];
+    const nextCursor =
+      hasMore && last ? { createdAt: last.createdAt, id: last.id } : null;
+    return { rows: page, nextCursor };
+  }
+
+  // A single message (incl. its deletedAt so the caller can mask/gate). Returns
+  // null when missing, in a deleted community, or sent by someone the caller has
+  // blocked (so the route answers 404 for hidden messages). Used by report.
+  async getMessage(id: string, callerId: string): Promise<MessageRow | null> {
+    const [row] = await db
+      .select({
+        id: messages.id,
+        communityId: messages.communityId,
+        senderId: messages.senderId,
+        senderDisplayName: users.displayName,
+        senderAvatarUrl: users.avatarUrl,
+        content: messages.content,
+        createdAt: messages.createdAt,
+        deletedAt: messages.deletedAt,
+      })
+      .from(messages)
+      .leftJoin(users, eq(users.id, messages.senderId))
+      .innerJoin(
+        communities,
+        and(
+          eq(communities.id, messages.communityId),
+          isNull(communities.deletedAt),
+        ),
+      )
+      .where(eq(messages.id, id))
+      .limit(1);
+    if (!row) return null;
+
+    if (row.senderId) {
+      const blockedIds = await this.getBlockedUserIds(callerId);
+      if (blockedIds.includes(row.senderId)) return null;
+    }
+    return row;
+  }
+
+  // Soft-delete a chat message (sender OR a community mod/admin). The guarded
+  // UPDATE (`deletedAt IS NULL`) makes it atomic — a concurrent delete can't
+  // match twice, so the message.deleted audit is written at most once (§7). The
+  // route masks content in the response.
+  async softDeleteMessage(
+    id: string,
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<"deleted" | "not_found" | "forbidden"> {
+    const [message] = await db
+      .select({
+        communityId: messages.communityId,
+        senderId: messages.senderId,
+        deletedAt: messages.deletedAt,
+      })
+      .from(messages)
+      .where(eq(messages.id, id))
+      .limit(1);
+    if (!message || message.deletedAt) return "not_found";
+
+    let authorized = message.senderId === actorId;
+    if (!authorized) {
+      const [m] = await db
+        .select({ role: communityMemberships.role })
+        .from(communityMemberships)
+        .where(
+          and(
+            eq(communityMemberships.communityId, message.communityId),
+            eq(communityMemberships.userId, actorId),
+          ),
+        )
+        .limit(1);
+      authorized = m?.role === "moderator" || m?.role === "admin";
+    }
+    if (!authorized) return "forbidden";
+
+    return db.transaction(async (tx) => {
+      const [deleted] = await tx
+        .update(messages)
+        .set({ content: "[deleted]", deletedAt: new Date() })
+        .where(and(eq(messages.id, id), isNull(messages.deletedAt)))
+        .returning({ id: messages.id });
+      // Lost the race to a concurrent delete ⇒ already gone.
+      if (!deleted) return "not_found";
+
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "message.deleted",
+        resourceType: "message",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return "deleted";
     });
   }
 

@@ -5,7 +5,7 @@
 > Source of truth alongside `shared/schema.ts` (data shapes), `server/validation.ts` (request Zod schemas), `shared/types.ts` (DTOs/envelopes), `CLAUDE.md` (security rules), and `COMPLIANCE_AND_PRIVACY.md`. Where this doc and code disagree, fix one to match — don't let them drift.
 >
 > 🚧 **Provisional (pending DPIA):** fields marked `🚧` may change once the DPIA completes (COMPLIANCE §4). Don't treat them as final.
-> ⛔ **Deferred:** direct messages are out of v1 scope (see `[[direct-messages-deferred]]`); no DM endpoints are defined.
+> 📨 **Direct messages (1:1) are in v1**, but ship as a **dedicated later chat slice** (after community chat), not yet defined here. They are **safety/DPIA-gated**: community-gated message-requests (consent before a thread opens — no friend graph), block both directions, report a DM message into the existing moderation queue (report-gated + audited moderator access to the reported message + context only), admin remove/ban, rate limits, erasure/export coverage, **no E2EE** (moderation needs server-readable reported content), **no screenshot uploads** in v1. New `conversations` + `direct_messages` tables + `new_direct_message` push (sender alias only, never content). See `docs/ROADMAP.md`.
 
 ---
 
@@ -224,16 +224,17 @@ These are part of the **locked contract** (COMPLIANCE §5.2/§5.5) — not optio
 
 Hybrid: **HTTP for persistence + history, Supabase Realtime Broadcast for live delivery** (TRANSFER §3.9, COMPLIANCE §6).
 
-| Method | Path                        | Class | Rate                | Body/Query                         | Success                                                           |
-| ------ | --------------------------- | ----- | ------------------- | ---------------------------------- | ----------------------------------------------------------------- |
-| GET    | `/communities/:id/messages` | 🔑    | —                   | **cursor** (history, newest-first) | `200 CursorPage<MessageDTO>`                                      |
-| POST   | `/communities/:id/messages` | 🔑    | `contentCreateUser` | `{ content }`                      | `201 MessageDTO`                                                  |
-| DELETE | `/messages/:id`             | 🔑    | —                   | —                                  | `200 { ok: true }` (author or mod; content cleared → `[deleted]`) |
-| POST   | `/messages/:id/report`      | 🔑    | `reportUser`        | `{ reason }`                       | `201 { ok: true }`                                                |
+| Method | Path                        | Class | Rate                | Body/Query                         | Success                                                                 |
+| ------ | --------------------------- | ----- | ------------------- | ---------------------------------- | ----------------------------------------------------------------------- |
+| GET    | `/communities/:id/messages` | 🔑    | —                   | **cursor** (history, newest-first) | `200 CursorPage<MessageDTO>`                                            |
+| POST   | `/communities/:id/messages` | 🔑    | `contentCreateUser` | `{ content }`                      | `201 MessageDTO`                                                        |
+| DELETE | `/messages/:id`             | 🔑    | —                   | —                                  | `200 { ok: true }` (sender or mod/admin; content cleared → `[deleted]`) |
+| POST   | `/messages/:id/report`      | 🔑    | `reportUser`        | `{ reason }`                       | `201 { ok: true }`                                                      |
 
-- `POST …/messages` persists to `messages` **then** broadcasts `new_message` on channel `chat:{communityId}`. History loads via `GET` only — Realtime carries new messages after screen open.
-- **Realtime delivery is not an HTTP endpoint:** the client subscribes with `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Broadcast bypasses the DB — does not violate the anon-key rule). Connection lifecycle is mandatory (subscribe on active foreground chat screen only; unsubscribe on navigate-away/background).
-- **Compliance:** messages are plaintext (moderation requirement, E2EE rejected, §5.6). **Never log message content** — on send failure log `{ userId, communityId, timestamp, errorCode }` only.
+- **Member-gated read AND write.** Chat is the in-group conversation, so both `GET` history and `POST` send require community membership (stricter than posts, whose reads are open). Non-member read → `403`; deleted/missing community → `404`. `content` is trimmed (whitespace-only → `400`).
+- `POST …/messages` persists to `messages` **then** broadcasts `new_message` on the community's chat channel **post-commit + best-effort** (a broadcast failure never fails the send; persistence is the source of truth). History loads via `GET` only — Realtime carries new messages after screen open. `DELETE` is the **sender or a community mod/admin** (atomic guarded soft-delete; `message.deleted` audited). `POST …/report` requires a **visible** message (member + live community + not deleted + sender not block-hidden) → otherwise `404`.
+- **Realtime delivery is not an HTTP endpoint.** The channel `chat:{communityId}` is a **PRIVATE** Supabase Realtime channel. Subscription is authorized **per user** (members only): the client authenticates its Realtime socket with the user's Supabase JWT and the subscribe is checked by an RLS policy on Supabase's internal `realtime.messages` table — **NOT** an app table, so the app-table zero-policy firewall (`supabase/rls.sql`, CLAUDE.md §2) is **unchanged**; the membership check runs through a locked-down `SECURITY DEFINER` function so the anon/authed role still has zero app-table access. The **server** publishes via the service role (HTTP broadcast endpoint, stateless). Connection lifecycle is mandatory (subscribe on the active foreground chat screen only; unsubscribe on navigate-away/background). _Subscription auth + the connection lifecycle are implemented and end-to-end tested in the mobile chat slice; this backend slice persists + publishes._ **Follow-up:** active mid-session subscriptions are not force-disconnected on leave/ban (only the next subscribe re-checks) — tracked as a mobile/safety item.
+- **Compliance:** messages are plaintext (moderation requirement, E2EE rejected, §5.6). **Never log message content** — on send/broadcast failure log an **error code only** (never the payload). Erasure scrubs the user's messages (`content` → `[deleted]`, `senderId` → null, `deletedAt` set); export includes the user's messages.
 
 ---
 
@@ -358,6 +359,6 @@ Both mutations are `isAuthenticated → requireAdmin`, rate-limited `adminMutati
 - 🚧 **DPIA-dependent:** `preferredCity` and any age/DOB field (none in v1 yet), `/safe-places` auth class, event pin coordinates. Lock after the DPIA.
 - **Scaffold path migration (tracked, not churned now):** `/api/admin/me` → `/api/v1/admin/me`; `/api/push-tokens` → `/api/v1/push-tokens`.
 - **Realtime channels** (`chat:{communityId}`) are documented here but are not HTTP endpoints — see §9.
-- **Deferred:** direct messages (no endpoints) until scoped.
+- **Direct messages (1:1):** in v1, but their HTTP endpoints are **not defined in this community-chat backend slice** — they ship as a dedicated later safety/DPIA-gated slice (tracker **P-26**; scope at the top of this doc + `docs/ROADMAP.md`).
 
 _Living contract — update by PR at each sprint boundary as endpoints are implemented. Mark each endpoint Implemented / In-progress as it lands._

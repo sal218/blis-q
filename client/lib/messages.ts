@@ -6,6 +6,7 @@ import type { CommunityApiError } from "@/lib/api/communities";
 import type { BlocksApiError } from "@/lib/api/safety";
 import type { PostsApiError } from "@/lib/api/posts";
 import type { ChatApiError } from "@/lib/api/chat";
+import type { EventsApiError } from "@/lib/api/events";
 
 // The single place that turns locale-independent error codes (from validation +
 // the API client) into user-facing Polish copy. Centralised so every screen
@@ -108,6 +109,25 @@ export function chatApiErrorMessage(error: ChatApiError): string {
       return strings.chat.notAvailable;
     case "forbidden":
       return strings.chat.forbidden;
+    case "validation":
+    case "server":
+      return strings.errors.generic;
+  }
+}
+
+// Events feed/detail/RSVP API errors → copy. `notFound` (404) means the event is
+// no longer visible (deleted, or creator block-hidden) — pair with a refresh;
+// `forbidden` (403) on RSVP means the caller isn't a member of the community.
+export function eventsApiErrorMessage(error: EventsApiError): string {
+  switch (error.kind) {
+    case "rateLimited":
+      return format(strings.errors.rateLimited, { seconds: error.retryAfter });
+    case "network":
+      return strings.errors.network;
+    case "notFound":
+      return strings.events.notAvailable;
+    case "forbidden":
+      return strings.events.rsvpForbidden;
     case "validation":
     case "server":
       return strings.errors.generic;

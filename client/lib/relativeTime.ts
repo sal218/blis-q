@@ -57,3 +57,36 @@ export function formatInboxTime(iso: string, now: number = Date.now()): string {
 
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
+
+// Polish uppercase weekday abbreviations, indexed by Date.getDay() (0 = Sunday).
+const PL_WEEKDAYS = ["NDZ", "PON", "WT", "ŚR", "CZW", "PT", "SOB"];
+
+// Event-card date badge: the weekday abbreviation + day-of-month (e.g. SOB / 24).
+// Pure (no `now`); an invalid date yields empty strings so the badge stays blank
+// rather than rendering "NaN".
+export function formatEventDateBadge(iso: string): {
+  weekday: string;
+  day: string;
+} {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { weekday: "", day: "" };
+  return { weekday: PL_WEEKDAYS[d.getDay()], day: String(d.getDate()) };
+}
+
+// Event time range: "16:00 – 18:00", or just "16:00" when there is no end time.
+// Invalid start → "" (the screen falls back to a "time TBA"-style label).
+export function formatEventTimeRange(
+  startIso: string,
+  endIso: string | null,
+): string {
+  const start = new Date(startIso);
+  if (Number.isNaN(start.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const hhmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  const startLabel = hhmm(start);
+  if (!endIso) return startLabel;
+  const end = new Date(endIso);
+  if (Number.isNaN(end.getTime())) return startLabel;
+  return `${startLabel} – ${hhmm(end)}`;
+}

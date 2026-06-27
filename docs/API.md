@@ -242,18 +242,16 @@ Hybrid: **HTTP for persistence + history, Supabase Realtime Broadcast for live d
 
 ## 10. Events & RSVPs — `/api/v1`
 
-| Method | Path                      | Class | Body/Query                                           | Success                                        |
-| ------ | ------------------------- | ----- | ---------------------------------------------------- | ---------------------------------------------- |
-| GET    | `/events`                 | 🔑    | **cursor** (ordered by `startsAt`) + `?communityId=` | `200 CursorPage<EventDTO>`                     |
-| POST   | `/communities/:id/events` | 🔑    | `CreateEventInput`                                   | `201 EventDTO` (member/mod; fires `new_event`) |
-| GET    | `/events/:id`             | 🔑    | —                                                    | `200 EventDTO`                                 |
-| PATCH  | `/events/:id`             | 🔑    | `UpdateEventInput`                                   | `200 EventDTO` (creator/mod)                   |
-| DELETE | `/events/:id`             | 🔑    | —                                                    | `200 { ok: true }` (creator/mod; soft delete)  |
-| POST   | `/events/:id/rsvp`        | 🔑    | `{ status }`                                         | `200 { status }` (upsert)                      |
-| DELETE | `/events/:id/rsvp`        | 🔑    | —                                                    | `200 { ok: true }`                             |
-| GET    | `/events/:id/rsvps`       | 🔑    | offset/page                                          | `200 OffsetPage<{ user: PublicUser, status }>` |
+| Method | Path                      | Class | Body/Query                                        | Success                                          |
+| ------ | ------------------------- | ----- | ------------------------------------------------- | ------------------------------------------------ |
+| GET    | `/events`                 | 🔑    | **cursor** (global UPCOMING feed, `startsAt` ASC) | `200 CursorPage<EventDTO>`                       |
+| POST   | `/communities/:id/events` | 🔑    | `CreateEventInput`                                | `201 EventDTO` (member; fires `new_event`)       |
+| GET    | `/events/:id`             | 🔑    | —                                                 | `200 EventDTO` (404 if deleted)                  |
+| PATCH  | `/events/:id`             | 🔑    | `UpdateEventInput`                                | `200 EventDTO` (creator/mod)                     |
+| DELETE | `/events/:id`             | 🔑    | —                                                 | `200 { ok: true }` (creator/mod; soft delete)    |
+| POST   | `/events/:id/rsvp`        | 🔑    | `{ status }`                                      | `200 { status }` (upsert; community-member only) |
 
-`status ∈ {going, interested, not_going}`. `event_reminder` pushes are sent by the scheduled job, not an endpoint. Event `location` is free text (venue) — 🚧 no pin coordinates persisted in v1.
+`status ∈ {going, interested, not_going}`. The `GET /events` feed is global and **upcoming-only** (`startsAt >= now`), keyset-paginated ascending on `(startsAt, id)`, block-filtered on the creator, and across all non-deleted communities. `EventDTO` carries **`goingCount`** (aggregate count of `going` RSVPs) and the caller's own **`rsvp`** — but **never attendee identities**: attending an Article 9 community's event is sensitive, so there is **no "who's going" endpoint** in v1. A future attendee preview (the mockup avatars) requires an explicit privacy decision (members-only / opt-in) — deferred. **RSVP is community-member-gated** (only a member of the event's community may RSVP). `event_reminder` pushes are sent by the scheduled job (slice 3), keyed off the additive nullable `events.reminder_sent_at` marker (`NULL` = not sent), not an endpoint. Event `location` is free text (venue) — 🚧 no pin coordinates persisted in v1. Event images are deferred (no `imageKey` accepted yet).
 
 ---
 
@@ -318,7 +316,7 @@ All other admin routes are `isAuthenticated` **then** `requireAdmin` (403 for no
 **Implemented (Sprint-4 moderation slice, `feat/moderation-actions`, backend-only):**
 
 - **`PATCH /api/admin/reports/:id`** — `ResolveReportInput { status: resolved|dismissed, resolution? }`. Atomic, one-way transition: only a `pending`/`reviewing` report may transition (UPDATE guarded by a status predicate); an already-actioned report → **`409`**, missing → `404`. Stamps `reviewedById`/`reviewedAt` + trimmed `resolution`; returns **`AdminReportDTO`** (the public `ReportDTO` plus `reviewedById`/`reviewedAt`/`resolution` — moderation internals never leak to the public/export surface). Transactional + audit `report.resolved`/`report.dismissed`.
-- **`POST /api/admin/moderation/remove-content`** — `RemoveContentInput { resourceType: "post", resourceId }`. **Post-only this slice**; any other `resourceType` → `400`. Missing/already-removed post → `404`. Soft-deletes + **scrubs stored content/media** (`content="[deleted]"`, `imageUrl=null`, `deletedAt`) and audits `moderation.content_removed` in one transaction. Platform-admin authority — no community-membership check (unlike the author/mod-gated `DELETE /posts/:id`).
+- **`POST /api/admin/moderation/remove-content`** — `RemoveContentInput { resourceType: "post" | "event", resourceId }`. **Posts and events**; any other `resourceType` → `400`. Missing/already-removed target → `404`. Soft-deletes + **scrubs stored content/media** (posts: `content="[deleted]"`, `imageUrl=null`; events: `title="[deleted]"`, `description=null`, `location=null`, `imageUrl=null`; both set `deletedAt`) and audits `moderation.content_removed` (with the matching `resourceType`) in one transaction. Platform-admin authority — no community-membership check (unlike the author/mod-gated `DELETE /posts/:id` / `DELETE /events/:id`).
 
 Also: **`GET /api/admin/reports`** now returns **`OffsetPage<AdminReportDTO>`** (the moderation fields, not the public `ReportDTO`) so the queue shows reviewer/time/resolution.
 
@@ -335,16 +333,16 @@ Both mutations are `isAuthenticated → requireAdmin`, rate-limited `adminMutati
 
 **Deferred:** `PATCH /admin/users/:id` set-`isAdmin` / admin promotion (separate sensitive slice — tracker **P-16**); ban `reason` (no privacy-safe store); `/mute` (DPIA-gated, no model — §12); message removal (chat, Sprint 5). **Admin-web UI wiring deferred** (backend-only slice).
 
-| Domain       | Endpoints                                                                                                                                    |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Self         | `GET /admin/me` → `{ id, displayName, isAdmin }`                                                                                             |
-| Users        | ✅ `GET /admin/users` (offset, `?search=&status=`), `GET /admin/users/:id` · ⛔ `PATCH /admin/users/:id` set `isAdmin` (P-16)                |
-| Communities  | ✅ `GET/POST /admin/communities`, `GET/PATCH/DELETE /admin/communities/:id`                                                                  |
-| Events       | `GET/POST /admin/events`, `GET/PATCH/DELETE /admin/events/:id`                                                                               |
-| Safe places  | `GET/POST /admin/safe-places`, `GET/PATCH/DELETE /admin/safe-places/:id` (the only write path for venues)                                    |
-| Reports      | ✅ `GET /admin/reports` (offset, `?status=`) · ✅ `PATCH /admin/reports/:id` (resolve/dismiss + `resolution`)                                |
-| Moderation   | ✅ `POST /admin/moderation/remove-content` (post-only) · ✅ `/ban` · ✅ `/unban` · ⛔ `/mute` (DPIA) — each writes `audit_log: moderation.*` |
-| Ad campaigns | `GET/POST /admin/ad-campaigns`, `GET/PATCH/DELETE /admin/ad-campaigns/:id`                                                                   |
+| Domain       | Endpoints                                                                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Self         | `GET /admin/me` → `{ id, displayName, isAdmin }`                                                                                                  |
+| Users        | ✅ `GET /admin/users` (offset, `?search=&status=`), `GET /admin/users/:id` · ⛔ `PATCH /admin/users/:id` set `isAdmin` (P-16)                     |
+| Communities  | ✅ `GET/POST /admin/communities`, `GET/PATCH/DELETE /admin/communities/:id`                                                                       |
+| Events       | `GET/POST /admin/events`, `GET/PATCH/DELETE /admin/events/:id`                                                                                    |
+| Safe places  | `GET/POST /admin/safe-places`, `GET/PATCH/DELETE /admin/safe-places/:id` (the only write path for venues)                                         |
+| Reports      | ✅ `GET /admin/reports` (offset, `?status=`) · ✅ `PATCH /admin/reports/:id` (resolve/dismiss + `resolution`)                                     |
+| Moderation   | ✅ `POST /admin/moderation/remove-content` (posts + events) · ✅ `/ban` · ✅ `/unban` · ⛔ `/mute` (DPIA) — each writes `audit_log: moderation.*` |
+| Ad campaigns | `GET/POST /admin/ad-campaigns`, `GET/PATCH/DELETE /admin/ad-campaigns/:id`                                                                        |
 
 ---
 

@@ -6,9 +6,11 @@ import {
   inArray,
   notInArray,
   gt,
+  gte,
   isNull,
   isNotNull,
   exists,
+  asc,
   desc,
   count,
   ilike,
@@ -199,6 +201,27 @@ export type ChatSummaryRow = {
   communityImageUrl: string | null;
   role: MembershipRole;
   lastMessage: MessageRow | null;
+};
+
+// One event joined with two correlated aggregates: goingCount (attendees with
+// status "going" — an aggregate, never identities) and callerRsvpStatus (the
+// caller's own RSVP, or null). The route masks deleted events when building the
+// DTO. createdById is exposed only for the block/authorization checks, never
+// serialised.
+export type EventRow = {
+  id: string;
+  communityId: string;
+  title: string;
+  description: string | null;
+  location: string | null;
+  startsAt: Date;
+  endsAt: Date | null;
+  imageUrl: string | null;
+  createdById: string | null;
+  goingCount: number;
+  callerRsvpStatus: string | null;
+  createdAt: Date;
+  deletedAt: Date | null;
 };
 
 // One row of the admin reports queue. `status`/`resourceType` are DB text
@@ -2086,6 +2109,370 @@ export class DatabaseStorage {
     });
   }
 
+  // ── Events & RSVPs (docs/API.md §10) ────────────────────────────────────────
+
+  // goingCount: attendees with status "going" — an AGGREGATE only, never
+  // identities (attending an Article 9 community's event is sensitive). int4 cast
+  // so pg returns a JS number, not a bigint string.
+  private goingCountSql() {
+    return sql<number>`(
+      select count(*)::int from ${eventRsvps}
+      where ${eventRsvps.eventId} = ${events.id} and ${eventRsvps.status} = 'going'
+    )`;
+  }
+
+  // The caller's own RSVP status for the event, or null. Correlated subquery
+  // parameterised on callerId (no N+1).
+  private callerRsvpSql(callerId: string) {
+    return sql<
+      string | null
+    >`(select status from ${eventRsvps} where ${eventRsvps.eventId} = ${events.id} and ${eventRsvps.userId} = ${callerId} limit 1)`;
+  }
+
+  // Column projection shared by the list/get reads (event fields + the two
+  // correlated aggregates). createdById is selected for the block/auth checks.
+  private eventSelection(callerId: string) {
+    return {
+      id: events.id,
+      communityId: events.communityId,
+      title: events.title,
+      description: events.description,
+      location: events.location,
+      startsAt: events.startsAt,
+      endsAt: events.endsAt,
+      imageUrl: events.imageUrl,
+      createdById: events.createdById,
+      goingCount: this.goingCountSql(),
+      callerRsvpStatus: this.callerRsvpSql(callerId),
+      createdAt: events.createdAt,
+      deletedAt: events.deletedAt,
+    };
+  }
+
+  // Create an event. Requires a non-deleted community AND creator membership
+  // (create is member-gated, mirrors createPost). Insert + event.created audit
+  // commit together (§7). A fresh event has goingCount 0 and no caller RSVP.
+  async createEvent(
+    communityId: string,
+    creatorId: string,
+    input: {
+      title: string;
+      description?: string;
+      location?: string;
+      startsAt: string;
+      endsAt?: string;
+    },
+    ipAddress?: string | null,
+  ): Promise<
+    | { status: "created"; event: EventRow }
+    | { status: "not_found" }
+    | { status: "forbidden" }
+  > {
+    if (!(await this.communityExists(communityId))) {
+      return { status: "not_found" };
+    }
+    if (!(await this.isCommunityMember(communityId, creatorId))) {
+      return { status: "forbidden" };
+    }
+
+    const inserted = await db.transaction(async (tx) => {
+      const [ev] = await tx
+        .insert(events)
+        .values({
+          communityId,
+          title: input.title,
+          description: input.description ?? null,
+          location: input.location ?? null,
+          startsAt: new Date(input.startsAt),
+          endsAt: input.endsAt ? new Date(input.endsAt) : null,
+          createdById: creatorId,
+        })
+        .returning({
+          id: events.id,
+          communityId: events.communityId,
+          title: events.title,
+          description: events.description,
+          location: events.location,
+          startsAt: events.startsAt,
+          endsAt: events.endsAt,
+          imageUrl: events.imageUrl,
+          createdById: events.createdById,
+          createdAt: events.createdAt,
+          deletedAt: events.deletedAt,
+        });
+      await tx.insert(auditLog).values({
+        actorId: creatorId,
+        action: "event.created",
+        resourceType: "event",
+        resourceId: ev.id,
+        ipAddress: ipAddress ?? null,
+      });
+      return ev;
+    });
+
+    return {
+      status: "created",
+      event: { ...inserted, goingCount: 0, callerRsvpStatus: null },
+    };
+  }
+
+  // One page of the GLOBAL upcoming-events feed (across all non-deleted
+  // communities), soonest-first, keyset-paginated on (startsAt, id) ASC. Excludes
+  // deleted events, past events (startsAt < now), and events whose creator the
+  // caller has blocked (createdById IS NULL is never blocked). Exposes goingCount
+  // only — no attendee identities. Returns rows + the next opaque cursor.
+  async listUpcomingEvents(input: {
+    callerId: string;
+    limit: number;
+    cursor?: { startsAt: Date; id: string } | null;
+    now?: Date;
+  }): Promise<{
+    rows: EventRow[];
+    nextCursor: { startsAt: Date; id: string } | null;
+  }> {
+    const now = input.now ?? new Date();
+    const blockedIds = await this.getBlockedUserIds(input.callerId);
+
+    const conditions: (SQL | undefined)[] = [
+      isNull(events.deletedAt),
+      gte(events.startsAt, now),
+    ];
+    if (blockedIds.length) {
+      conditions.push(
+        or(
+          isNull(events.createdById),
+          notInArray(events.createdById, blockedIds),
+        ),
+      );
+    }
+    if (input.cursor) {
+      conditions.push(
+        or(
+          gt(events.startsAt, input.cursor.startsAt),
+          and(
+            eq(events.startsAt, input.cursor.startsAt),
+            gt(events.id, input.cursor.id),
+          ),
+        ),
+      );
+    }
+
+    const rows = await db
+      .select(this.eventSelection(input.callerId))
+      .from(events)
+      .innerJoin(
+        communities,
+        and(
+          eq(communities.id, events.communityId),
+          isNull(communities.deletedAt),
+        ),
+      )
+      .where(and(...conditions))
+      .orderBy(asc(events.startsAt), asc(events.id))
+      .limit(input.limit + 1);
+
+    const hasMore = rows.length > input.limit;
+    const page = hasMore ? rows.slice(0, input.limit) : rows;
+    const last = page[page.length - 1];
+    const nextCursor =
+      hasMore && last ? { startsAt: last.startsAt, id: last.id } : null;
+    return { rows: page, nextCursor };
+  }
+
+  // A single event (incl. deletedAt so the route can 404 tombstones). Returns
+  // null when missing, in a deleted community, or created by someone the caller
+  // has blocked (→ route 404). Includes goingCount + the caller's own RSVP.
+  async getEvent(id: string, callerId: string): Promise<EventRow | null> {
+    const [row] = await db
+      .select(this.eventSelection(callerId))
+      .from(events)
+      .innerJoin(
+        communities,
+        and(
+          eq(communities.id, events.communityId),
+          isNull(communities.deletedAt),
+        ),
+      )
+      .where(eq(events.id, id))
+      .limit(1);
+    if (!row) return null;
+
+    if (row.createdById) {
+      const blockedIds = await this.getBlockedUserIds(callerId);
+      if (blockedIds.includes(row.createdById)) return null;
+    }
+    return row;
+  }
+
+  // Edit an event (creator OR a community mod/admin). The merged-candidate range
+  // guard rejects a one-sided PATCH that would invert the times (the schema-level
+  // refine only fires when both dates are in the body). deletedAt + event.updated
+  // audit commit together (§7). Empty bodies are rejected at the schema layer.
+  async updateEvent(
+    id: string,
+    actorId: string,
+    input: {
+      title?: string;
+      description?: string;
+      location?: string;
+      startsAt?: string;
+      endsAt?: string;
+    },
+    ipAddress?: string | null,
+  ): Promise<"updated" | "not_found" | "forbidden" | "invalid_range"> {
+    const [ev] = await db
+      .select({
+        communityId: events.communityId,
+        createdById: events.createdById,
+        startsAt: events.startsAt,
+        endsAt: events.endsAt,
+        deletedAt: events.deletedAt,
+      })
+      .from(events)
+      .where(eq(events.id, id))
+      .limit(1);
+    if (!ev || ev.deletedAt) return "not_found";
+
+    let authorized = ev.createdById === actorId;
+    if (!authorized) {
+      const [m] = await db
+        .select({ role: communityMemberships.role })
+        .from(communityMemberships)
+        .where(
+          and(
+            eq(communityMemberships.communityId, ev.communityId),
+            eq(communityMemberships.userId, actorId),
+          ),
+        )
+        .limit(1);
+      authorized = m?.role === "moderator" || m?.role === "admin";
+    }
+    if (!authorized) return "forbidden";
+
+    // Validate the MERGED candidate, not just the request body.
+    const effectiveStartsAt = input.startsAt
+      ? new Date(input.startsAt)
+      : ev.startsAt;
+    const effectiveEndsAt = input.endsAt ? new Date(input.endsAt) : ev.endsAt;
+    if (effectiveEndsAt && effectiveEndsAt <= effectiveStartsAt) {
+      return "invalid_range";
+    }
+
+    const patch: Partial<typeof events.$inferInsert> = {};
+    if (input.title !== undefined) patch.title = input.title;
+    if (input.description !== undefined) patch.description = input.description;
+    if (input.location !== undefined) patch.location = input.location;
+    if (input.startsAt !== undefined) patch.startsAt = new Date(input.startsAt);
+    if (input.endsAt !== undefined) patch.endsAt = new Date(input.endsAt);
+
+    // Guard the write itself (not only the precheck): if a concurrent
+    // soft-delete/admin-remove tombstones the row between the precheck and here,
+    // `deletedAt IS NULL` makes this UPDATE a no-op so PATCH can't resurrect
+    // content onto a deleted event — and the audit is written only if a row
+    // changed (mirrors softDeleteEvent / adminRemoveEvent).
+    return db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(events)
+        .set(patch)
+        .where(and(eq(events.id, id), isNull(events.deletedAt)))
+        .returning({ id: events.id });
+      if (!updated) return "not_found";
+
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "event.updated",
+        resourceType: "event",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return "updated";
+    });
+  }
+
+  // Soft-delete an event (creator OR a community mod/admin). Authorization first,
+  // then an atomic guarded UPDATE (`deletedAt IS NULL`) so a concurrent delete
+  // can't double-write the event.deleted audit. Scrubs stored title/desc/media.
+  async softDeleteEvent(
+    id: string,
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<"deleted" | "not_found" | "forbidden"> {
+    const [ev] = await db
+      .select({
+        communityId: events.communityId,
+        createdById: events.createdById,
+        deletedAt: events.deletedAt,
+      })
+      .from(events)
+      .where(eq(events.id, id))
+      .limit(1);
+    if (!ev || ev.deletedAt) return "not_found";
+
+    let authorized = ev.createdById === actorId;
+    if (!authorized) {
+      const [m] = await db
+        .select({ role: communityMemberships.role })
+        .from(communityMemberships)
+        .where(
+          and(
+            eq(communityMemberships.communityId, ev.communityId),
+            eq(communityMemberships.userId, actorId),
+          ),
+        )
+        .limit(1);
+      authorized = m?.role === "moderator" || m?.role === "admin";
+    }
+    if (!authorized) return "forbidden";
+
+    return db.transaction(async (tx) => {
+      const [removed] = await tx
+        .update(events)
+        .set({
+          title: "[deleted]",
+          description: null,
+          location: null,
+          imageUrl: null,
+          deletedAt: new Date(),
+        })
+        .where(and(eq(events.id, id), isNull(events.deletedAt)))
+        .returning({ id: events.id });
+      if (!removed) return "not_found";
+
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "event.deleted",
+        resourceType: "event",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return "deleted";
+    });
+  }
+
+  // Upsert the caller's RSVP. Community-member-gated: only a member of the
+  // event's community may RSVP (mirrors the in-group model). Visible-event-only
+  // (getEvent hides deleted/community-deleted/block-hidden). Not audited (RSVP is
+  // a benign toggle; the row itself is the record). Returns "ok"/404/403.
+  async setRsvp(
+    eventId: string,
+    userId: string,
+    status: "going" | "interested" | "not_going",
+  ): Promise<"ok" | "not_found" | "forbidden"> {
+    const event = await this.getEvent(eventId, userId);
+    if (!event || event.deletedAt) return "not_found";
+    if (!(await this.isCommunityMember(event.communityId, userId))) {
+      return "forbidden";
+    }
+    await db
+      .insert(eventRsvps)
+      .values({ eventId, userId, status })
+      .onConflictDoUpdate({
+        target: [eventRsvps.eventId, eventRsvps.userId],
+        set: { status },
+      });
+    return "ok";
+  }
+
   // Admin content removal (moderation). Platform-admin authority — no community
   // membership check (the route is requireAdmin-gated, unlike softDeletePost
   // which is author/community-mod gated). Post-only this slice. Scrubs stored
@@ -2113,6 +2500,40 @@ export class DatabaseStorage {
         action: "moderation.content_removed",
         resourceType: "post",
         resourceId: postId,
+        ipAddress: ipAddress ?? null,
+      });
+      return "removed";
+    });
+  }
+
+  // Admin event removal (moderation). Mirrors adminRemovePost: platform-admin
+  // authority (route is requireAdmin-gated), atomic guarded UPDATE so the
+  // moderation.content_removed audit is written at most once. Scrubs stored
+  // title/desc/media. Missing/already-removed → "not_found".
+  async adminRemoveEvent(
+    eventId: string,
+    adminId: string,
+    ipAddress?: string | null,
+  ): Promise<"removed" | "not_found"> {
+    return db.transaction(async (tx) => {
+      const [removed] = await tx
+        .update(events)
+        .set({
+          title: "[deleted]",
+          description: null,
+          location: null,
+          imageUrl: null,
+          deletedAt: new Date(),
+        })
+        .where(and(eq(events.id, eventId), isNull(events.deletedAt)))
+        .returning({ id: events.id });
+      if (!removed) return "not_found";
+
+      await tx.insert(auditLog).values({
+        actorId: adminId,
+        action: "moderation.content_removed",
+        resourceType: "event",
+        resourceId: eventId,
         ipAddress: ipAddress ?? null,
       });
       return "removed";

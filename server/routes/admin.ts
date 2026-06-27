@@ -378,9 +378,10 @@ async function handleResolveReport(
   }
 }
 
-// Admin content removal. Post-only this slice — the strict schema rejects any
-// other resourceType with 400. Missing/already-removed post → 404. Soft-delete +
-// scrub + audit (moderation.content_removed) happen in one transaction.
+// Admin content removal. Posts and events this slice — the strict schema rejects
+// any other resourceType with 400. The handler branches to the matching storage
+// remover by resourceType. Missing/already-removed → 404. Soft-delete + scrub +
+// audit (moderation.content_removed) happen in one transaction.
 async function handleRemoveContent(
   req: Request,
   res: Response,
@@ -401,11 +402,18 @@ async function handleRemoveContent(
         .json({ error: "Invalid input", details: parsed.error.issues });
     }
 
-    const result = await storage.adminRemovePost(
-      parsed.data.resourceId,
-      userId,
-      req.ip ?? null,
-    );
+    const result =
+      parsed.data.resourceType === "event"
+        ? await storage.adminRemoveEvent(
+            parsed.data.resourceId,
+            userId,
+            req.ip ?? null,
+          )
+        : await storage.adminRemovePost(
+            parsed.data.resourceId,
+            userId,
+            req.ip ?? null,
+          );
     if (result === "not_found") {
       return res.status(404).json({ error: "Not found" });
     }

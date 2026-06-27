@@ -58,11 +58,14 @@ export const pl = {
     title: "Czat",
     comingSoon: "Czat pojawi się wkrótce.", // "Chat coming soon."
     open: "Czat", // button on the community screen → opens that community's chat
-    // Messages inbox (Chat tab root, P-24b)
+    // Messages inbox (Chat tab root, P-24b/P-24c)
     messagesTitle: "Wiadomości", // "Messages" — the inbox screen title
     noMessagesYet: "Brak wiadomości", // preview when a community chat has no messages
     inboxEmpty:
       "Nie masz jeszcze żadnych czatów. Dołącz do społeczności, aby zacząć.", // no joined communities
+    yesterday: "Wczoraj", // inbox timestamp for a message sent yesterday
+    searchPlaceholder: "Szukaj wiadomości", // inbox search field ("Search messages")
+    searchEmpty: "Brak wyników", // no chats match the search query
     composerPlaceholder: "Napisz wiadomość…", // "Write a message…"
     send: "Wyślij", // "Send"
     empty: "Brak wiadomości. Napisz pierwszą.", // "No messages. Write the first one."

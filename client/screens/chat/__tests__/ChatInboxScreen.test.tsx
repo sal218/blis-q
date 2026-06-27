@@ -84,4 +84,53 @@ describe("ChatInboxScreen", () => {
     renderInbox();
     expect(screen.getByText(strings.chat.inboxEmpty)).toBeTruthy();
   });
+
+  it("filters the list by the search query (client-side)", () => {
+    chatsMock.mockReturnValue(
+      state({
+        chats: [
+          {
+            community: { id: "c1", name: "Queer Creatives", imageUrl: null },
+            role: "member",
+            lastMessage: null,
+          },
+          {
+            community: { id: "c2", name: "Trans Support", imageUrl: null },
+            role: "member",
+            lastMessage: null,
+          },
+        ],
+      }),
+    );
+    renderInbox();
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText(strings.chat.searchPlaceholder),
+      "trans",
+    );
+    expect(screen.getByText("Trans Support")).toBeTruthy();
+    expect(screen.queryByText("Queer Creatives")).toBeNull();
+  });
+
+  it("shows the search-empty state when nothing matches", () => {
+    chatsMock.mockReturnValue(
+      state({
+        chats: [
+          {
+            community: { id: "c1", name: "Queer Creatives", imageUrl: null },
+            role: "member",
+            lastMessage: null,
+          },
+        ],
+      }),
+    );
+    renderInbox();
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText(strings.chat.searchPlaceholder),
+      "zzz",
+    );
+    expect(screen.getByText(strings.chat.searchEmpty)).toBeTruthy();
+    expect(screen.queryByText("Queer Creatives")).toBeNull();
+  });
 });

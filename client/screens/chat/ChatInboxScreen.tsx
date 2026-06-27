@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   View,
   Text,
+  TextInput,
   FlatList,
   ActivityIndicator,
   RefreshControl,
@@ -12,19 +13,24 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Avatar } from "@/components/Avatar";
+import { MagnifyingGlass } from "@/components/icons/PhosphorIcons";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { useChats } from "@/hooks/useChats";
+import { formatInboxTime } from "@/lib/relativeTime";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type { ChatStackParamList } from "@/navigation/AppTabs";
 import type { ChatSummaryDTO } from "@shared/types";
 
 // Messages inbox = the Chat tab root (design ref: chat-screen.png — community
-// chats only this slice; DMs/Requests/search/unread are P-24c/P-26). Lists the
-// caller's community chats with a last-message preview; tap → the chat thread.
-// HTTP-only (useChats refetches on focus); no Realtime subscription here.
+// chats only). Pinned header (title + search) + a list of the caller's community
+// chats: circular avatar, name + timestamp, last-message preview. Tap → thread.
+// HTTP-only (useChats refetches silently on focus); search filters the loaded
+// list client-side. Unread badges / presence / DM-Requests chips are P-24c/P-26.
 
 type Props = NativeStackScreenProps<ChatStackParamList, "ChatInbox">;
+
+const AVATAR_SIZE = 52;
 
 export function ChatInboxScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -32,6 +38,12 @@ export function ChatInboxScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { chats, status, errorMessage, refreshing, refresh, retry } =
     useChats();
+  const [query, setQuery] = useState("");
+
+  const trimmed = query.trim().toLowerCase();
+  const filtered = trimmed
+    ? chats.filter((c) => c.community.name.toLowerCase().includes(trimmed))
+    : chats;
 
   const open = (item: ChatSummaryDTO) =>
     navigation.navigate("ChatThread", {
@@ -70,19 +82,33 @@ export function ChatInboxScreen({ navigation }: Props) {
 
   return (
     <View style={styles.root}>
+      <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+        <Text style={styles.title}>{strings.chat.messagesTitle}</Text>
+        <View style={styles.searchBox}>
+          <MagnifyingGlass size={18} color={colors.textMuted} />
+          <TextInput
+            style={styles.search}
+            value={query}
+            onChangeText={setQuery}
+            placeholder={strings.chat.searchPlaceholder}
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+        </View>
+      </View>
+
       <FlatList
         testID="chat-inbox"
         showsVerticalScrollIndicator={false}
-        data={chats}
+        data={filtered}
         keyExtractor={(c) => c.community.id}
         contentContainerStyle={{
-          paddingTop: insets.top + spacing.lg,
-          paddingBottom: insets.bottom + spacing.xl,
           paddingHorizontal: spacing.lg,
+          paddingBottom: insets.bottom + spacing.xl,
         }}
-        ListHeaderComponent={
-          <Text style={styles.title}>{strings.chat.messagesTitle}</Text>
-        }
         renderItem={({ item }) => (
           <Pressable
             accessibilityRole="button"
@@ -93,19 +119,27 @@ export function ChatInboxScreen({ navigation }: Props) {
             <Avatar
               uri={item.community.imageUrl}
               name={item.community.name}
-              size={48}
-              borderRadius={radius.sm}
+              size={AVATAR_SIZE}
+              borderRadius={radius.full}
             />
             <View style={styles.rowBody}>
-              <Text style={styles.name} numberOfLines={1}>
-                {item.community.name}
-              </Text>
+              <View style={styles.rowTop}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {item.community.name}
+                </Text>
+                {item.lastMessage ? (
+                  <Text style={styles.time}>
+                    {formatInboxTime(item.lastMessage.createdAt)}
+                  </Text>
+                ) : null}
+              </View>
               <Text style={styles.preview} numberOfLines={1}>
                 {preview(item)}
               </Text>
             </View>
           </Pressable>
         )}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -114,7 +148,9 @@ export function ChatInboxScreen({ navigation }: Props) {
           />
         }
         ListEmptyComponent={
-          <Text style={styles.emptyText}>{strings.chat.inboxEmpty}</Text>
+          <Text style={styles.emptyText}>
+            {trimmed ? strings.chat.searchEmpty : strings.chat.inboxEmpty}
+          </Text>
         }
       />
     </View>
@@ -143,16 +179,41 @@ function createStyles(colors: ThemeColors) {
       textAlign: "center",
       marginBottom: spacing.md,
     },
+    header: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.md,
+    },
     title: {
       color: colors.text,
       fontSize: 28,
       fontWeight: "800",
-      marginBottom: spacing.lg,
+      marginBottom: spacing.md,
+    },
+    searchBox: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.surface,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+    },
+    search: {
+      flex: 1,
+      paddingVertical: spacing.sm,
+      marginLeft: spacing.sm,
+      color: colors.text,
+      fontSize: 16,
     },
     row: {
       flexDirection: "row",
       alignItems: "center",
       paddingVertical: spacing.sm,
+    },
+    // Faint, theme-aware divider between rows, inset to start under the text
+    // (aligns past the avatar). colors.border adapts to light/dark.
+    separator: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: colors.border,
+      marginLeft: AVATAR_SIZE + spacing.md,
     },
     rowPressed: {
       opacity: 0.7,
@@ -161,10 +222,20 @@ function createStyles(colors: ThemeColors) {
       flex: 1,
       marginLeft: spacing.md,
     },
+    rowTop: {
+      flexDirection: "row",
+      alignItems: "baseline",
+    },
     name: {
+      flex: 1,
       color: colors.text,
       fontSize: 16,
       fontWeight: "700",
+      marginRight: spacing.sm,
+    },
+    time: {
+      color: colors.textMuted,
+      fontSize: 12,
     },
     preview: {
       color: colors.textMuted,
@@ -174,6 +245,7 @@ function createStyles(colors: ThemeColors) {
     emptyText: {
       color: colors.textMuted,
       fontSize: 15,
+      paddingTop: spacing.md,
     },
   });
 }

@@ -48,19 +48,48 @@ describe("useChats", () => {
   });
 
   // Regression: returning to the inbox must refetch WITHOUT the pull-to-refresh
-  // spinner (no `refreshing`, never back to `loading`) — silent background update.
-  it("re-focus refetches silently (no spinner) and updates in the background", async () => {
+  // spinner. Asserted WHILE the refetch is in flight (a deferred promise) so a
+  // regression to "refresh"/"initial" mode — which would set refreshing/loading
+  // before resolving — is actually caught.
+  it("re-focus refetches silently — no spinner in flight, updates on resolve", async () => {
     listMock.mockResolvedValue({ ok: true, data: [item("c1")] });
     const { result } = renderHook(() => useChats());
     await waitFor(() => expect(result.current.status).toBe("ready"));
 
-    listMock.mockResolvedValue({ ok: true, data: [item("c2")] });
-    await act(async () => {
-      mockFocusCb?.(); // simulate navigating back to the inbox
+    let resolveRefetch!: (v: unknown) => void;
+    listMock.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveRefetch = r;
+      }),
+    );
+    act(() => {
+      mockFocusCb?.(); // navigate back to the inbox; refetch now in flight
     });
 
+    // In flight: no spinner, not loading, the existing list still shown.
+    expect(result.current.refreshing).toBe(false);
+    expect(result.current.status).toBe("ready");
+    expect(result.current.chats).toEqual([item("c1")]);
+
+    await act(async () => {
+      resolveRefetch({ ok: true, data: [item("c2")] });
+    });
     await waitFor(() => expect(result.current.chats).toEqual([item("c2")]));
     expect(result.current.refreshing).toBe(false);
-    expect(result.current.status).toBe("ready"); // never flipped to "loading"
+  });
+
+  it("a silent re-focus failure keeps the existing list (no error screen)", async () => {
+    listMock.mockResolvedValue({ ok: true, data: [item("c1")] });
+    const { result } = renderHook(() => useChats());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    listMock.mockResolvedValueOnce({ ok: false, error: { kind: "server" } });
+    await act(async () => {
+      mockFocusCb?.();
+    });
+
+    expect(result.current.status).toBe("ready"); // not flipped to "error"
+    expect(result.current.chats).toEqual([item("c1")]); // list preserved
+    expect(result.current.errorMessage).toBeNull();
   });
 });

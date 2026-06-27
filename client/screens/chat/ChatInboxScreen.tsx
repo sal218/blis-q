@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Avatar } from "@/components/Avatar";
+import { MagnifyingGlass } from "@/components/icons/PhosphorIcons";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { useChats } from "@/hooks/useChats";
 import { formatInboxTime } from "@/lib/relativeTime";
@@ -83,17 +84,20 @@ export function ChatInboxScreen({ navigation }: Props) {
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
         <Text style={styles.title}>{strings.chat.messagesTitle}</Text>
-        <TextInput
-          style={styles.search}
-          value={query}
-          onChangeText={setQuery}
-          placeholder={strings.chat.searchPlaceholder}
-          placeholderTextColor={colors.textMuted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-          clearButtonMode="while-editing"
-        />
+        <View style={styles.searchBox}>
+          <MagnifyingGlass size={18} color={colors.textMuted} />
+          <TextInput
+            style={styles.search}
+            value={query}
+            onChangeText={setQuery}
+            placeholder={strings.chat.searchPlaceholder}
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+        </View>
       </View>
 
       <FlatList
@@ -185,11 +189,17 @@ function createStyles(colors: ThemeColors) {
       fontWeight: "800",
       marginBottom: spacing.md,
     },
-    search: {
+    searchBox: {
+      flexDirection: "row",
+      alignItems: "center",
       backgroundColor: colors.surface,
       borderRadius: radius.md,
       paddingHorizontal: spacing.md,
+    },
+    search: {
+      flex: 1,
       paddingVertical: spacing.sm,
+      marginLeft: spacing.sm,
       color: colors.text,
       fontSize: 16,
     },

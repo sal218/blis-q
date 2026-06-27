@@ -2,11 +2,11 @@
 
 > Living status board. **Update this whenever a piece of work lands** (merged PR) or a new branch starts. Pair with [docs/ROADMAP.md](ROADMAP.md) (the plan), [docs/API.md](API.md) (the contract), and `CLAUDE.md` (rules + issue tracker).
 
-_Last updated: 2026-06-24 — admin users/ban-unban UI (#29), mobile suspension UX + login gating (P-20, #31), and moderator delete-others in the feed (#32) merged. In flight: `feat/mobile-token-refresh` (P-10). Quick-exit/discreet-mode safety is PAUSED (P-17)._
+_Last updated: 2026-06-27 — Sprint-5 community chat: backend (messages API + Realtime publish) merged (#38); the mobile chat **thread + Realtime authorization** is in flight (`feat/community-chat-thread`, P-24a). Home shell + app-wide dark-mode UI pass merged (#37); P-10 token refresh merged (#35/#36). Quick-exit/discreet-mode safety is PAUSED (P-17)._
 
 ## Current phase
 
-**Sprint 4 — Community posts + moderation (ROADMAP Sprint 4). Sprint 3 done. Backend all merged (posts #19, db:push/RLS #20, /autoslice #21, moderation #22, user ban/unban #23). Mobile posts UI merged: feed+report (#25), composer+delete-own (#26). Admin moderation UI merged: reports-queue actions (#27), users/ban-unban (#29). Mobile suspension UX + login gating merged (P-20, #31); moderator delete-others in the feed merged (#32). In flight: mobile session-token refresh (P-10). Remaining Sprint-4 bits: emergency contacts (client/DPIA-blocked), P-19 polish, Android device test. Quick-exit + discreet-mode safety is PAUSED pending a client/product decision (P-17).**
+**Sprint 5 — Community chat (ROADMAP Sprint 5). Sprint 4 done (posts #19/#25/#26, db:push/RLS #20, /autoslice #21, moderation #22/#27, user ban/unban #23/#29, suspension UX #31, mod-delete #32). Sprint-5 chat: backend messages API + `server/realtime.ts` private-channel publish merged (#38); the mobile chat **thread + Realtime authorization** is in flight (`feat/community-chat-thread`, P-24a) — Messages inbox is P-24b, rich features (reactions/images/pins/presence/search/unread) P-24c, and 1:1 DMs a dedicated later safety/DPIA-gated slice (P-26). Home + app-wide dark-mode UI pass merged (#37); mobile token refresh merged (P-10, #35/#36). Remaining deferred Sprint-4 bits: emergency contacts (client/DPIA-blocked), P-19 polish, Android device test. Quick-exit + discreet-mode safety is PAUSED pending a client/product decision (P-17).**
 
 ## Merged to `main`
 
@@ -43,8 +43,8 @@ _Last updated: 2026-06-24 — admin users/ban-unban UI (#29), mobile suspension 
 
 ## In progress
 
-- **In Codex Mode B review: `feat/community-chat-backend`** — Sprint-5 community chat, **backend slice 1** (the chat _engine_; mobile + DMs are later slices). HTTP messages API per API.md §9: `GET/POST /communities/:id/messages`, `DELETE /messages/:id`, `POST /messages/:id/report` — **member-gated read+write**, cursor + block filter, atomic guarded soft-delete, message reports into the existing moderation queue. New `server/realtime.ts` publish helper broadcasts `new_message` on the **private** `chat:{communityId}` channel **post-commit + best-effort**. Messages index gains the `(communityId, createdAt, id)` keyset tie-breaker (DB change → deploy via `docs/DEPLOY.md`). No per-message create audit (high-volume); delete + report audited. 19 integration tests. Codex Mode A: APPROVED. **DMs scoped as a dedicated later safety/DPIA-gated v1 slice** (ROADMAP / API.md / [[direct-messages-v1-scope]]).
-- **Merged since:** Home shell + app-wide dark-mode UI pass (Phosphor tab icons P-11, `ScreenBackground` gradient, `react-native-svg`) (#37); cold-start refresh (P-10, #36); mobile session-token refresh (P-10 mid-session, #35); mobile suspension UX / login gating (P-20, #31); moderator delete-others in the feed (#32); admin users/ban-unban UI (#29); DPIA docs + processor entity (Ladly Media FZ-LLC) + Polish translation (#33/#34).
+- **In Codex Mode B review: `feat/community-chat-thread`** — Sprint-5 community chat, **mobile slice 1 (P-24a)**: the live chat **thread** + Realtime authorization. Client `chat.ts` API wrapper + `useCommunityChat` hook (HTTP history cursor/load-older, subscribe to the **private** `chat:{communityId}` channel after `setAuth`, dedup by id, client-side block-filter of live messages, gap-fill on resubscribe, optimistic send, **mandatory connection lifecycle** — focus+foreground only). `ChatThreadScreen` (inverted list + composer + delete/report via the reused report modal), reached from a **"Czat" button on the community screen** (the Messages inbox / Chat-tab root is P-24b). **Realtime auth:** new `supabase/realtime-auth.sql` — an RLS policy on Supabase's internal `realtime.messages` + a `SECURITY DEFINER` member check (app-table zero-policy unchanged); deploy via `docs/DEPLOY.md`. 15 client tests. Codex Mode A: APPROVED. **Before PR (human):** the live-Supabase authorization spike (member subscribes / non-member + soft-deleted-community rejected) + on-device realtime test.
+- **Merged since:** community chat **backend** — messages API + `server/realtime.ts` (#38); Home shell + app-wide dark-mode UI pass (Phosphor tab icons P-11, `ScreenBackground` gradient, `react-native-svg`) (#37); cold-start refresh (P-10, #36); mobile session-token refresh (P-10 mid-session, #35); mobile suspension UX / login gating (P-20, #31); moderator delete-others in the feed (#32); admin users/ban-unban UI (#29); DPIA docs + processor entity (Ladly Media FZ-LLC) + Polish translation (#33/#34).
 - Then deferred Sprint-4 bits: emergency contacts (content-source decision pending), the P-19 polish, P-20 follow-ups (export/delete CTAs, deterministic cold-start probe), and Android device test of the posts UI.
 - **PAUSED (P-17):** quick-exit + discreet-mode safety UI — kept un-wired (`App.tsx` note) pending a client/product safety decision (a visible trigger may shame users / be a "tell").
 - **Pending device testing:** Android pass for the mobile posts UI (#25/#26) — iOS Expo done; Android deferred by the maintainer.
@@ -61,7 +61,7 @@ Admin (🛡️ `isAuthenticated → requireAdmin`): **`POST /api/admin/login`** 
 
 ## Sprint status
 
-Sprint 1 (auth) ✅ · Sprint 2 (account/GDPR, P-1/P-2 closed) ✅ · Sprint 3 (communities → block/reports → mobile → admin) ✅. **Now in Sprint 4** (posts → moderation actions → safety) per [ROADMAP](ROADMAP.md).
+Sprint 1 (auth) ✅ · Sprint 2 (account/GDPR, P-1/P-2 closed) ✅ · Sprint 3 (communities → block/reports → mobile → admin) ✅ · Sprint 4 (posts → moderation → user ban) ✅. **Now in Sprint 5** (community chat: backend #38 done → mobile thread + Realtime auth in flight → inbox → DMs) per [ROADMAP](ROADMAP.md).
 
 ## Infrastructure
 
@@ -102,4 +102,4 @@ Tracked here so they stay explicit (per Codex), not just implied by the roadmap.
 
 ## Next decision
 
-**Sprint 4 underway.** `feat/posts` (slice 1) implemented → Codex working-tree validation (delete-scrub / prettier / STATUS fixes applied) → full battery → commit/push → Codex final validation before PR. Backend-only, text-only this slice (R2 image upload deferred). Next Sprint-4 slices: moderation actions (ban/mute/remove + report resolve/dismiss), then mobile posts UI from `assets/*.png`, then safety features. None of the mobile-provisioning steps are needed for the backend slice.
+**Sprint 5 chat underway.** Backend (#38) merged. `feat/community-chat-thread` (P-24a: mobile thread + Realtime auth) implemented → Codex Mode B → battery → human gate (the live-Supabase auth spike + on-device test + `realtime-auth.sql` deploy per `docs/DEPLOY.md`) before PR. Next: the **Messages inbox / Chat-tab root** (P-24b, from `chat-screen.png`), then rich chat features (P-24c), then **1:1 DMs** as a dedicated safety/DPIA-gated slice (P-26). Mobile-provisioning (EAS dev client, Supabase Google provider, etc.) is needed for live device testing of chat.

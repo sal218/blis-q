@@ -27,12 +27,18 @@ interface ReportPostModalProps {
   visible: boolean;
   onClose: () => void;
   onSubmit: (reason: string) => Promise<PostActionOutcome>;
+  // Optional copy overrides so the same modal serves posts (default) and chat
+  // messages. The helper/submit/required copy is generic and stays shared.
+  title?: string;
+  placeholder?: string;
 }
 
 export function ReportPostModal({
   visible,
   onClose,
   onSubmit,
+  title = strings.posts.reportTitle,
+  placeholder = strings.posts.reportReasonPlaceholder,
 }: ReportPostModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -81,7 +87,7 @@ export function ReportPostModal({
         <Pressable style={styles.backdrop} onPress={onClose}>
           {/* Absorb taps inside the sheet so they don't close it. */}
           <Pressable style={styles.sheet} onPress={() => {}}>
-            <Text style={styles.title}>{strings.posts.reportTitle}</Text>
+            <Text style={styles.title}>{title}</Text>
             <Text style={styles.helper}>
               {strings.posts.reportReasonHelper}
             </Text>
@@ -90,14 +96,14 @@ export function ReportPostModal({
               style={styles.input}
               value={reason}
               onChangeText={setReason}
-              placeholder={strings.posts.reportReasonPlaceholder}
+              placeholder={placeholder}
               placeholderTextColor={colors.textMuted}
               multiline
               numberOfLines={4}
               maxLength={MAX_REASON_LENGTH}
               textAlignVertical="top"
               editable={!submitting}
-              accessibilityLabel={strings.posts.reportTitle}
+              accessibilityLabel={title}
             />
 
             <FormError message={error} />

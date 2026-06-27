@@ -5,6 +5,7 @@ import type { ApiError } from "@/lib/api/auth";
 import type { CommunityApiError } from "@/lib/api/communities";
 import type { BlocksApiError } from "@/lib/api/safety";
 import type { PostsApiError } from "@/lib/api/posts";
+import type { ChatApiError } from "@/lib/api/chat";
 
 // The single place that turns locale-independent error codes (from validation +
 // the API client) into user-facing Polish copy. Centralised so every screen
@@ -88,6 +89,25 @@ export function postsApiErrorMessage(error: PostsApiError): string {
       return strings.posts.notAvailable;
     case "forbidden":
       return strings.posts.forbidden;
+    case "validation":
+    case "server":
+      return strings.errors.generic;
+  }
+}
+
+// Community chat API errors → copy. `notFound` (404) means the message/community
+// is no longer visible (deleted, or not a member); `forbidden` (403) is a
+// non-member read or a delete the caller isn't allowed.
+export function chatApiErrorMessage(error: ChatApiError): string {
+  switch (error.kind) {
+    case "rateLimited":
+      return format(strings.errors.rateLimited, { seconds: error.retryAfter });
+    case "network":
+      return strings.errors.network;
+    case "notFound":
+      return strings.chat.notAvailable;
+    case "forbidden":
+      return strings.chat.forbidden;
     case "validation":
     case "server":
       return strings.errors.generic;

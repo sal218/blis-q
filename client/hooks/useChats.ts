@@ -32,10 +32,14 @@ export function useChats(): UseChats {
   const seq = useRef(0);
   const loadedOnce = useRef(false);
 
-  const load = useCallback(async (mode: "initial" | "refresh") => {
+  // "initial" = first load (full-screen spinner); "refresh" = user pull-to-refresh
+  // (the RefreshControl spinner); "silent" = background refetch on re-focus (NO
+  // spinner — like WhatsApp; a failure keeps the existing list rather than
+  // flipping to an error screen).
+  const load = useCallback(async (mode: "initial" | "refresh" | "silent") => {
     const s = ++seq.current;
     if (mode === "refresh") setRefreshing(true);
-    else setStatus("loading");
+    else if (mode === "initial") setStatus("loading");
 
     const result = await listChats();
 
@@ -46,7 +50,7 @@ export function useChats(): UseChats {
       setChats(result.data);
       setErrorMessage(null);
       setStatus("ready");
-    } else {
+    } else if (mode !== "silent") {
       setErrorMessage(chatApiErrorMessage(result.error));
       setStatus("error");
     }
@@ -54,8 +58,9 @@ export function useChats(): UseChats {
 
   useFocusEffect(
     useCallback(() => {
-      // First focus = full load (spinner); later focuses = silent refresh.
-      void load(loadedOnce.current ? "refresh" : "initial");
+      // First focus = full load; returning to the inbox = a SILENT background
+      // refresh (no spinner). Explicit pull-to-refresh still shows the spinner.
+      void load(loadedOnce.current ? "silent" : "initial");
       loadedOnce.current = true;
     }, [load]),
   );

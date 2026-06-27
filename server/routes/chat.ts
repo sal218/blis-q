@@ -3,7 +3,7 @@ import { z } from "zod";
 import { isAuthenticated } from "../auth";
 import { safeErrorCode } from "./auth";
 import { storage } from "../storage";
-import type { MessageRow } from "../storage";
+import type { MessageRow, ChatSummaryRow } from "../storage";
 import {
   createMessageSchema,
   messageReportSchema,
@@ -15,7 +15,7 @@ import {
 } from "../rateLimit";
 import { broadcastNewMessage } from "../realtime";
 import { encodeCursor, decodeCursor } from "../cursor";
-import type { MessageDTO, CursorPage } from "@shared/types";
+import type { MessageDTO, CursorPage, ChatSummaryDTO } from "@shared/types";
 
 // Community chat (docs/API.md §9). Hybrid: HTTP for persistence + history,
 // Supabase Realtime Broadcast for live delivery. Every route is isAuthenticated.
@@ -25,10 +25,36 @@ import type { MessageDTO, CursorPage } from "@shared/types";
 // community's private channel, post-commit + best-effort (a broadcast failure
 // must never fail the send).
 export function registerChatRoutes(app: Express): void {
+  app.get("/api/v1/chats", isAuthenticated, handleListChats);
   app.get("/api/v1/communities/:id/messages", isAuthenticated, handleList);
   app.post("/api/v1/communities/:id/messages", isAuthenticated, handleCreate);
   app.delete("/api/v1/messages/:id", isAuthenticated, handleDelete);
   app.post("/api/v1/messages/:id/report", isAuthenticated, handleReport);
+}
+
+// Messages inbox: the caller's community chats + a last-message preview. Reuses
+// toMessageDTO so a deleted last message is masked exactly like in the thread.
+function toChatSummaryDTO(row: ChatSummaryRow): ChatSummaryDTO {
+  return {
+    community: {
+      id: row.communityId,
+      name: row.communityName,
+      imageUrl: row.communityImageUrl,
+    },
+    role: row.role,
+    lastMessage: row.lastMessage ? toMessageDTO(row.lastMessage) : null,
+  };
+}
+
+async function handleListChats(req: Request, res: Response): Promise<Response> {
+  try {
+    const rows = await storage.listUserChats(req.user!.id);
+    const body: ChatSummaryDTO[] = rows.map(toChatSummaryDTO);
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[GET /api/v1/chats]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 }
 
 // Deleted messages are returned as tombstones: content "[deleted]", sender null.

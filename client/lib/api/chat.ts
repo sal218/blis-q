@@ -1,4 +1,4 @@
-import type { CursorPage, MessageDTO } from "@shared/types";
+import type { CursorPage, MessageDTO, ChatSummaryDTO } from "@shared/types";
 import { request, commonApiError } from "@/lib/api/http";
 
 // Typed client for community chat (docs/API.md §9). Screens/hooks go through
@@ -24,6 +24,18 @@ async function toChatError(res: Response): Promise<ChatApiError> {
   if (res.status === 403) return { kind: "forbidden" };
   if (res.status === 404) return { kind: "notFound" };
   return commonApiError(res);
+}
+
+// GET /api/v1/chats — the caller's Messages inbox: their community chats, each
+// with a last-message preview. Unpaginated (a user is in few communities).
+export function listChats(): Promise<ChatResult<ChatSummaryDTO[]>> {
+  return request(
+    "GET",
+    "/api/v1/chats",
+    undefined,
+    (res) => res.json() as Promise<ChatSummaryDTO[]>,
+    toChatError,
+  );
 }
 
 // GET /api/v1/communities/:id/messages — newest-first, cursor-paginated. Pass the

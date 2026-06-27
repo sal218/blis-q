@@ -12,6 +12,7 @@ import {
   desc,
   count,
   ilike,
+  sql,
   type SQL,
 } from "drizzle-orm";
 import type { MembershipRole, PublicUser } from "@shared/types";
@@ -188,6 +189,16 @@ export type MessageRow = {
   content: string;
   createdAt: Date;
   deletedAt: Date | null;
+};
+
+// One row of the Messages inbox: a community the caller belongs to + role + the
+// latest visible message (null if none). The route masks a deleted last message.
+export type ChatSummaryRow = {
+  communityId: string;
+  communityName: string;
+  communityImageUrl: string | null;
+  role: MembershipRole;
+  lastMessage: MessageRow | null;
 };
 
 // One row of the admin reports queue. `status`/`resourceType` are DB text
@@ -1840,6 +1851,112 @@ export class DatabaseStorage {
       });
       return "deleted";
     });
+  }
+
+  // The caller's Messages inbox: every community they belong to (non-deleted) +
+  // their role + the latest VISIBLE message as a preview. "Visible" = the latest
+  // message whose sender the caller hasn't blocked (sender NULL never blocked) —
+  // consistent with listMessages/getMessage. Deleted messages are returned as-is
+  // (the route masks them). Ordered by most-recent activity; messageless
+  // communities last. Scoped entirely to userId. NOT the browse list — this joins
+  // memberships directly so it enumerates ALL joined chats.
+  async listUserChats(userId: string): Promise<ChatSummaryRow[]> {
+    const mine = await db
+      .select({
+        communityId: communities.id,
+        communityName: communities.name,
+        communityImageUrl: communities.imageUrl,
+        role: communityMemberships.role,
+      })
+      .from(communityMemberships)
+      .innerJoin(
+        communities,
+        and(
+          eq(communities.id, communityMemberships.communityId),
+          isNull(communities.deletedAt),
+        ),
+      )
+      .where(eq(communityMemberships.userId, userId));
+    if (mine.length === 0) return [];
+
+    const ids = mine.map((c) => c.communityId);
+    const blockedIds = await this.getBlockedUserIds(userId);
+
+    // Latest block-filtered message per community via a row_number() window, then
+    // keep rn = 1 (a subquery so we can window-rank then filter — Postgres can't
+    // DISTINCT ON + reorder by activity in one pass).
+    const conditions: (SQL | undefined)[] = [
+      inArray(messages.communityId, ids),
+    ];
+    if (blockedIds.length) {
+      conditions.push(
+        or(
+          isNull(messages.senderId),
+          notInArray(messages.senderId, blockedIds),
+        ),
+      );
+    }
+    const ranked = db
+      .select({
+        id: messages.id,
+        communityId: messages.communityId,
+        senderId: messages.senderId,
+        content: messages.content,
+        createdAt: messages.createdAt,
+        deletedAt: messages.deletedAt,
+        rn: sql<number>`row_number() over (partition by ${messages.communityId} order by ${messages.createdAt} desc, ${messages.id} desc)`.as(
+          "rn",
+        ),
+      })
+      .from(messages)
+      .where(and(...conditions))
+      .as("ranked");
+
+    const lasts = await db
+      .select({
+        id: ranked.id,
+        communityId: ranked.communityId,
+        senderId: ranked.senderId,
+        content: ranked.content,
+        createdAt: ranked.createdAt,
+        deletedAt: ranked.deletedAt,
+        senderDisplayName: users.displayName,
+        senderAvatarUrl: users.avatarUrl,
+      })
+      .from(ranked)
+      .leftJoin(users, eq(users.id, ranked.senderId))
+      .where(eq(ranked.rn, 1));
+
+    const lastByCommunity = new Map<string, MessageRow>();
+    for (const m of lasts) {
+      lastByCommunity.set(m.communityId, {
+        id: m.id,
+        communityId: m.communityId,
+        senderId: m.senderId,
+        senderDisplayName: m.senderDisplayName ?? null,
+        senderAvatarUrl: m.senderAvatarUrl ?? null,
+        content: m.content,
+        createdAt: m.createdAt,
+        deletedAt: m.deletedAt,
+      });
+    }
+
+    const rows: ChatSummaryRow[] = mine.map((c) => ({
+      communityId: c.communityId,
+      communityName: c.communityName,
+      communityImageUrl: c.communityImageUrl,
+      role: c.role as MembershipRole,
+      lastMessage: lastByCommunity.get(c.communityId) ?? null,
+    }));
+
+    // Most-recent activity first; communities with no messages last (by name).
+    rows.sort((a, b) => {
+      const at = a.lastMessage?.createdAt.getTime() ?? -Infinity;
+      const bt = b.lastMessage?.createdAt.getTime() ?? -Infinity;
+      if (at !== bt) return bt - at;
+      return a.communityName.localeCompare(b.communityName);
+    });
+    return rows;
   }
 
   // Admin reports queue: one page, newest first, optional status filter.

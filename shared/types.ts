@@ -135,6 +135,15 @@ export type MessageDTO = {
   deleted: boolean;
 };
 
+// One row of the Messages inbox (Chat tab): a community the caller belongs to,
+// the caller's role there, and the latest (block-filtered) message as a preview.
+// lastMessage is null when the community has no visible messages yet.
+export type ChatSummaryDTO = {
+  community: { id: string; name: string; imageUrl: string | null };
+  role: MembershipRole;
+  lastMessage: MessageDTO | null;
+};
+
 export type EventDTO = {
   id: string;
   communityId: string;

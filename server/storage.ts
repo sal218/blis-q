@@ -2365,8 +2365,19 @@ export class DatabaseStorage {
     if (input.startsAt !== undefined) patch.startsAt = new Date(input.startsAt);
     if (input.endsAt !== undefined) patch.endsAt = new Date(input.endsAt);
 
-    await db.transaction(async (tx) => {
-      await tx.update(events).set(patch).where(eq(events.id, id));
+    // Guard the write itself (not only the precheck): if a concurrent
+    // soft-delete/admin-remove tombstones the row between the precheck and here,
+    // `deletedAt IS NULL` makes this UPDATE a no-op so PATCH can't resurrect
+    // content onto a deleted event — and the audit is written only if a row
+    // changed (mirrors softDeleteEvent / adminRemoveEvent).
+    return db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(events)
+        .set(patch)
+        .where(and(eq(events.id, id), isNull(events.deletedAt)))
+        .returning({ id: events.id });
+      if (!updated) return "not_found";
+
       await tx.insert(auditLog).values({
         actorId,
         action: "event.updated",
@@ -2374,8 +2385,8 @@ export class DatabaseStorage {
         resourceId: id,
         ipAddress: ipAddress ?? null,
       });
+      return "updated";
     });
-    return "updated";
   }
 
   // Soft-delete an event (creator OR a community mod/admin). Authorization first,

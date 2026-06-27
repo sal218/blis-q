@@ -449,6 +449,23 @@ describe("PATCH /api/v1/events/:id", () => {
     expect(res.status).toBe(400);
   });
 
+  it("PATCH on a soft-deleted event → 404, content not resurrected", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    await storage.softDeleteEvent(eid, owner);
+    mockUser = { id: owner };
+
+    const res = await request(app)
+      .patch(`/api/v1/events/${eid}`)
+      .send({ title: "resurrected" });
+    expect(res.status).toBe(404);
+
+    // the guarded update is a no-op on a tombstoned row — title stays scrubbed
+    const [row] = await db.select().from(events).where(eq(events.id, eid));
+    expect(row.title).toBe("[deleted]");
+  });
+
   it("one-sided PATCH that inverts the range (merged candidate) → 400", async () => {
     const owner = await seedUser();
     const cid = await seedCommunity(owner);

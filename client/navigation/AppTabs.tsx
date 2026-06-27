@@ -67,6 +67,10 @@ function EventsStack() {
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.text,
         contentStyle: { backgroundColor: "transparent" },
+        // iOS: show just the back chevron, never the previous screen's title as
+        // a label (it otherwise falls back to the English route name, and the
+        // label shows/hides inconsistently across devices).
+        headerBackButtonDisplayMode: "minimal",
       }}
     >
       <EventsStackNav.Screen
@@ -101,6 +105,10 @@ function ProfileStack() {
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.text,
         contentStyle: { backgroundColor: "transparent" },
+        // iOS: show just the back chevron, never the previous screen's title as
+        // a label (it otherwise falls back to the English route name, and the
+        // label shows/hides inconsistently across devices).
+        headerBackButtonDisplayMode: "minimal",
       }}
     >
       <ProfileStackNav.Screen

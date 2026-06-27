@@ -29,6 +29,8 @@ import type { ChatSummaryDTO } from "@shared/types";
 
 type Props = NativeStackScreenProps<ChatStackParamList, "ChatInbox">;
 
+const AVATAR_SIZE = 52;
+
 export function ChatInboxScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -113,7 +115,7 @@ export function ChatInboxScreen({ navigation }: Props) {
             <Avatar
               uri={item.community.imageUrl}
               name={item.community.name}
-              size={52}
+              size={AVATAR_SIZE}
               borderRadius={radius.full}
             />
             <View style={styles.rowBody}>
@@ -133,6 +135,7 @@ export function ChatInboxScreen({ navigation }: Props) {
             </View>
           </Pressable>
         )}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -194,6 +197,13 @@ function createStyles(colors: ThemeColors) {
       flexDirection: "row",
       alignItems: "center",
       paddingVertical: spacing.sm,
+    },
+    // Faint, theme-aware divider between rows, inset to start under the text
+    // (aligns past the avatar). colors.border adapts to light/dark.
+    separator: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: colors.border,
+      marginLeft: AVATAR_SIZE + spacing.md,
     },
     rowPressed: {
       opacity: 0.7,

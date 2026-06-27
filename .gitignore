@@ -24,3 +24,6 @@ drizzle/
 npm-debug.log*
 coverage/
 .DS_Store
+
+# Confidential client documents — keep local, NEVER commit (Article 9-adjacent).
+blis-Q_pitchdeck.pdf

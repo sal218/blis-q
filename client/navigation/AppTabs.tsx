@@ -14,6 +14,7 @@ import { ChatScreen } from "@/screens/ChatScreen";
 import { EventsScreen } from "@/screens/events/EventsScreen";
 import { CommunityDetailScreen } from "@/screens/communities/CommunityDetailScreen";
 import { CreateCommunityScreen } from "@/screens/communities/CreateCommunityScreen";
+import { ChatThreadScreen } from "@/screens/chat/ChatThreadScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { BlockedUsersScreen } from "@/screens/BlockedUsersScreen";
 import { strings } from "@/i18n";
@@ -38,6 +39,15 @@ export type EventsStackParamList = {
   EventsHome: undefined;
   CommunityDetail: { id: string };
   CreateCommunity: undefined;
+  // Community chat thread (P-24a). Reached from CommunityDetail for now; the
+  // Messages inbox / Chat-tab root is P-24b. canModerate snapshots the caller's
+  // community role so the thread offers delete on others' messages (server still
+  // enforces).
+  ChatThread: {
+    communityId: string;
+    communityName: string;
+    canModerate: boolean;
+  };
 };
 
 export type ProfileStackParamList = {
@@ -73,6 +83,11 @@ function EventsStack() {
         name="CreateCommunity"
         component={CreateCommunityScreen}
         options={{ title: strings.communities.createTitle }}
+      />
+      <EventsStackNav.Screen
+        name="ChatThread"
+        component={ChatThreadScreen}
+        options={{ title: "" }}
       />
     </EventsStackNav.Navigator>
   );

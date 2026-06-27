@@ -121,6 +121,21 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
 
           <FormError message={actionError} />
 
+          {isMember ? (
+            <View style={styles.chatButton}>
+              <PrimaryButton
+                label={strings.chat.open}
+                onPress={() =>
+                  navigation.navigate("ChatThread", {
+                    communityId: id,
+                    communityName: community.name,
+                    canModerate,
+                  })
+                }
+              />
+            </View>
+          ) : null}
+
           <PrimaryButton
             label={
               isMember ? strings.communities.leave : strings.communities.join
@@ -186,6 +201,9 @@ function createStyles(colors: ThemeColors) {
     },
     aboutContent: {
       padding: spacing.lg,
+    },
+    chatButton: {
+      marginBottom: spacing.md,
     },
     section: {
       marginBottom: spacing.lg,

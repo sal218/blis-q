@@ -51,10 +51,31 @@ export const pl = {
     activityEmpty: "Aktywność pojawi się wkrótce.", // "Activity will appear soon."
   },
 
-  // Chat tab — placeholder this slice (design ref: chat-screen.png).
+  // Chat tab placeholder (design ref: chat-screen.png) + the community chat
+  // THREAD (design ref: chat-groupchat-details-screen.png). The Messages inbox
+  // (Chat tab root) lands in P-24b; the thread is reached from a community for now.
   chat: {
     title: "Czat",
-    comingSoon: "Czat pojawi się wkrótce.",
+    comingSoon: "Czat pojawi się wkrótce.", // "Chat coming soon."
+    open: "Czat", // button on the community screen → opens that community's chat
+    composerPlaceholder: "Napisz wiadomość…", // "Write a message…"
+    send: "Wyślij", // "Send"
+    empty: "Brak wiadomości. Napisz pierwszą.", // "No messages. Write the first one."
+    loadError: "Nie udało się załadować czatu.", // "Couldn't load the chat."
+    retry: "Spróbuj ponownie", // "Try again"
+    deleted: "Ta wiadomość została usunięta.", // deleted-message tombstone
+    sendError: "Nie udało się wysłać wiadomości.", // send failure
+    notAvailable: "Ta wiadomość nie jest już dostępna.", // 404 on report/delete
+    forbidden: "Nie masz uprawnień do tej akcji.", // 403
+    // Per-message long-press actions
+    messageActions: "Opcje wiadomości", // a11y label / action-sheet title
+    report: "Zgłoś", // "Report"
+    reportTitle: "Zgłoś wiadomość", // report modal title (passed to ReportPostModal)
+    reportReasonPlaceholder: "Opisz, co jest nie tak z tą wiadomością",
+    reportSuccess: "Dziękujemy. Zgłoszenie zostało wysłane.", // success toast
+    delete: "Usuń", // "Delete"
+    deleteConfirmTitle: "Usunąć wiadomość?", // "Delete message?"
+    deleteConfirmBody: "Tej operacji nie można cofnąć.", // "This can't be undone."
   },
 
   // Events tab: a segmented section (Events / Safe places / Communities). Only

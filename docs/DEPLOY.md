@@ -61,6 +61,44 @@ DATABASE_URL=<test-url> npm run check:rls  # checks the test project
 
 ---
 
+## Supabase Realtime authorization — `supabase/realtime-auth.sql`
+
+Community chat (P-24a) delivers live messages over the **private** Realtime
+channel `chat:{communityId}`. Authorization lives in `supabase/realtime-auth.sql`:
+an RLS policy on Supabase's **internal** `realtime.messages` table + a
+`SECURITY DEFINER` membership function. This is the one intentional exception to
+the zero-policy model — it does **not** touch any app table, so `supabase/rls.sql`
+and `npm run check:rls` are unaffected (check:rls only inspects `public` app
+tables; `realtime.messages` is correctly outside its scope).
+
+Apply it **per environment**, human-run, **after** `supabase/rls.sql`:
+
+```bash
+# DATABASE_URL points at the target environment.
+psql "$DATABASE_URL" -f supabase/realtime-auth.sql   # idempotent
+```
+
+It is NOT applied by `db:push`/`db:rls` and is NOT managed by Drizzle. Re-run it
+whenever the file changes. Requires Supabase Realtime **Authorization** enabled
+for the project (private channels).
+
+### Live authorization spike checklist (do before relying on it)
+
+On a dev/test Supabase project with the SQL applied, verify the policy actually
+gates subscriptions (it cannot be unit-tested without a live connection):
+
+1. A **member** of community X can subscribe to `chat:{X}` and receives broadcasts.
+2. A **non-member** subscribing to `chat:{X}` is **rejected** (no messages).
+3. A member of a **soft-deleted** community (`communities.deleted_at` set) is
+   **rejected**.
+4. A malformed topic (not `chat:{uuid}`) is **rejected**.
+
+If Realtime Authorization proves unworkable for our model, fall back to a
+backend-issued opaque per-membership channel token (tracked under P-24) — weaker
+(no live revocation), so private channels are preferred.
+
+---
+
 ## Incident log
 
 ### 2026-06-18 — Production schema drift + disabled test RLS (repaired)

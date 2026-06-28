@@ -122,18 +122,29 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
           <FormError message={actionError} />
 
           {isMember ? (
-            <View style={styles.chatButton}>
-              <PrimaryButton
-                label={strings.chat.open}
-                onPress={() =>
-                  navigation.navigate("ChatThread", {
-                    communityId: id,
-                    communityName: community.name,
-                    canModerate,
-                  })
-                }
-              />
-            </View>
+            <>
+              <View style={styles.chatButton}>
+                <PrimaryButton
+                  label={strings.chat.open}
+                  onPress={() =>
+                    navigation.navigate("ChatThread", {
+                      communityId: id,
+                      communityName: community.name,
+                      canModerate,
+                    })
+                  }
+                />
+              </View>
+              <View style={styles.chatButton}>
+                <PrimaryButton
+                  label={strings.events.createCta}
+                  onPress={() =>
+                    navigation.navigate("CreateEvent", { communityId: id })
+                  }
+                  variant="secondary"
+                />
+              </View>
+            </>
           ) : null}
 
           <PrimaryButton

@@ -53,6 +53,28 @@ export function getEvent(id: string): Promise<EventsResult<EventDTO>> {
   );
 }
 
+// POST /api/v1/communities/:id/events — create an event (members only). Returns
+// 201 with the created EventDTO. 403 = not a member of the community; 404 =
+// community missing/deleted. Dates are ISO strings assembled by the form.
+export function createEvent(
+  communityId: string,
+  input: {
+    title: string;
+    description?: string;
+    location?: string;
+    startsAt: string;
+    endsAt?: string;
+  },
+): Promise<EventsResult<EventDTO>> {
+  return request(
+    "POST",
+    `/api/v1/communities/${communityId}/events`,
+    input,
+    (res) => res.json() as Promise<EventDTO>,
+    toEventsError,
+  );
+}
+
 // POST /api/v1/events/:id/rsvp — upsert the caller's RSVP. Community-member-gated
 // server-side (403 for non-members). Returns the stored status only — never an
 // attendee list. The screen patches goingCount locally from the status change.

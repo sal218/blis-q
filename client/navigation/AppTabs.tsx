@@ -12,6 +12,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { EventsScreen } from "@/screens/events/EventsScreen";
 import { EventDetailScreen } from "@/screens/events/EventDetailScreen";
+import { CreateEventScreen } from "@/screens/events/CreateEventScreen";
 import { CommunityDetailScreen } from "@/screens/communities/CommunityDetailScreen";
 import { CreateCommunityScreen } from "@/screens/communities/CreateCommunityScreen";
 import { ChatInboxScreen } from "@/screens/chat/ChatInboxScreen";
@@ -49,6 +50,7 @@ export type AppTabsParamList = {
 export type EventsStackParamList = {
   EventsHome: undefined;
   EventDetail: { id: string };
+  CreateEvent: { communityId: string };
   CommunityDetail: { id: string };
   CreateCommunity: undefined;
   ChatThread: ChatThreadParams;
@@ -92,6 +94,11 @@ function EventsStack() {
         name="EventDetail"
         component={EventDetailScreen}
         options={{ title: "" }}
+      />
+      <EventsStackNav.Screen
+        name="CreateEvent"
+        component={CreateEventScreen}
+        options={{ title: strings.events.createTitle }}
       />
       <EventsStackNav.Screen
         name="CommunityDetail"

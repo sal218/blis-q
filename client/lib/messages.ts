@@ -7,6 +7,7 @@ import type { BlocksApiError } from "@/lib/api/safety";
 import type { PostsApiError } from "@/lib/api/posts";
 import type { ChatApiError } from "@/lib/api/chat";
 import type { EventsApiError } from "@/lib/api/events";
+import type { EventFieldError } from "@/validation/events";
 
 // The single place that turns locale-independent error codes (from validation +
 // the API client) into user-facing Polish copy. Centralised so every screen
@@ -128,6 +129,42 @@ export function eventsApiErrorMessage(error: EventsApiError): string {
       return strings.events.notAvailable;
     case "forbidden":
       return strings.events.rsvpForbidden;
+    case "validation":
+    case "server":
+      return strings.errors.generic;
+  }
+}
+
+// Create-event form field errors → Polish copy.
+export function eventFieldErrorMessage(err: EventFieldError): string {
+  switch (err.code) {
+    case "titleRequired":
+      return strings.events.titleRequired;
+    case "titleTooLong":
+      return format(strings.events.titleTooLong, { max: err.max });
+    case "descriptionTooLong":
+      return format(strings.events.descriptionTooLong, { max: err.max });
+    case "locationTooLong":
+      return format(strings.events.locationTooLong, { max: err.max });
+    case "endBeforeStart":
+      return strings.events.endBeforeStart;
+  }
+}
+
+// Create-event API errors → copy. `forbidden` (403) here means the caller isn't a
+// MEMBER of the community (so can't create) — distinct from RSVP's forbidden copy;
+// `notFound` (404) means the community is gone. Reusing eventsApiErrorMessage
+// would show the RSVP wording, hence this create-specific mapper.
+export function createEventApiErrorMessage(error: EventsApiError): string {
+  switch (error.kind) {
+    case "rateLimited":
+      return format(strings.errors.rateLimited, { seconds: error.retryAfter });
+    case "network":
+      return strings.errors.network;
+    case "forbidden":
+      return strings.events.createForbidden;
+    case "notFound":
+      return strings.events.createCommunityGone;
     case "validation":
     case "server":
       return strings.errors.generic;

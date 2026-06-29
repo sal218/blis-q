@@ -3,7 +3,7 @@
 jest.mock("@/lib/auth", () => ({ fetchWithAuth: jest.fn() }));
 
 import { fetchWithAuth } from "@/lib/auth";
-import { listEvents, getEvent, setRsvp } from "@/lib/api/events";
+import { listEvents, getEvent, setRsvp, createEvent } from "@/lib/api/events";
 
 const fetchMock = fetchWithAuth as unknown as jest.Mock;
 
@@ -144,6 +144,56 @@ describe("events API client — setRsvp", () => {
 
     fetchMock.mockRejectedValueOnce(new Error("offline"));
     expect(await setRsvp("e1", "going")).toEqual({
+      ok: false,
+      error: { kind: "network" },
+    });
+  });
+});
+
+describe("events API client — createEvent", () => {
+  const input = {
+    title: "Spotkanie",
+    location: "Warszawa",
+    startsAt: "2026-07-04T16:00:00.000Z",
+  };
+
+  it("201 → ok with the created EventDTO; posts to the community events path", async () => {
+    fetchMock.mockResolvedValue(res(201, EVENT));
+    expect(await createEvent("c1", input)).toEqual({ ok: true, data: EVENT });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/v1/communities/c1/events",
+      input,
+    );
+  });
+
+  it("403 → forbidden (non-member); 404 → notFound; 400 → validation; 429; network", async () => {
+    fetchMock.mockResolvedValueOnce(res(403, {}));
+    expect(await createEvent("c1", input)).toEqual({
+      ok: false,
+      error: { kind: "forbidden" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(404, {}));
+    expect(await createEvent("c1", input)).toEqual({
+      ok: false,
+      error: { kind: "notFound" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(400, {}));
+    expect(await createEvent("c1", input)).toEqual({
+      ok: false,
+      error: { kind: "validation" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(429, { retryAfter: 15 }));
+    expect(await createEvent("c1", input)).toEqual({
+      ok: false,
+      error: { kind: "rateLimited", retryAfter: 15 },
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    expect(await createEvent("c1", input)).toEqual({
       ok: false,
       error: { kind: "network" },
     });

@@ -50,7 +50,11 @@ const community = (membership: Membership) => ({
 });
 
 function renderDetail() {
-  const navigation = { setOptions: jest.fn(), replace: jest.fn() };
+  const navigation = {
+    setOptions: jest.fn(),
+    replace: jest.fn(),
+    navigate: jest.fn(),
+  };
   render(
     <CommunityDetailScreen
       navigation={navigation as never}
@@ -102,6 +106,29 @@ describe("CommunityDetailScreen", () => {
       await screen.findByRole("button", { name: strings.communities.leave }),
     ).toBeTruthy();
     expect(joinMock).toHaveBeenCalledWith("c1");
+  });
+
+  it("member sees the Create-event entry → navigates to CreateEvent", async () => {
+    getMock.mockResolvedValue({
+      ok: true,
+      data: community({ role: "member" }),
+    });
+    const { navigation } = renderDetail();
+    fireEvent.press(
+      await screen.findByRole("button", { name: strings.events.createCta }),
+    );
+    expect(navigation.navigate).toHaveBeenCalledWith("CreateEvent", {
+      communityId: "c1",
+    });
+  });
+
+  it("non-member does not see the Create-event entry", async () => {
+    getMock.mockResolvedValue({ ok: true, data: community(null) });
+    renderDetail();
+    await screen.findByRole("button", { name: strings.communities.join });
+    expect(
+      screen.queryByRole("button", { name: strings.events.createCta }),
+    ).toBeNull();
   });
 
   it("shows the sole-admin copy when leaving conflicts (409)", async () => {

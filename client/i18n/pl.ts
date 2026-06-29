@@ -121,6 +121,32 @@ export const pl = {
     // API error copy
     notAvailable: "To wydarzenie nie jest już dostępne.", // "This event is no longer available."
     rsvpForbidden: "Dołącz do społeczności, aby potwierdzić udział.", // "Join the community to RSVP."
+
+    // Create event (form on Community detail)
+    createCta: "Utwórz wydarzenie", // "Create event" (the entry button)
+    createTitle: "Nowe wydarzenie", // "New event" (screen header)
+    titleLabel: "Tytuł", // "Title"
+    titlePlaceholder: "Nazwa wydarzenia", // "Event name"
+    descriptionLabel: "Opis (opcjonalnie)", // "Description (optional)"
+    descriptionPlaceholder: "Szczegóły wydarzenia", // "Event details"
+    locationLabel: "Miejsce (opcjonalnie)", // "Location (optional)"
+    locationPlaceholder: "Adres lub nazwa miejsca", // "Address or venue name"
+    startLabel: "Początek", // "Start"
+    endLabel: "Koniec", // "End"
+    addEnd: "Dodaj godzinę zakończenia", // "Add end time"
+    removeEnd: "Usuń godzinę zakończenia", // "Remove end time"
+    create: "Utwórz wydarzenie", // "Create event" (submit)
+    createError: "Nie udało się utworzyć wydarzenia. Spróbuj ponownie.", // "Couldn't create the event."
+    // Field errors
+    titleRequired: "Podaj tytuł wydarzenia.", // "Enter an event title."
+    titleTooLong: "Tytuł może mieć maksymalnie {max} znaków.", // "Title max {max} chars."
+    descriptionTooLong: "Opis może mieć maksymalnie {max} znaków.", // "Description max {max} chars."
+    locationTooLong: "Miejsce może mieć maksymalnie {max} znaków.", // "Location max {max} chars."
+    endBeforeStart: "Koniec musi być po początku.", // "End must be after the start."
+    // Create API error copy
+    createForbidden:
+      "Musisz być członkiem tej społeczności, aby utworzyć wydarzenie.", // "You must be a member of this community to create an event."
+    createCommunityGone: "Tej społeczności już nie ma.", // "This community no longer exists."
   },
 
   profile: {

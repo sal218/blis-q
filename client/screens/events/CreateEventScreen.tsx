@@ -79,7 +79,7 @@ function DateTimeChip({
   onPick: (picked: Date) => void;
   testID: string;
 }) {
-  const { colors } = useTheme();
+  const { colors, mode: themeMode } = useTheme();
   const [open, setOpen] = useState(false);
 
   const handle = (event: DateTimePickerEvent, selected?: Date) => {
@@ -96,6 +96,11 @@ function DateTimeChip({
         mode={mode}
         display="compact"
         locale="pl-PL"
+        // Match the app theme so the pill isn't a light control on a dark
+        // screen; brand-tint the selected value. (Full custom pickers are part
+        // of the planned events-UI revamp.)
+        themeVariant={themeMode === "dark" ? "dark" : "light"}
+        accentColor={colors.primary}
         onChange={handle}
       />
     );
@@ -230,9 +235,9 @@ export function CreateEventScreen({ route, navigation }: Props) {
           testID="add-end"
           accessibilityRole="button"
           onPress={() => setEndsAt(new Date(startsAt.getTime() + 60 * 60_000))}
-          style={styles.addEnd}
+          style={({ pressed }) => [styles.endToggle, pressed && styles.pressed]}
         >
-          <Text style={styles.addEndText}>{strings.events.addEnd}</Text>
+          <Text style={styles.endToggleAdd}>＋ {strings.events.addEnd}</Text>
         </Pressable>
       ) : (
         <>
@@ -262,8 +267,14 @@ export function CreateEventScreen({ route, navigation }: Props) {
               setEndsAt(null);
               setDateError(null);
             }}
+            style={({ pressed }) => [
+              styles.endToggle,
+              pressed && styles.pressed,
+            ]}
           >
-            <Text style={styles.removeEnd}>{strings.events.removeEnd}</Text>
+            <Text style={styles.endToggleRemove}>
+              ✕ {strings.events.removeEnd}
+            </Text>
           </Pressable>
         </>
       )}
@@ -303,18 +314,29 @@ function createStyles(colors: ThemeColors) {
       alignItems: "center",
       gap: spacing.md,
     },
-    addEnd: {
+    // Add/remove end time: a clearly-tappable bordered pill (not bare text).
+    endToggle: {
+      alignSelf: "flex-start",
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
       marginTop: spacing.md,
     },
-    addEndText: {
-      color: colors.primary,
-      fontSize: 15,
-      fontWeight: "600",
+    pressed: {
+      opacity: 0.6,
     },
-    removeEnd: {
+    endToggleAdd: {
+      color: colors.primary,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    endToggleRemove: {
       color: colors.textMuted,
       fontSize: 14,
-      marginTop: spacing.sm,
+      fontWeight: "700",
     },
     dateError: {
       color: colors.danger,

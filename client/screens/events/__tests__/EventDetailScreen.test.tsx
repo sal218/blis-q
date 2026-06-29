@@ -56,6 +56,9 @@ describe("EventDetailScreen", () => {
     expect(screen.getByText("SOB")).toBeTruthy();
     expect(screen.getByText("4")).toBeTruthy();
     expect(screen.getByText("LIP")).toBeTruthy();
+    // the time row and a separate full-date row (no duplicated time)
+    expect(screen.getByText("16:00 – 18:00")).toBeTruthy();
+    expect(screen.getByText("4 lipca 2026")).toBeTruthy();
   });
 
   it("shows the gradient placeholder (no image) when the event has no banner", () => {

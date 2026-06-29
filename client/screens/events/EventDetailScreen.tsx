@@ -37,6 +37,13 @@ type Props = NativeStackScreenProps<EventsStackParamList, "EventDetail">;
 
 const BANNER_HEIGHT = 200;
 
+// The date badge overlays the banner IMAGE (arbitrary colours), so its scrim +
+// text are intentionally theme-INDEPENDENT: a dark scrim + white text stays
+// legible over any image in BOTH light and dark mode (the standard photo-badge
+// pattern). Theme tokens would wrongly flip these in dark mode.
+const BADGE_SCRIM = "rgba(0,0,0,0.5)";
+const BADGE_TEXT = "#fff";
+
 // Segment order ↔ RsvpStatus. The caller's current status maps to a selected
 // index; "no RSVP yet" is -1 (no segment highlighted).
 const RSVP_ORDER: RsvpStatus[] = ["going", "interested", "not_going"];
@@ -92,8 +99,8 @@ export function EventDetailScreen({ route }: Props) {
 
   const badge = formatEventDateBadge(event.startsAt);
   const time = formatEventTimeRange(event.startsAt, event.endsAt);
-  const longDate = formatEventDateLong(event.startsAt);
-  const fullWhen = [longDate, time].filter(Boolean).join("  ·  ");
+  // The Clock row above already shows the time; this row is the full date only.
+  const fullWhen = formatEventDateLong(event.startsAt);
 
   const selectedIndex = event.rsvp ? RSVP_ORDER.indexOf(event.rsvp.status) : -1;
 
@@ -232,22 +239,22 @@ function createStyles(colors: ThemeColors) {
       paddingVertical: spacing.sm,
       paddingHorizontal: spacing.md,
       borderRadius: radius.md,
-      backgroundColor: "rgba(0,0,0,0.5)",
+      backgroundColor: BADGE_SCRIM,
     },
     badgeWeekday: {
-      color: "#fff",
+      color: BADGE_TEXT,
       fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.5,
     },
     badgeDay: {
-      color: "#fff",
+      color: BADGE_TEXT,
       fontSize: 26,
       fontWeight: "800",
       lineHeight: 30,
     },
     badgeMonth: {
-      color: "#fff",
+      color: BADGE_TEXT,
       fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.5,

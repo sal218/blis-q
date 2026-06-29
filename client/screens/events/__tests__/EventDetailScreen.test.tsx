@@ -45,13 +45,35 @@ function renderDetail() {
 beforeEach(() => eventMock.mockReset());
 
 describe("EventDetailScreen", () => {
-  it("renders the event fields and going count", () => {
+  it("renders the event fields, the date badge and going count", () => {
     eventMock.mockReturnValue(state());
     renderDetail();
     expect(screen.getByText("Pride Meetup")).toBeTruthy();
     expect(screen.getByText("Warszawa")).toBeTruthy();
     expect(screen.getByText("Spotkanie społeczności")).toBeTruthy();
     expect(screen.getByText("46 idzie")).toBeTruthy();
+    // stacked date badge for 2026-07-04 (a Saturday in July) → SOB / 4 / LIP
+    expect(screen.getByText("SOB")).toBeTruthy();
+    expect(screen.getByText("4")).toBeTruthy();
+    expect(screen.getByText("LIP")).toBeTruthy();
+  });
+
+  it("shows the gradient placeholder (no image) when the event has no banner", () => {
+    eventMock.mockReturnValue(state()); // default imageUrl: null
+    renderDetail();
+    expect(screen.getByTestId("event-banner-placeholder")).toBeTruthy();
+    expect(screen.queryByTestId("event-banner")).toBeNull();
+    // privacy: going COUNT only — no attendee images/identities are rendered
+    expect(screen.getByText("46 idzie")).toBeTruthy();
+  });
+
+  it("renders the banner image when the event has one", () => {
+    eventMock.mockReturnValue(
+      state({ event: event({ imageUrl: "https://cdn.example/e1.jpg" }) }),
+    );
+    renderDetail();
+    expect(screen.getByTestId("event-banner")).toBeTruthy();
+    expect(screen.queryByTestId("event-banner-placeholder")).toBeNull();
   });
 
   it("highlights the caller's current RSVP status", () => {

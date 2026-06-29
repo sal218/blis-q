@@ -61,16 +61,62 @@ export function formatInboxTime(iso: string, now: number = Date.now()): string {
 // Polish uppercase weekday abbreviations, indexed by Date.getDay() (0 = Sunday).
 const PL_WEEKDAYS = ["NDZ", "PON", "WT", "ŚR", "CZW", "PT", "SOB"];
 
-// Event-card date badge: the weekday abbreviation + day-of-month (e.g. SOB / 24).
-// Pure (no `now`); an invalid date yields empty strings so the badge stays blank
-// rather than rendering "NaN".
+// Polish uppercase month abbreviations, indexed by Date.getMonth() (0 = January).
+const PL_MONTHS_SHORT = [
+  "STY",
+  "LUT",
+  "MAR",
+  "KWI",
+  "MAJ",
+  "CZE",
+  "LIP",
+  "SIE",
+  "WRZ",
+  "PAŹ",
+  "LIS",
+  "GRU",
+];
+
+// Polish genitive month names ("24 maja"), indexed by Date.getMonth().
+const PL_MONTHS_GENITIVE = [
+  "stycznia",
+  "lutego",
+  "marca",
+  "kwietnia",
+  "maja",
+  "czerwca",
+  "lipca",
+  "sierpnia",
+  "września",
+  "października",
+  "listopada",
+  "grudnia",
+];
+
+// Event date badge: weekday abbreviation + day-of-month + month abbreviation
+// (e.g. SOB / 24 / LIP). Pure (no `now`); an invalid date yields empty strings so
+// the badge stays blank rather than rendering "NaN". `month` is additive — the
+// feed card reads only weekday + day.
 export function formatEventDateBadge(iso: string): {
   weekday: string;
   day: string;
+  month: string;
 } {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return { weekday: "", day: "" };
-  return { weekday: PL_WEEKDAYS[d.getDay()], day: String(d.getDate()) };
+  if (Number.isNaN(d.getTime())) return { weekday: "", day: "", month: "" };
+  return {
+    weekday: PL_WEEKDAYS[d.getDay()],
+    day: String(d.getDate()),
+    month: PL_MONTHS_SHORT[d.getMonth()],
+  };
+}
+
+// Long Polish date for the detail screen: "24 lipca 2026" (day + genitive month +
+// year). Invalid → "".
+export function formatEventDateLong(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getDate()} ${PL_MONTHS_GENITIVE[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 // Event time range: "16:00 – 18:00", or just "16:00" when there is no end time.

@@ -1,6 +1,7 @@
 import {
   formatInboxTime,
   formatEventDateBadge,
+  formatEventDateLong,
   formatEventTimeRange,
 } from "@/lib/relativeTime";
 import { strings } from "@/i18n";
@@ -33,20 +34,37 @@ describe("formatInboxTime", () => {
 
 // Local (no-Z) datetimes → getDay()/getHours() are timezone-independent.
 describe("formatEventDateBadge", () => {
-  it("returns the Polish weekday abbrev + day-of-month", () => {
-    // 2026-07-04 is a Saturday → SOB; 2026-07-05 is a Sunday → NDZ.
+  it("returns the Polish weekday abbrev + day + month abbrev", () => {
+    // 2026-07-04 is a Saturday in July → SOB / 4 / LIP.
     expect(formatEventDateBadge("2026-07-04T16:00:00")).toEqual({
       weekday: "SOB",
       day: "4",
+      month: "LIP",
     });
-    expect(formatEventDateBadge("2026-07-05T09:00:00")).toEqual({
-      weekday: "NDZ",
+    expect(formatEventDateBadge("2026-12-05T09:00:00")).toEqual({
+      weekday: "SOB",
       day: "5",
+      month: "GRU",
     });
   });
 
   it("invalid date → empty fields", () => {
-    expect(formatEventDateBadge("nope")).toEqual({ weekday: "", day: "" });
+    expect(formatEventDateBadge("nope")).toEqual({
+      weekday: "",
+      day: "",
+      month: "",
+    });
+  });
+});
+
+describe("formatEventDateLong", () => {
+  it("day + genitive month + year", () => {
+    expect(formatEventDateLong("2026-07-04T16:00:00")).toBe("4 lipca 2026");
+    expect(formatEventDateLong("2026-12-25T10:00:00")).toBe("25 grudnia 2026");
+  });
+
+  it("invalid date → empty string", () => {
+    expect(formatEventDateLong("nope")).toBe("");
   });
 });
 

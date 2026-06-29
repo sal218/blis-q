@@ -1,5 +1,12 @@
 import { useMemo, useState } from "react";
-import { ScrollView, View, Text, Pressable, StyleSheet } from "react-native";
+import {
+  ScrollView,
+  View,
+  Text,
+  Pressable,
+  Platform,
+  StyleSheet,
+} from "react-native";
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -25,14 +32,12 @@ import type { EventsStackParamList } from "@/navigation/AppTabs";
 
 // Create-event form (entry: the member-only button on Community detail). Mirrors
 // CreateCommunityScreen: validate (client mirror of the server schema) → submit
-// trimmed → replace with the new event's detail on success. Dates use the native
-// @react-native-community/datetimepicker (separate date + time, since Android
-// can't do a combined "datetime" mode). startsAt defaults to the next top-of-hour;
-// the end time is optional. Times are sent as ISO (UTC); the feed renders local.
+// trimmed → replace with the new event's detail on success. Start has a separate
+// date + time control and an optional end (Android has no combined "datetime"
+// mode, so date/time are split on both platforms for symmetry). startsAt defaults
+// to the next top-of-hour. Times are sent as ISO (UTC); the feed renders local.
 
 type Props = NativeStackScreenProps<EventsStackParamList, "CreateEvent">;
-
-type PickerTarget = { which: "start" | "end"; mode: "date" | "time" };
 
 function nextTopOfHour(): Date {
   const d = new Date();
@@ -57,6 +62,70 @@ function mergePart(base: Date, picked: Date, mode: "date" | "time"): Date {
   return d;
 }
 
+// One date OR time control. On iOS the native compact picker renders INLINE as
+// the control itself (a pill that pops the calendar/wheel in place) — no separate
+// button. On Android the picker has no inline UI, so we show a button and open it
+// as a dialog on press. `onPick` receives the raw picked Date; the parent merges
+// the relevant part. (testID is set on the picker on iOS and on the button on
+// Android, so it's pressable in both real use and tests.)
+function DateTimeChip({
+  value,
+  mode,
+  onPick,
+  testID,
+}: {
+  value: Date;
+  mode: "date" | "time";
+  onPick: (picked: Date) => void;
+  testID: string;
+}) {
+  const { colors } = useTheme();
+  const [open, setOpen] = useState(false);
+
+  const handle = (event: DateTimePickerEvent, selected?: Date) => {
+    if (Platform.OS !== "ios") setOpen(false); // Android dialogs are one-shot
+    if (event.type === "dismissed" || !selected) return;
+    onPick(selected);
+  };
+
+  if (Platform.OS === "ios") {
+    return (
+      <DateTimePicker
+        testID={testID}
+        value={value}
+        mode={mode}
+        display="compact"
+        locale="pl-PL"
+        onChange={handle}
+      />
+    );
+  }
+
+  return (
+    <>
+      <Pressable
+        testID={testID}
+        accessibilityRole="button"
+        onPress={() => setOpen(true)}
+        style={{
+          flex: 1,
+          backgroundColor: colors.surface,
+          borderRadius: radius.md,
+          paddingVertical: spacing.md,
+          alignItems: "center",
+        }}
+      >
+        <Text style={{ color: colors.text, fontSize: 16 }}>
+          {mode === "date" ? fmtDate(value) : fmtTime(value)}
+        </Text>
+      </Pressable>
+      {open ? (
+        <DateTimePicker value={value} mode={mode} onChange={handle} />
+      ) : null}
+    </>
+  );
+}
+
 export function CreateEventScreen({ route, navigation }: Props) {
   const { communityId } = route.params;
   const { colors } = useTheme();
@@ -67,7 +136,6 @@ export function CreateEventScreen({ route, navigation }: Props) {
   const [location, setLocation] = useState("");
   const [startsAt, setStartsAt] = useState<Date>(nextTopOfHour);
   const [endsAt, setEndsAt] = useState<Date | null>(null);
-  const [picker, setPicker] = useState<PickerTarget | null>(null);
 
   const [titleError, setTitleError] = useState<string | null>(null);
   const [descriptionError, setDescriptionError] = useState<string | null>(null);
@@ -75,17 +143,6 @@ export function CreateEventScreen({ route, navigation }: Props) {
   const [dateError, setDateError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const onPickerChange = (event: DateTimePickerEvent, selected?: Date) => {
-    const target = picker;
-    setPicker(null); // Android dialogs are one-shot; close on every result.
-    if (!target || event.type === "dismissed" || !selected) return;
-    if (target.which === "start") {
-      setStartsAt((s) => mergePart(s, selected, target.mode));
-    } else {
-      setEndsAt((e) => mergePart(e ?? startsAt, selected, target.mode));
-    }
-  };
 
   const onSubmit = async () => {
     const titleErr = validateEventTitle(title);
@@ -115,8 +172,6 @@ export function CreateEventScreen({ route, navigation }: Props) {
       setFormError(createEventApiErrorMessage(res.error));
     }
   };
-
-  const pickerValue = picker?.which === "end" ? (endsAt ?? startsAt) : startsAt;
 
   return (
     <ScrollView
@@ -155,22 +210,18 @@ export function CreateEventScreen({ route, navigation }: Props) {
       {/* Start */}
       <Text style={styles.fieldLabel}>{strings.events.startLabel}</Text>
       <View style={styles.dateRow}>
-        <Pressable
+        <DateTimeChip
           testID="start-date"
-          accessibilityRole="button"
-          onPress={() => setPicker({ which: "start", mode: "date" })}
-          style={styles.dateChip}
-        >
-          <Text style={styles.dateChipText}>{fmtDate(startsAt)}</Text>
-        </Pressable>
-        <Pressable
+          value={startsAt}
+          mode="date"
+          onPick={(d) => setStartsAt((s) => mergePart(s, d, "date"))}
+        />
+        <DateTimeChip
           testID="start-time"
-          accessibilityRole="button"
-          onPress={() => setPicker({ which: "start", mode: "time" })}
-          style={styles.dateChip}
-        >
-          <Text style={styles.dateChipText}>{fmtTime(startsAt)}</Text>
-        </Pressable>
+          value={startsAt}
+          mode="time"
+          onPick={(d) => setStartsAt((s) => mergePart(s, d, "time"))}
+        />
       </View>
 
       {/* End (optional) */}
@@ -187,22 +238,22 @@ export function CreateEventScreen({ route, navigation }: Props) {
         <>
           <Text style={styles.fieldLabel}>{strings.events.endLabel}</Text>
           <View style={styles.dateRow}>
-            <Pressable
+            <DateTimeChip
               testID="end-date"
-              accessibilityRole="button"
-              onPress={() => setPicker({ which: "end", mode: "date" })}
-              style={styles.dateChip}
-            >
-              <Text style={styles.dateChipText}>{fmtDate(endsAt)}</Text>
-            </Pressable>
-            <Pressable
+              value={endsAt}
+              mode="date"
+              onPick={(d) =>
+                setEndsAt((e) => mergePart(e ?? startsAt, d, "date"))
+              }
+            />
+            <DateTimeChip
               testID="end-time"
-              accessibilityRole="button"
-              onPress={() => setPicker({ which: "end", mode: "time" })}
-              style={styles.dateChip}
-            >
-              <Text style={styles.dateChipText}>{fmtTime(endsAt)}</Text>
-            </Pressable>
+              value={endsAt}
+              mode="time"
+              onPick={(d) =>
+                setEndsAt((e) => mergePart(e ?? startsAt, d, "time"))
+              }
+            />
           </View>
           <Pressable
             testID="remove-end"
@@ -218,15 +269,6 @@ export function CreateEventScreen({ route, navigation }: Props) {
       )}
 
       {dateError ? <Text style={styles.dateError}>{dateError}</Text> : null}
-
-      {picker ? (
-        <DateTimePicker
-          testID="event-picker"
-          value={pickerValue}
-          mode={picker.mode}
-          onChange={onPickerChange}
-        />
-      ) : null}
 
       <View style={styles.submit}>
         <PrimaryButton
@@ -258,19 +300,8 @@ function createStyles(colors: ThemeColors) {
     },
     dateRow: {
       flexDirection: "row",
-      gap: spacing.sm,
-    },
-    dateChip: {
-      flex: 1,
-      backgroundColor: colors.surface,
-      borderRadius: radius.md,
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.md,
       alignItems: "center",
-    },
-    dateChipText: {
-      color: colors.text,
-      fontSize: 16,
+      gap: spacing.md,
     },
     addEnd: {
       marginTop: spacing.md,

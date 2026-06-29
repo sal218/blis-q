@@ -91,13 +91,14 @@ describe("CreateEventScreen", () => {
       screen.getByPlaceholderText(strings.events.titlePlaceholder),
       "Spotkanie",
     );
-    // enable an end time (defaults to start + 1h), then pick an earlier DATE
+    // enable an end time (defaults to start + 1h), then pick an earlier DATE.
+    // On iOS (jest-expo default) the picker IS the inline control, so pressing
+    // its testID fires onChange directly.
     fireEvent.press(screen.getByTestId("add-end"));
     (globalThis as { __pickedDate?: Date }).__pickedDate = new Date(
       "2020-01-01T10:00:00",
     );
     fireEvent.press(screen.getByTestId("end-date"));
-    fireEvent.press(screen.getByTestId("event-picker"));
 
     fireEvent.press(screen.getByText(strings.events.create));
     await waitFor(() =>

@@ -14,16 +14,19 @@ import type { AppTabsParamList } from "@/navigation/AppTabs";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useHomeCommunities } from "@/hooks/useHomeCommunities";
+import { useHomeEvents } from "@/hooks/useHomeEvents";
 import { SectionHeader } from "@/components/SectionHeader";
 import { CommunityRailCard } from "@/components/CommunityRailCard";
+import { EventCard } from "@/components/EventCard";
 import { strings, format } from "@/i18n";
 import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
 
 // Home tab (design ref: assets/home-screen.png). Greeting + a live
-// "Your communities" rail; events / safe-places / activity are polished empty
-// states until their data exists (events Sprint 6, safe places Sprint 7;
-// cross-community activity feed — P-13). Communities live under the Events tab,
-// so taps deep-link into the Events stack. Light = mockup, dark = brand purple.
+// "Your communities" rail + a live "Upcoming events" rail (the caller's own
+// RSVP'd "going" events). Safe-places + activity remain polished empty states
+// until their data exists (safe places Sprint 7; cross-community activity feed —
+// P-13). Communities + events live under the Events tab, so taps deep-link into
+// the Events stack. Light = mockup, dark = brand purple.
 
 type Props = BottomTabScreenProps<AppTabsParamList, "Home">;
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
@@ -34,6 +37,7 @@ export function HomeScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
   const { communities, status } = useHomeCommunities();
+  const { events, status: eventsStatus } = useHomeEvents();
 
   const name = user?.displayName?.trim();
   const greeting = name
@@ -46,6 +50,10 @@ export function HomeScreen({ navigation }: Props) {
       params: { id },
     });
   const goToCommunities = () =>
+    navigation.navigate("Events", { screen: "EventsHome" });
+  const openEvent = (id: string) =>
+    navigation.navigate("Events", { screen: "EventDetail", params: { id } });
+  const goToEvents = () =>
     navigation.navigate("Events", { screen: "EventsHome" });
 
   return (
@@ -105,13 +113,36 @@ export function HomeScreen({ navigation }: Props) {
         )}
       </View>
 
-      <PlaceholderSection
-        title={strings.home.upcomingEvents}
-        icon="calendar-outline"
-        message={strings.home.eventsEmpty}
-        styles={styles}
-        colors={colors}
-      />
+      <View style={styles.section}>
+        <SectionHeader
+          title={strings.home.upcomingEvents}
+          onSeeAll={goToEvents}
+        />
+        {eventsStatus === "loading" ? (
+          <ActivityIndicator
+            color={colors.primary}
+            style={styles.railLoading}
+          />
+        ) : events.length === 0 ? (
+          <View style={styles.placeholderCard}>
+            <Ionicons
+              name="calendar-outline"
+              size={28}
+              color={colors.textMuted}
+            />
+            <Text style={styles.placeholderText}>
+              {strings.home.noUpcomingEvents}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.eventsList}>
+            {events.slice(0, 3).map((e) => (
+              <EventCard key={e.id} event={e} onPress={openEvent} />
+            ))}
+          </View>
+        )}
+      </View>
+
       <PlaceholderSection
         title={strings.home.nearbyPlaces}
         icon="location-outline"
@@ -187,6 +218,9 @@ function createStyles(colors: ThemeColors) {
     },
     railLoading: {
       alignSelf: "flex-start",
+    },
+    eventsList: {
+      gap: spacing.sm,
     },
     emptyText: {
       color: colors.textMuted,

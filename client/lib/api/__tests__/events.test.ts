@@ -3,7 +3,13 @@
 jest.mock("@/lib/auth", () => ({ fetchWithAuth: jest.fn() }));
 
 import { fetchWithAuth } from "@/lib/auth";
-import { listEvents, getEvent, setRsvp, createEvent } from "@/lib/api/events";
+import {
+  listEvents,
+  listMyEvents,
+  getEvent,
+  setRsvp,
+  createEvent,
+} from "@/lib/api/events";
 
 const fetchMock = fetchWithAuth as unknown as jest.Mock;
 
@@ -79,6 +85,32 @@ describe("events API client — listEvents", () => {
   it("fetch throwing → network", async () => {
     fetchMock.mockRejectedValueOnce(new Error("offline"));
     expect(await listEvents()).toEqual({
+      ok: false,
+      error: { kind: "network" },
+    });
+  });
+});
+
+describe("events API client — listMyEvents", () => {
+  it("200 → ok with the bare event array at /events/mine", async () => {
+    fetchMock.mockResolvedValue(res(200, [EVENT]));
+    expect(await listMyEvents()).toEqual({ ok: true, data: [EVENT] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "GET",
+      "/api/v1/events/mine",
+      undefined,
+    );
+  });
+
+  it("5xx → server; network", async () => {
+    fetchMock.mockResolvedValueOnce(res(500, {}));
+    expect(await listMyEvents()).toEqual({
+      ok: false,
+      error: { kind: "server" },
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    expect(await listMyEvents()).toEqual({
       ok: false,
       error: { kind: "network" },
     });

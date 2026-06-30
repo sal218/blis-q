@@ -31,8 +31,8 @@ const app = express();
 app.use(express.json());
 registerAdminRoutes(app);
 
-const signInMock =
-  supabaseClient.auth.signInWithPassword as unknown as jest.Mock;
+const signInMock = supabaseClient.auth
+  .signInWithPassword as unknown as jest.Mock;
 const signOutMock = supabaseAdmin.auth.admin.signOut as unknown as jest.Mock;
 const rlMock = checkAdminLoginRateLimit as unknown as jest.Mock;
 

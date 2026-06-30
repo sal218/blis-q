@@ -56,10 +56,7 @@ function setupCors(app: express.Application) {
         "Access-Control-Allow-Methods",
         "GET, POST, PUT, PATCH, DELETE, OPTIONS",
       );
-      res.header(
-        "Access-Control-Allow-Headers",
-        "Content-Type, Authorization",
-      );
+      res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
       res.header("Access-Control-Allow-Credentials", "true");
     };
 
@@ -140,7 +137,9 @@ function setupResendUrlFix(app: express.Application) {
     if (!match) return next();
     const idx = match.index!;
     const fixed = req.url.substring(0, idx) + "?" + req.url.substring(idx + 3);
-    log(`[URL-FIX] Resend encoding detected, redirecting: ${fixed.substring(0, 60)}…`);
+    log(
+      `[URL-FIX] Resend encoding detected, redirecting: ${fixed.substring(0, 60)}…`,
+    );
     return res.redirect(302, fixed);
   });
 }
@@ -160,7 +159,11 @@ function setupHelmet(app: express.Application) {
             "https://apis.google.com",
             ...(isProd ? [] : ["'unsafe-inline'", "'unsafe-eval'"]),
           ],
-          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            "https://fonts.googleapis.com",
+          ],
           fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
           // No bare `https:` wildcard — restrict images to known providers:
           // R2 (presigned asset URLs), Supabase, and Google account avatars

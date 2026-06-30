@@ -17,10 +17,7 @@ const BRAND_PRIMARY = "#4F46E5";
  * Shared responsive email shell. Keeps every template visually consistent and
  * avoids repeating the full HTML boilerplate in each send function.
  */
-function renderEmail(options: {
-  heading: string;
-  bodyHtml: string;
-}): string {
+function renderEmail(options: { heading: string; bodyHtml: string }): string {
   const year = new Date().getFullYear();
   return `
     <!DOCTYPE html>

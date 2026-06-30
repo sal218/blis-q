@@ -44,7 +44,8 @@ const app = express();
 app.use(express.json());
 registerAuthRoutes(app);
 
-const updateUserMock = supabaseAdmin.auth.admin.updateUserById as unknown as jest.Mock;
+const updateUserMock = supabaseAdmin.auth.admin
+  .updateUserById as unknown as jest.Mock;
 const rlMock = checkPasswordResetRateLimit as unknown as jest.Mock;
 const emailMock = sendPasswordResetEmail as unknown as jest.Mock;
 
@@ -129,7 +130,10 @@ describe("POST /api/v1/auth/forgot-password", () => {
 
   it("deleted account → identical 202, nothing stored or sent", async () => {
     const { id, email } = await seedUser();
-    await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, id));
+    await db
+      .update(users)
+      .set({ deletedAt: new Date() })
+      .where(eq(users.id, id));
 
     const res = await request(app)
       .post("/api/v1/auth/forgot-password")
@@ -240,7 +244,10 @@ describe("POST /api/v1/auth/reset-password", () => {
   it("token for a now-soft-deleted account → 400, no password change", async () => {
     const { id, email } = await seedUser();
     const token = await requestResetToken(email);
-    await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, id));
+    await db
+      .update(users)
+      .set({ deletedAt: new Date() })
+      .where(eq(users.id, id));
 
     const res = await request(app)
       .post("/api/v1/auth/reset-password")

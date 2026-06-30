@@ -6,7 +6,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Pressable,
-  StatusBar,
   StyleSheet,
   Alert,
 } from "react-native";
@@ -115,9 +114,6 @@ export function EventDetailScreen({ route }: Props) {
 
   return (
     <View style={styles.root}>
-      {/* White status-bar text reads over the banner (immersive header). */}
-      <StatusBar barStyle="light-content" />
-
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}

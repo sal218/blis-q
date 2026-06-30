@@ -37,38 +37,82 @@ function state(over: Partial<ReturnType<typeof useEvent>> = {}) {
 }
 
 function renderDetail() {
+  const goBack = jest.fn();
   const route = { params: { id: "e1" } } as never;
-  const navigation = {} as never;
+  const navigation = { goBack } as unknown as never;
   render(<EventDetailScreen route={route} navigation={navigation} />);
+  return { goBack };
 }
 
 beforeEach(() => eventMock.mockReset());
 
 describe("EventDetailScreen", () => {
-  it("renders the event fields and going count", () => {
+  it("renders the event fields, the date badge and going count", () => {
     eventMock.mockReturnValue(state());
     renderDetail();
     expect(screen.getByText("Pride Meetup")).toBeTruthy();
     expect(screen.getByText("Warszawa")).toBeTruthy();
     expect(screen.getByText("Spotkanie społeczności")).toBeTruthy();
     expect(screen.getByText("46 idzie")).toBeTruthy();
+    // stacked date badge for 2026-07-04 (a Saturday in July) → SOB / 4 / LIP
+    expect(screen.getByText("SOB")).toBeTruthy();
+    expect(screen.getByText("4")).toBeTruthy();
+    expect(screen.getByText("LIP")).toBeTruthy();
+    // the time row and a separate full-date row (no duplicated time)
+    expect(screen.getByText("16:00 – 18:00")).toBeTruthy();
+    expect(screen.getByText("4 lipca 2026")).toBeTruthy();
   });
 
-  it("highlights the caller's current RSVP status", () => {
+  it("shows the gradient placeholder (no image) when the event has no banner", () => {
+    eventMock.mockReturnValue(state()); // default imageUrl: null
+    renderDetail();
+    expect(screen.getByTestId("event-banner-placeholder")).toBeTruthy();
+    expect(screen.queryByTestId("event-banner")).toBeNull();
+    // privacy: going COUNT only — no attendee images/identities are rendered
+    expect(screen.getByText("46 idzie")).toBeTruthy();
+  });
+
+  it("renders the banner image when the event has one", () => {
+    eventMock.mockReturnValue(
+      state({ event: event({ imageUrl: "https://cdn.example/e1.jpg" }) }),
+    );
+    renderDetail();
+    expect(screen.getByTestId("event-banner")).toBeTruthy();
+    expect(screen.queryByTestId("event-banner-placeholder")).toBeNull();
+  });
+
+  it("marks the going toggle selected when the caller is going", () => {
     eventMock.mockReturnValue(
       state({ event: event({ rsvp: { status: "going" } }) }),
     );
     renderDetail();
-    const goingTab = screen.getByLabelText(strings.events.rsvpGoing);
-    expect(goingTab.props.accessibilityState).toMatchObject({ selected: true });
+    const goBtn = screen.getByLabelText(strings.events.rsvpGoing);
+    expect(goBtn.props.accessibilityState).toMatchObject({ selected: true });
   });
 
-  it("calls setRsvp with the pressed status", () => {
+  it("tapping the toggle when NOT going → setRsvp('going')", () => {
     const setRsvp = jest.fn().mockResolvedValue({ ok: true });
-    eventMock.mockReturnValue(state({ setRsvp }));
+    eventMock.mockReturnValue(state({ setRsvp })); // default rsvp: null
     renderDetail();
-    fireEvent.press(screen.getByLabelText(strings.events.rsvpInterested));
-    expect(setRsvp).toHaveBeenCalledWith("interested");
+    fireEvent.press(screen.getByLabelText(strings.events.rsvpGoing));
+    expect(setRsvp).toHaveBeenCalledWith("going");
+  });
+
+  it("tapping the toggle when already going → setRsvp('not_going')", () => {
+    const setRsvp = jest.fn().mockResolvedValue({ ok: true });
+    eventMock.mockReturnValue(
+      state({ event: event({ rsvp: { status: "going" } }), setRsvp }),
+    );
+    renderDetail();
+    fireEvent.press(screen.getByLabelText(strings.events.rsvpGoing));
+    expect(setRsvp).toHaveBeenCalledWith("not_going");
+  });
+
+  it("the floating back button goes back", () => {
+    eventMock.mockReturnValue(state());
+    const { goBack } = renderDetail();
+    fireEvent.press(screen.getByLabelText(strings.common.back));
+    expect(goBack).toHaveBeenCalled();
   });
 
   it("shows the error state with a retry", () => {

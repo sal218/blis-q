@@ -67,6 +67,34 @@ describe("useHomeEvents", () => {
     await waitFor(() => expect(result.current.events).toEqual([ev("e2")]));
   });
 
+  it("drops a stale refetch that resolves after a newer focus", async () => {
+    listMock.mockResolvedValueOnce({ ok: true, data: [ev("e1")] });
+    const { result } = renderHook(() => useHomeEvents());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // Refetch A is in flight (deferred) when a newer refetch B resolves first.
+    let resolveA!: (v: unknown) => void;
+    listMock.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveA = r;
+      }),
+    );
+    act(() => {
+      mockFocusCb?.(); // A in flight
+    });
+    listMock.mockResolvedValueOnce({ ok: true, data: [ev("e2")] });
+    await act(async () => {
+      mockFocusCb?.(); // B resolves → e2 wins
+    });
+    await waitFor(() => expect(result.current.events).toEqual([ev("e2")]));
+
+    // A resolves late — it must NOT overwrite the fresher e2.
+    await act(async () => {
+      resolveA({ ok: true, data: [ev("e1")] });
+    });
+    expect(result.current.events).toEqual([ev("e2")]);
+  });
+
   it("a silent re-focus failure keeps the existing list (status stays ready)", async () => {
     listMock.mockResolvedValue({ ok: true, data: [ev("e1")] });
     const { result } = renderHook(() => useHomeEvents());

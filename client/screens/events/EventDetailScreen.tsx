@@ -117,6 +117,9 @@ export function EventDetailScreen({ route }: Props) {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        // Don't auto-inset below the status bar — let the banner run fully
+        // edge-to-edge to the top edge (immersive, under the status bar).
+        contentInsetAdjustmentBehavior="never"
       >
         {/* Edge-to-edge banner with rounded bottom + bottom-left date badge */}
         <View style={styles.bannerWrap}>

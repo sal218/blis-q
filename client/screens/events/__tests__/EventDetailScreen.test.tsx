@@ -1,6 +1,11 @@
 jest.mock("@/hooks/useEvent", () => ({ useEvent: jest.fn() }));
 
-import { render, screen, fireEvent } from "@testing-library/react-native";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react-native";
 import { EventDetailScreen } from "@/screens/events/EventDetailScreen";
 import { useEvent } from "@/hooks/useEvent";
 import { strings } from "@/i18n";
@@ -32,6 +37,7 @@ function state(over: Partial<ReturnType<typeof useEvent>> = {}) {
     submitting: false,
     retry: jest.fn(),
     setRsvp: jest.fn().mockResolvedValue({ ok: true }),
+    report: jest.fn().mockResolvedValue({ ok: true }),
     ...over,
   };
 }
@@ -113,6 +119,25 @@ describe("EventDetailScreen", () => {
     const { goBack } = renderDetail();
     fireEvent.press(screen.getByLabelText(strings.common.back));
     expect(goBack).toHaveBeenCalled();
+  });
+
+  it("⋯ → action sheet → report modal → submits the reason", async () => {
+    const report = jest.fn().mockResolvedValue({ ok: true });
+    eventMock.mockReturnValue(state({ report }));
+    renderDetail();
+
+    // ⋯ opens the action sheet (the Report row appears)
+    fireEvent.press(screen.getByLabelText(strings.events.moreActions));
+    fireEvent.press(screen.getByText(strings.events.reportEvent));
+
+    // the report modal is open → fill a reason + submit
+    fireEvent.changeText(
+      screen.getByPlaceholderText(strings.events.reportPlaceholder),
+      "  spam  ",
+    );
+    fireEvent.press(screen.getByText(strings.posts.reportSubmit));
+
+    await waitFor(() => expect(report).toHaveBeenCalledWith("spam")); // trimmed
   });
 
   it("shows the error state with a retry", () => {

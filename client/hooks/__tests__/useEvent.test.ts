@@ -1,15 +1,17 @@
 jest.mock("@/lib/api/events", () => ({
   getEvent: jest.fn(),
   setRsvp: jest.fn(),
+  reportEvent: jest.fn(),
 }));
 
 import { renderHook, act, waitFor } from "@testing-library/react-native";
 import { useEvent } from "@/hooks/useEvent";
-import { getEvent, setRsvp } from "@/lib/api/events";
+import { getEvent, setRsvp, reportEvent } from "@/lib/api/events";
 import type { EventDTO, RsvpStatus } from "@shared/types";
 
 const getMock = getEvent as unknown as jest.Mock;
 const rsvpMock = setRsvp as unknown as jest.Mock;
+const reportMock = reportEvent as unknown as jest.Mock;
 
 const event = (over: Partial<EventDTO> = {}): EventDTO => ({
   id: "e1",
@@ -30,6 +32,7 @@ const event = (over: Partial<EventDTO> = {}): EventDTO => ({
 beforeEach(() => {
   getMock.mockReset();
   rsvpMock.mockReset();
+  reportMock.mockReset();
 });
 
 describe("useEvent", () => {
@@ -123,5 +126,36 @@ describe("useEvent", () => {
     expect(outcome.ok).toBe(false);
     expect(result.current.event?.rsvp).toBeNull();
     expect(result.current.event?.goingCount).toBe(5);
+  });
+
+  it("report success → { ok: true } and posts the reason", async () => {
+    getMock.mockResolvedValue({ ok: true, data: event() });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    reportMock.mockResolvedValueOnce({ ok: true, data: { ok: true } });
+    let outcome: { ok: boolean } = { ok: false };
+    await act(async () => {
+      outcome = await result.current.report("spam");
+    });
+    expect(outcome).toEqual({ ok: true });
+    expect(reportMock).toHaveBeenCalledWith("e1", "spam");
+  });
+
+  it("report failure → { ok: false, message } (mapped)", async () => {
+    getMock.mockResolvedValue({ ok: true, data: event() });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    reportMock.mockResolvedValueOnce({
+      ok: false,
+      error: { kind: "notFound" },
+    });
+    let outcome: { ok: boolean; message?: string } = { ok: true };
+    await act(async () => {
+      outcome = await result.current.report("spam");
+    });
+    expect(outcome.ok).toBe(false);
+    expect(outcome.message).toEqual(expect.any(String));
   });
 });

@@ -87,6 +87,22 @@ export function createEvent(
   );
 }
 
+// POST /api/v1/events/:id/report — flag an event for moderation (visible-event
+// only → 404 otherwise). Returns 201 on success (request() treats res.ok as ok).
+// The reason is free text; the UI keeps it out of logs and minimises PII.
+export function reportEvent(
+  id: string,
+  reason: string,
+): Promise<EventsResult<{ ok: true }>> {
+  return request(
+    "POST",
+    `/api/v1/events/${id}/report`,
+    { reason },
+    async () => ({ ok: true }) as const,
+    toEventsError,
+  );
+}
+
 // POST /api/v1/events/:id/rsvp — upsert the caller's RSVP. Community-member-gated
 // server-side (403 for non-members). Returns the stored status only — never an
 // attendee list. The screen patches goingCount locally from the status change.

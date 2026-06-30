@@ -24,7 +24,6 @@ import {
 import { strings, format } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type { EventsStackParamList } from "@/navigation/AppTabs";
-import type { RsvpStatus } from "@shared/types";
 
 // Event detail (design ref: assets/Event-Details*.png — light + dark). An
 // edge-to-edge banner (the event image, or a brand gradient placeholder) with
@@ -45,13 +44,6 @@ const BANNER_RADIUS = 28;
 // pattern). Theme tokens would wrongly flip these in dark mode.
 const BADGE_SCRIM = "rgba(0,0,0,0.5)";
 const BADGE_TEXT = "#fff";
-
-const RSVP_ORDER: RsvpStatus[] = ["going", "interested", "not_going"];
-const RSVP_LABELS = [
-  strings.events.rsvpGoing,
-  strings.events.rsvpInterested,
-  strings.events.rsvpNotGoing,
-];
 
 // Brand gradient shown when the event has no banner image.
 function BannerPlaceholder({ colors }: { colors: ThemeColors }) {
@@ -102,11 +94,14 @@ export function EventDetailScreen({ route }: Props) {
   // The Clock row above already shows the time; this row is the full date only.
   const fullWhen = formatEventDateLong(event.startsAt);
 
-  const selectedIndex = event.rsvp ? RSVP_ORDER.indexOf(event.rsvp.status) : -1;
+  // Binary "going" toggle (the client mockup's "I'm going" model). Tap to mark
+  // going; tap again to clear it (→ not_going). Save joins this bar in the Save
+  // slice (C); Interested isn't in the client design.
+  const isGoing = event.rsvp?.status === "going";
 
-  const onPickRsvp = async (index: number) => {
+  const onToggleGoing = async () => {
     if (submitting) return;
-    const result = await setRsvp(RSVP_ORDER[index]);
+    const result = await setRsvp(isGoing ? "not_going" : "going");
     if (!result.ok) {
       Alert.alert(strings.events.rsvpError, result.message);
     }
@@ -179,44 +174,35 @@ export function EventDetailScreen({ route }: Props) {
         </View>
       </ScrollView>
 
-      {/* Pinned RSVP bar (the Save button joins this bar in the Save slice). */}
+      {/* Pinned action bar: the "Pójdę" (going) toggle. The Save button joins
+          it here in the Save slice (C) → the mockup's two-button bar. */}
       <View
         style={[
           styles.bottomBar,
           { paddingBottom: insets.bottom + spacing.sm },
         ]}
       >
-        <Text style={styles.rsvpPrompt}>{strings.events.rsvpPrompt}</Text>
-        <View style={styles.rsvpRow}>
-          {RSVP_ORDER.map((rsvp, index) => {
-            const selected = selectedIndex === index;
-            return (
-              <Pressable
-                key={rsvp}
-                accessibilityRole="button"
-                accessibilityLabel={RSVP_LABELS[index]}
-                accessibilityState={{ selected }}
-                disabled={submitting}
-                onPress={() => onPickRsvp(index)}
-                style={({ pressed }) => [
-                  styles.rsvpBtn,
-                  selected && styles.rsvpBtnActive,
-                  pressed && styles.rsvpBtnPressed,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.rsvpBtnText,
-                    selected && styles.rsvpBtnTextActive,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {RSVP_LABELS[index]}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={strings.events.rsvpGoing}
+          accessibilityState={{ selected: isGoing }}
+          disabled={submitting}
+          onPress={onToggleGoing}
+          style={({ pressed }) => [
+            styles.goBtn,
+            isGoing && styles.goBtnActive,
+            pressed && styles.goBtnPressed,
+          ]}
+        >
+          <Text
+            style={[styles.goBtnText, isGoing && styles.goBtnTextActive]}
+            numberOfLines={1}
+          >
+            {isGoing
+              ? `✓ ${strings.events.rsvpGoing}`
+              : strings.events.rsvpGoing}
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -341,38 +327,27 @@ function createStyles(colors: ThemeColors) {
       borderTopColor: colors.border,
       backgroundColor: colors.background,
     },
-    rsvpPrompt: {
-      color: colors.text,
-      fontSize: 15,
-      fontWeight: "700",
-      marginBottom: spacing.sm,
-    },
-    rsvpRow: {
-      flexDirection: "row",
-      gap: spacing.sm,
-    },
-    rsvpBtn: {
-      flex: 1,
+    goBtn: {
       alignItems: "center",
       paddingVertical: spacing.md,
       borderRadius: radius.full,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
       backgroundColor: colors.surface,
     },
-    rsvpBtnActive: {
+    goBtnActive: {
       backgroundColor: colors.primary,
       borderColor: colors.primary,
     },
-    rsvpBtnPressed: {
-      opacity: 0.7,
+    goBtnPressed: {
+      opacity: 0.85,
     },
-    rsvpBtnText: {
-      color: colors.text,
-      fontSize: 14,
-      fontWeight: "700",
+    goBtnText: {
+      color: colors.primary,
+      fontSize: 16,
+      fontWeight: "800",
     },
-    rsvpBtnTextActive: {
+    goBtnTextActive: {
       color: "#fff",
     },
   });

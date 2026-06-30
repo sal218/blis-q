@@ -79,21 +79,31 @@ describe("EventDetailScreen", () => {
     expect(screen.queryByTestId("event-banner-placeholder")).toBeNull();
   });
 
-  it("highlights the caller's current RSVP status", () => {
+  it("marks the going toggle selected when the caller is going", () => {
     eventMock.mockReturnValue(
       state({ event: event({ rsvp: { status: "going" } }) }),
     );
     renderDetail();
-    const goingTab = screen.getByLabelText(strings.events.rsvpGoing);
-    expect(goingTab.props.accessibilityState).toMatchObject({ selected: true });
+    const goBtn = screen.getByLabelText(strings.events.rsvpGoing);
+    expect(goBtn.props.accessibilityState).toMatchObject({ selected: true });
   });
 
-  it("calls setRsvp with the pressed status", () => {
+  it("tapping the toggle when NOT going → setRsvp('going')", () => {
     const setRsvp = jest.fn().mockResolvedValue({ ok: true });
-    eventMock.mockReturnValue(state({ setRsvp }));
+    eventMock.mockReturnValue(state({ setRsvp })); // default rsvp: null
     renderDetail();
-    fireEvent.press(screen.getByLabelText(strings.events.rsvpInterested));
-    expect(setRsvp).toHaveBeenCalledWith("interested");
+    fireEvent.press(screen.getByLabelText(strings.events.rsvpGoing));
+    expect(setRsvp).toHaveBeenCalledWith("going");
+  });
+
+  it("tapping the toggle when already going → setRsvp('not_going')", () => {
+    const setRsvp = jest.fn().mockResolvedValue({ ok: true });
+    eventMock.mockReturnValue(
+      state({ event: event({ rsvp: { status: "going" } }), setRsvp }),
+    );
+    renderDetail();
+    fireEvent.press(screen.getByLabelText(strings.events.rsvpGoing));
+    expect(setRsvp).toHaveBeenCalledWith("not_going");
   });
 
   it("shows the error state with a retry", () => {

@@ -5,6 +5,8 @@ import {
   Image,
   ScrollView,
   ActivityIndicator,
+  Pressable,
+  StatusBar,
   StyleSheet,
   Alert,
 } from "react-native";
@@ -12,7 +14,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Stop, Rect } from "react-native-svg";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
-import { SegmentedControl } from "@/components/SegmentedControl";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { Clock, MapPin, CalendarBlank } from "@/components/icons/PhosphorIcons";
 import { useEvent } from "@/hooks/useEvent";
@@ -26,16 +27,18 @@ import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type { EventsStackParamList } from "@/navigation/AppTabs";
 import type { RsvpStatus } from "@shared/types";
 
-// Event detail (design ref: assets/Event-Details*.png — light + dark). A banner
-// (the event image, or a brand gradient placeholder) with a stacked date badge,
-// then the title + icon rows (time / location / full date) + the About section,
-// and a pinned bottom RSVP bar. The going count is AGGREGATE ONLY — attendee
-// identities are never shown (Article 9). Banner UPLOAD (R2), Save, tags, and the
-// cancelled/past states are deferred to later events-detail slices.
+// Event detail (design ref: assets/Event-Details*.png — light + dark). An
+// edge-to-edge banner (the event image, or a brand gradient placeholder) with
+// rounded bottom corners and a stacked date badge at its bottom-left, then the
+// title + icon rows (time / location / full date) + About, and a pinned bottom
+// RSVP bar. The going count is AGGREGATE ONLY — attendee identities are never
+// shown (Article 9). Banner UPLOAD (R2), Save, tags, and cancelled/past states
+// are deferred to later events-detail slices.
 
 type Props = NativeStackScreenProps<EventsStackParamList, "EventDetail">;
 
-const BANNER_HEIGHT = 200;
+const BANNER_HEIGHT = 240;
+const BANNER_RADIUS = 28;
 
 // The date badge overlays the banner IMAGE (arbitrary colours), so its scrim +
 // text are intentionally theme-INDEPENDENT: a dark scrim + white text stays
@@ -44,8 +47,6 @@ const BANNER_HEIGHT = 200;
 const BADGE_SCRIM = "rgba(0,0,0,0.5)";
 const BADGE_TEXT = "#fff";
 
-// Segment order ↔ RsvpStatus. The caller's current status maps to a selected
-// index; "no RSVP yet" is -1 (no segment highlighted).
 const RSVP_ORDER: RsvpStatus[] = ["going", "interested", "not_going"];
 const RSVP_LABELS = [
   strings.events.rsvpGoing,
@@ -114,22 +115,27 @@ export function EventDetailScreen({ route }: Props) {
 
   return (
     <View style={styles.root}>
+      {/* White status-bar text reads over the banner (immersive header). */}
+      <StatusBar barStyle="light-content" />
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Banner + stacked date badge */}
-        <View style={styles.banner}>
-          {event.imageUrl ? (
-            <Image
-              testID="event-banner"
-              source={{ uri: event.imageUrl }}
-              style={styles.bannerImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <BannerPlaceholder colors={colors} />
-          )}
+        {/* Edge-to-edge banner with rounded bottom + bottom-left date badge */}
+        <View style={styles.bannerWrap}>
+          <View style={styles.bannerClip}>
+            {event.imageUrl ? (
+              <Image
+                testID="event-banner"
+                source={{ uri: event.imageUrl }}
+                style={styles.bannerMedia}
+                resizeMode="cover"
+              />
+            ) : (
+              <BannerPlaceholder colors={colors} />
+            )}
+          </View>
           <View style={styles.badge}>
             <Text style={styles.badgeWeekday}>{badge.weekday}</Text>
             <Text style={styles.badgeDay}>{badge.day}</Text>
@@ -174,7 +180,7 @@ export function EventDetailScreen({ route }: Props) {
         </View>
       </ScrollView>
 
-      {/* Pinned RSVP bar (Save joins this bar in the Save slice). */}
+      {/* Pinned RSVP bar (the Save button joins this bar in the Save slice). */}
       <View
         style={[
           styles.bottomBar,
@@ -182,17 +188,36 @@ export function EventDetailScreen({ route }: Props) {
         ]}
       >
         <Text style={styles.rsvpPrompt}>{strings.events.rsvpPrompt}</Text>
-        <SegmentedControl
-          segments={RSVP_LABELS}
-          selectedIndex={selectedIndex}
-          onChange={onPickRsvp}
-        />
-        {submitting ? (
-          <ActivityIndicator
-            style={styles.rsvpSpinner}
-            color={colors.primary}
-          />
-        ) : null}
+        <View style={styles.rsvpRow}>
+          {RSVP_ORDER.map((rsvp, index) => {
+            const selected = selectedIndex === index;
+            return (
+              <Pressable
+                key={rsvp}
+                accessibilityRole="button"
+                accessibilityLabel={RSVP_LABELS[index]}
+                accessibilityState={{ selected }}
+                disabled={submitting}
+                onPress={() => onPickRsvp(index)}
+                style={({ pressed }) => [
+                  styles.rsvpBtn,
+                  selected && styles.rsvpBtnActive,
+                  pressed && styles.rsvpBtnPressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.rsvpBtnText,
+                    selected && styles.rsvpBtnTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {RSVP_LABELS[index]}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -222,19 +247,26 @@ function createStyles(colors: ThemeColors) {
       textAlign: "center",
       marginBottom: spacing.md,
     },
-    banner: {
-      height: BANNER_HEIGHT,
+    bannerWrap: {
       width: "100%",
+      height: BANNER_HEIGHT,
+    },
+    bannerClip: {
+      width: "100%",
+      height: BANNER_HEIGHT,
+      overflow: "hidden",
+      borderBottomLeftRadius: BANNER_RADIUS,
+      borderBottomRightRadius: BANNER_RADIUS,
       backgroundColor: colors.surface,
     },
-    bannerImage: {
-      height: BANNER_HEIGHT,
+    bannerMedia: {
       width: "100%",
+      height: BANNER_HEIGHT,
     },
     badge: {
       position: "absolute",
-      top: spacing.md,
-      left: spacing.md,
+      bottom: spacing.md,
+      left: spacing.lg,
       alignItems: "center",
       paddingVertical: spacing.sm,
       paddingHorizontal: spacing.md,
@@ -316,8 +348,33 @@ function createStyles(colors: ThemeColors) {
       fontWeight: "700",
       marginBottom: spacing.sm,
     },
-    rsvpSpinner: {
-      marginTop: spacing.sm,
+    rsvpRow: {
+      flexDirection: "row",
+      gap: spacing.sm,
+    },
+    rsvpBtn: {
+      flex: 1,
+      alignItems: "center",
+      paddingVertical: spacing.md,
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    rsvpBtnActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    rsvpBtnPressed: {
+      opacity: 0.7,
+    },
+    rsvpBtnText: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    rsvpBtnTextActive: {
+      color: "#fff",
     },
   });
 }

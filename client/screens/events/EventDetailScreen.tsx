@@ -14,7 +14,12 @@ import Svg, { Defs, LinearGradient, Stop, Rect } from "react-native-svg";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
-import { Clock, MapPin, CalendarBlank } from "@/components/icons/PhosphorIcons";
+import {
+  Clock,
+  MapPin,
+  CalendarBlank,
+  CaretLeft,
+} from "@/components/icons/PhosphorIcons";
 import { useEvent } from "@/hooks/useEvent";
 import {
   formatEventDateBadge,
@@ -60,7 +65,7 @@ function BannerPlaceholder({ colors }: { colors: ThemeColors }) {
   );
 }
 
-export function EventDetailScreen({ route }: Props) {
+export function EventDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -68,9 +73,24 @@ export function EventDetailScreen({ route }: Props) {
     route.params.id,
   );
 
+  // The native header is hidden (full-bleed banner), so the screen owns its back
+  // button — a floating circle that reads over the banner or a plain screen.
+  const backButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={strings.common.back}
+      hitSlop={8}
+      onPress={() => navigation.goBack()}
+      style={[styles.backBtn, { top: insets.top + spacing.sm }]}
+    >
+      <CaretLeft size={22} color="#fff" />
+    </Pressable>
+  );
+
   if (status === "loading") {
     return (
       <View style={[styles.root, styles.centered]}>
+        {backButton}
         <ActivityIndicator color={colors.primary} />
       </View>
     );
@@ -79,6 +99,7 @@ export function EventDetailScreen({ route }: Props) {
   if (status === "error" || !event) {
     return (
       <View style={[styles.root, styles.centered]}>
+        {backButton}
         <Text style={styles.errorText}>
           {errorMessage ?? strings.events.detailLoadError}
         </Text>
@@ -109,6 +130,7 @@ export function EventDetailScreen({ route }: Props) {
 
   return (
     <View style={styles.root}>
+      {backButton}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -216,6 +238,19 @@ function createStyles(colors: ThemeColors) {
     },
     scrollContent: {
       paddingBottom: spacing.xl,
+    },
+    backBtn: {
+      position: "absolute",
+      left: spacing.lg,
+      zIndex: 10,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      // Translucent dark circle (like the date badge scrim) so the chevron reads
+      // over any banner image AND over a plain loading/error screen.
+      backgroundColor: BADGE_SCRIM,
     },
     centered: {
       flex: 1,

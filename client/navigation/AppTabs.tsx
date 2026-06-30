@@ -93,9 +93,10 @@ function EventsStack() {
       <EventsStackNav.Screen
         name="EventDetail"
         component={EventDetailScreen}
-        // Transparent floating header so the banner runs edge-to-edge under the
-        // status bar (immersive, per the mockup); the OS back button floats on it.
-        options={{ headerTransparent: true, title: "" }}
+        // No native header: the screen is full-bleed so the banner runs
+        // edge-to-edge under the status bar (immersive, per the mockup). The
+        // screen renders its own floating back button.
+        options={{ headerShown: false }}
       />
       <EventsStackNav.Screen
         name="CreateEvent"

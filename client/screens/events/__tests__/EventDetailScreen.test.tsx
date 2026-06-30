@@ -37,9 +37,11 @@ function state(over: Partial<ReturnType<typeof useEvent>> = {}) {
 }
 
 function renderDetail() {
+  const goBack = jest.fn();
   const route = { params: { id: "e1" } } as never;
-  const navigation = {} as never;
+  const navigation = { goBack } as unknown as never;
   render(<EventDetailScreen route={route} navigation={navigation} />);
+  return { goBack };
 }
 
 beforeEach(() => eventMock.mockReset());
@@ -104,6 +106,13 @@ describe("EventDetailScreen", () => {
     renderDetail();
     fireEvent.press(screen.getByLabelText(strings.events.rsvpGoing));
     expect(setRsvp).toHaveBeenCalledWith("not_going");
+  });
+
+  it("the floating back button goes back", () => {
+    eventMock.mockReturnValue(state());
+    const { goBack } = renderDetail();
+    fireEvent.press(screen.getByLabelText(strings.common.back));
+    expect(goBack).toHaveBeenCalled();
   });
 
   it("shows the error state with a retry", () => {

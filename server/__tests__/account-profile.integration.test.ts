@@ -56,10 +56,10 @@ const app = express();
 app.use(express.json());
 registerAccountRoutes(app);
 
-const signInMock =
-  supabaseClient.auth.signInWithPassword as unknown as jest.Mock;
-const updateUserByIdMock =
-  supabaseAdmin.auth.admin.updateUserById as unknown as jest.Mock;
+const signInMock = supabaseClient.auth
+  .signInWithPassword as unknown as jest.Mock;
+const updateUserByIdMock = supabaseAdmin.auth.admin
+  .updateUserById as unknown as jest.Mock;
 const signOutMock = supabaseAdmin.auth.admin.signOut as unknown as jest.Mock;
 const acctRl = checkAccountUpdateRateLimit as unknown as jest.Mock;
 const pwRl = checkChangePasswordRateLimit as unknown as jest.Mock;
@@ -285,7 +285,9 @@ describe("POST /api/v1/account/change-password", () => {
       .select()
       .from(auditLog)
       .where(eq(auditLog.actorId, id));
-    expect(audits.some((a) => a.action === "user.password_changed")).toBe(false);
+    expect(audits.some((a) => a.action === "user.password_changed")).toBe(
+      false,
+    );
   });
 
   it("rate-limited → 429, Supabase never called", async () => {

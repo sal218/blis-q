@@ -46,7 +46,9 @@ function getClient(): S3Client {
   const endpoint = process.env.R2_ENDPOINT;
 
   if (!accountId || !accessKeyId || !secretAccessKey || !endpoint) {
-    throw new Error("R2 is not configured (missing R2_* environment variables)");
+    throw new Error(
+      "R2 is not configured (missing R2_* environment variables)",
+    );
   }
 
   client = new S3Client({

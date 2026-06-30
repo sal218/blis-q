@@ -41,6 +41,18 @@ export function listEvents(
   );
 }
 
+// GET /api/v1/events/mine — the caller's own upcoming "going" events (the Home
+// rail), soonest-first, capped. Returns a bare array (no pagination).
+export function listMyEvents(): Promise<EventsResult<EventDTO[]>> {
+  return request(
+    "GET",
+    `/api/v1/events/mine`,
+    undefined,
+    (res) => res.json() as Promise<EventDTO[]>,
+    toEventsError,
+  );
+}
+
 // GET /api/v1/events/:id — one event (incl. the caller's own rsvp + goingCount).
 // 404 = missing / deleted / creator block-hidden.
 export function getEvent(id: string): Promise<EventsResult<EventDTO>> {

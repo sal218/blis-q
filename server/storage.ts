@@ -2279,6 +2279,58 @@ export class DatabaseStorage {
     return { rows: page, nextCursor };
   }
 
+  // The caller's OWN upcoming events — the ones they RSVP'd "going" to (the Home
+  // "Nadchodzące wydarzenia" rail). Caller-scoped via an INNER JOIN on the
+  // caller's going RSVP; same visibility rules as the global feed (non-deleted
+  // event + community, startsAt >= now, creator-block-filtered). Soonest-first,
+  // capped (no cursor — a short personal rail). goingCount aggregate only.
+  async listMyUpcomingEvents(input: {
+    callerId: string;
+    limit: number;
+    now?: Date;
+  }): Promise<EventRow[]> {
+    const now = input.now ?? new Date();
+    const blockedIds = await this.getBlockedUserIds(input.callerId);
+
+    const conditions: (SQL | undefined)[] = [
+      isNull(events.deletedAt),
+      gte(events.startsAt, now),
+    ];
+    if (blockedIds.length) {
+      conditions.push(
+        or(
+          isNull(events.createdById),
+          notInArray(events.createdById, blockedIds),
+        ),
+      );
+    }
+
+    return (
+      db
+        .select(this.eventSelection(input.callerId))
+        .from(events)
+        .innerJoin(
+          communities,
+          and(
+            eq(communities.id, events.communityId),
+            isNull(communities.deletedAt),
+          ),
+        )
+        // caller-scoped: only events this user RSVP'd "going" to
+        .innerJoin(
+          eventRsvps,
+          and(
+            eq(eventRsvps.eventId, events.id),
+            eq(eventRsvps.userId, input.callerId),
+            eq(eventRsvps.status, "going"),
+          ),
+        )
+        .where(and(...conditions))
+        .orderBy(asc(events.startsAt), asc(events.id))
+        .limit(input.limit)
+    );
+  }
+
   // A single event (incl. deletedAt so the route can 404 tombstones). Returns
   // null when missing, in a deleted community, or created by someone the caller
   // has blocked (→ route 404). Includes goingCount + the caller's own RSVP.

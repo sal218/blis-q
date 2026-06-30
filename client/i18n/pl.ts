@@ -43,6 +43,7 @@ export const pl = {
     seeAll: "Zobacz wszystkie", // "See all"
     noCommunities: "Nie należysz jeszcze do żadnej społeczności.", // "You're not in any community yet."
     upcomingEvents: "Nadchodzące wydarzenia", // "Upcoming events"
+    noUpcomingEvents: "Nie wybierasz się jeszcze na żadne wydarzenia.", // "You're not going to any events yet."
     nearbyPlaces: "Bezpieczne miejsca w pobliżu", // "Nearby safe places"
     latestActivity: "Najnowsze ze społeczności", // "Latest from your communities"
     // Polished empty states for the sections whose data doesn't exist yet.

@@ -357,6 +357,98 @@ describe("GET /api/v1/events (global upcoming feed)", () => {
   });
 });
 
+describe("GET /api/v1/events/mine (Home rail — caller's going events)", () => {
+  it("unauthenticated → 401", async () => {
+    mockUser = null;
+    expect((await request(app).get(`/api/v1/events/mine`)).status).toBe(401);
+  });
+
+  it("returns ONLY the caller's going upcoming events, soonest-first", async () => {
+    const owner = await seedUser();
+    const caller = await seedUser();
+    const cid = await seedCommunity(owner);
+    await storage.joinCommunity(cid, caller);
+    const soon = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() + HOUR),
+    });
+    const later = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() + 5 * HOUR),
+    });
+    const interested = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() + 2 * HOUR),
+    });
+    const notRsvpd = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() + 3 * HOUR),
+    });
+    await storage.setRsvp(later, caller, "going");
+    await storage.setRsvp(soon, caller, "going");
+    await storage.setRsvp(interested, caller, "interested");
+    mockUser = { id: caller };
+
+    const res = await request(app).get(`/api/v1/events/mine`);
+    expect(res.status).toBe(200);
+    const ids = res.body.map((e: { id: string }) => e.id);
+    expect(ids).toEqual([soon, later]); // soonest-first; going only
+    expect(ids).not.toContain(interested);
+    expect(ids).not.toContain(notRsvpd);
+  });
+
+  it("excludes past events even when the caller is going", async () => {
+    const owner = await seedUser();
+    const caller = await seedUser();
+    const cid = await seedCommunity(owner);
+    await storage.joinCommunity(cid, caller);
+    const past = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() - HOUR),
+    });
+    await storage.setRsvp(past, caller, "going");
+    mockUser = { id: caller };
+
+    const res = await request(app).get(`/api/v1/events/mine`);
+    expect(res.body.map((e: { id: string }) => e.id)).not.toContain(past);
+  });
+
+  it("is caller-scoped — another user's going RSVP does not leak", async () => {
+    const owner = await seedUser();
+    const other = await seedUser();
+    const caller = await seedUser();
+    const cid = await seedCommunity(owner);
+    await storage.joinCommunity(cid, other);
+    await storage.joinCommunity(cid, caller);
+    const eid = await seedEvent(cid, owner);
+    await storage.setRsvp(eid, other, "going"); // OTHER is going, not caller
+    mockUser = { id: caller };
+
+    const res = await request(app).get(`/api/v1/events/mine`);
+    expect(res.body.map((e: { id: string }) => e.id)).not.toContain(eid);
+  });
+
+  it("excludes deleted events and events in a deleted community", async () => {
+    const owner = await seedUser();
+    const caller = await seedUser();
+    const cid = await seedCommunity(owner);
+    await storage.joinCommunity(cid, caller);
+    const del = await seedEvent(cid, owner);
+    await storage.setRsvp(del, caller, "going");
+    await storage.softDeleteEvent(del, owner);
+
+    const cid2 = await seedCommunity(owner);
+    await storage.joinCommunity(cid2, caller);
+    const inDeadComm = await seedEvent(cid2, owner);
+    await storage.setRsvp(inDeadComm, caller, "going");
+    await db
+      .update(communities)
+      .set({ deletedAt: new Date() })
+      .where(eq(communities.id, cid2));
+    mockUser = { id: caller };
+
+    const res = await request(app).get(`/api/v1/events/mine`);
+    const ids = res.body.map((e: { id: string }) => e.id);
+    expect(ids).not.toContain(del);
+    expect(ids).not.toContain(inDeadComm);
+  });
+});
+
 describe("GET /api/v1/events/:id", () => {
   it("200 found (with caller rsvp); 404 missing/deleted/blocked", async () => {
     const caller = await seedUser();

@@ -27,8 +27,13 @@ import type { EventDTO, CursorPage, RsvpStatus } from "@shared/types";
 // RSVP is community-member-gated; edit/delete are creator-or-mod/admin. Mutations
 // are transactional + audited in storage; the new_event push is post-commit +
 // best-effort. Event images are deferred (no imageKey accepted this slice).
+// The Home "upcoming events" rail is capped server-side (a short personal list).
+const HOME_EVENTS_LIMIT = 10;
+
 export function registerEventRoutes(app: Express): void {
   app.get("/api/v1/events", isAuthenticated, handleList);
+  // "/mine" must be registered BEFORE "/:id" so it isn't swallowed by the param.
+  app.get("/api/v1/events/mine", isAuthenticated, handleListMine);
   app.post("/api/v1/communities/:id/events", isAuthenticated, handleCreate);
   app.get("/api/v1/events/:id", isAuthenticated, handleGet);
   app.patch("/api/v1/events/:id", isAuthenticated, handleUpdate);
@@ -87,6 +92,22 @@ async function handleList(req: Request, res: Response): Promise<Response> {
     return res.status(200).json(body);
   } catch (err) {
     console.error("[GET /api/v1/events]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// GET /api/v1/events/mine — the caller's own upcoming "going" events (Home rail),
+// soonest-first, capped. Caller-scoped; aggregate goingCount only.
+async function handleListMine(req: Request, res: Response): Promise<Response> {
+  try {
+    const rows = await storage.listMyUpcomingEvents({
+      callerId: req.user!.id,
+      limit: HOME_EVENTS_LIMIT,
+    });
+    const body: EventDTO[] = rows.map(toEventDTO);
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[GET /api/v1/events/mine]", { code: safeErrorCode(err) });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }

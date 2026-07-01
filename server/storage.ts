@@ -2520,11 +2520,14 @@ export class DatabaseStorage {
     id: string,
     actorId: string,
     ipAddress?: string | null,
-  ): Promise<"cancelled" | "not_found" | "forbidden" | "already_cancelled"> {
+  ): Promise<
+    "cancelled" | "not_found" | "forbidden" | "already_cancelled" | "past"
+  > {
     const [ev] = await db
       .select({
         createdById: events.createdById,
         status: events.status,
+        startsAt: events.startsAt,
         deletedAt: events.deletedAt,
       })
       .from(events)
@@ -2533,6 +2536,9 @@ export class DatabaseStorage {
     if (!ev || ev.deletedAt) return "not_found";
     if (ev.createdById !== actorId) return "forbidden";
     if (ev.status === "cancelled") return "already_cancelled";
+    // A past event can't be cancelled — it already happened. Keeps the endpoint
+    // consistent with the DTO's `canCancel` flag (creator ∧ active ∧ !past).
+    if (ev.startsAt < new Date()) return "past";
 
     return db.transaction(async (tx) => {
       const [cancelled] = await tx

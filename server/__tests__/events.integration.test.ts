@@ -852,6 +852,22 @@ describe("POST /api/v1/events/:id/cancel", () => {
     ).toBe(404);
   });
 
+  it("a past event can't be cancelled → 409 (stays active)", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() - HOUR),
+    });
+    mockUser = { id: owner };
+
+    const res = await request(app).post(`/api/v1/events/${eid}/cancel`);
+    expect(res.status).toBe(409);
+
+    const [row] = await db.select().from(events).where(eq(events.id, eid));
+    expect(row.status).toBe("active");
+    expect(row.cancelledAt).toBeNull();
+  });
+
   it("rate-limited → 429", async () => {
     const owner = await seedUser();
     const cid = await seedCommunity(owner);

@@ -1,10 +1,12 @@
 jest.mock("@/hooks/useEvent", () => ({ useEvent: jest.fn() }));
 
+import { Alert } from "react-native";
 import {
   render,
   screen,
   fireEvent,
   waitFor,
+  act,
 } from "@testing-library/react-native";
 import { EventDetailScreen } from "@/screens/events/EventDetailScreen";
 import { useEvent } from "@/hooks/useEvent";
@@ -42,6 +44,7 @@ function state(over: Partial<ReturnType<typeof useEvent>> = {}) {
     retry: jest.fn(),
     setRsvp: jest.fn().mockResolvedValue({ ok: true }),
     report: jest.fn().mockResolvedValue({ ok: true }),
+    cancel: jest.fn().mockResolvedValue({ ok: true }),
     ...over,
   };
 }
@@ -152,5 +155,59 @@ describe("EventDetailScreen", () => {
     renderDetail();
     fireEvent.press(screen.getByText(strings.events.retry));
     expect(retry).toHaveBeenCalled();
+  });
+
+  it("cancelled event → shows the notice, closes RSVP, hides the cancel action", () => {
+    eventMock.mockReturnValue(
+      state({ event: event({ status: "cancelled", canCancel: false }) }),
+    );
+    renderDetail();
+    expect(screen.getByText(strings.events.cancelledNotice)).toBeTruthy();
+    // RSVP is closed: the going toggle is gone, replaced by a disabled pill
+    expect(screen.queryByLabelText(strings.events.rsvpGoing)).toBeNull();
+    expect(screen.getByText(strings.events.rsvpClosedCancelled)).toBeTruthy();
+    // the ⋯ sheet offers Report but NOT the cancel action (canCancel false)
+    fireEvent.press(screen.getByLabelText(strings.events.moreActions));
+    expect(screen.getByText(strings.events.reportEvent)).toBeTruthy();
+    expect(screen.queryByText(strings.events.cancelAction)).toBeNull();
+  });
+
+  it("past event → shows the past notice and a closed RSVP bar", () => {
+    eventMock.mockReturnValue(state({ event: event({ past: true }) }));
+    renderDetail();
+    expect(screen.getByText(strings.events.pastNotice)).toBeTruthy();
+    expect(screen.queryByLabelText(strings.events.rsvpGoing)).toBeNull();
+    expect(screen.getByText(strings.events.rsvpClosedPast)).toBeTruthy();
+  });
+
+  it("creator (canCancel) → ⋯ shows cancel → confirm → calls cancel()", async () => {
+    const cancel = jest.fn().mockResolvedValue({ ok: true });
+    const alertSpy = jest.spyOn(Alert, "alert");
+    eventMock.mockReturnValue(
+      state({ event: event({ canCancel: true }), cancel }),
+    );
+    renderDetail();
+
+    fireEvent.press(screen.getByLabelText(strings.events.moreActions));
+    fireEvent.press(screen.getByText(strings.events.cancelAction));
+
+    // onCancelEvent → Alert.alert(title, body, buttons); invoke the destructive.
+    const buttons = alertSpy.mock.calls.at(-1)?.[2] as
+      | { text: string; style?: string; onPress?: () => void }[]
+      | undefined;
+    const destructive = buttons?.find((b) => b.style === "destructive");
+    await act(async () => {
+      await destructive?.onPress?.();
+    });
+    expect(cancel).toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
+  it("non-creator active event → no cancel action in the ⋯ sheet", () => {
+    eventMock.mockReturnValue(state({ event: event({ canCancel: false }) }));
+    renderDetail();
+    fireEvent.press(screen.getByLabelText(strings.events.moreActions));
+    expect(screen.queryByText(strings.events.cancelAction)).toBeNull();
+    expect(screen.getByText(strings.events.reportEvent)).toBeTruthy();
   });
 });

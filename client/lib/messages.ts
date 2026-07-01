@@ -137,6 +137,27 @@ export function eventsApiErrorMessage(error: EventsApiError): string {
   }
 }
 
+// Cancel-event API errors → copy. Distinct from the RSVP mapper: `forbidden`
+// (403) here means the caller isn't the event's creator (not "join to RSVP"),
+// and `conflict` (409) means the event is already cancelled or has passed.
+export function cancelEventApiErrorMessage(error: EventsApiError): string {
+  switch (error.kind) {
+    case "rateLimited":
+      return format(strings.errors.rateLimited, { seconds: error.retryAfter });
+    case "network":
+      return strings.errors.network;
+    case "forbidden":
+      return strings.events.cancelForbidden;
+    case "notFound":
+      return strings.events.notAvailable;
+    case "conflict":
+      return strings.events.rsvpUnavailable; // "cancelled or already took place"
+    case "validation":
+    case "server":
+      return strings.errors.generic;
+  }
+}
+
 // Create-event form field errors → Polish copy.
 export function eventFieldErrorMessage(err: EventFieldError): string {
   switch (err.code) {

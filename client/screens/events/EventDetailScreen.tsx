@@ -36,8 +36,9 @@ import type { EventsStackParamList } from "@/navigation/AppTabs";
 // rounded bottom corners and a stacked date badge at its bottom-left, then the
 // title + icon rows (time / location / full date) + About, and a pinned bottom
 // RSVP bar. The going count is AGGREGATE ONLY — attendee identities are never
-// shown (Article 9). Banner UPLOAD (R2), Save, tags, and cancelled/past states
-// are deferred to later events-detail slices.
+// shown (Article 9). Cancelled/past events show a notice + a closed RSVP bar,
+// and the creator can cancel from the ⋯ sheet (slice B2). Banner UPLOAD (R2),
+// Save, and tags are deferred to later events-detail slices.
 
 type Props = NativeStackScreenProps<EventsStackParamList, "EventDetail">;
 
@@ -70,8 +71,16 @@ export function EventDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { event, status, errorMessage, submitting, retry, setRsvp, report } =
-    useEvent(route.params.id);
+  const {
+    event,
+    status,
+    errorMessage,
+    submitting,
+    retry,
+    setRsvp,
+    report,
+    cancel,
+  } = useEvent(route.params.id);
   const [menuVisible, setMenuVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
 
@@ -121,6 +130,9 @@ export function EventDetailScreen({ route, navigation }: Props) {
   // going; tap again to clear it (→ not_going). Save joins this bar in the Save
   // slice (C); Interested isn't in the client design.
   const isGoing = event.rsvp?.status === "going";
+  // A cancelled or past event is closed to RSVP (the server rejects it too).
+  const isCancelled = event.status === "cancelled";
+  const rsvpClosed = isCancelled || event.past;
 
   const onToggleGoing = async () => {
     if (submitting) return;
@@ -128,6 +140,28 @@ export function EventDetailScreen({ route, navigation }: Props) {
     if (!result.ok) {
       Alert.alert(strings.events.rsvpError, result.message);
     }
+  };
+
+  // Creator cancels the event — confirm first (mirrors the post-delete flow),
+  // then call cancel(); a failure surfaces the mapped message.
+  const onCancelEvent = () => {
+    setMenuVisible(false);
+    Alert.alert(
+      strings.events.cancelConfirmTitle,
+      strings.events.cancelConfirmBody,
+      [
+        { text: strings.common.cancel, style: "cancel" },
+        {
+          text: strings.events.cancelAction,
+          style: "destructive",
+          onPress: async () => {
+            const result = await cancel();
+            if (!result.ok)
+              Alert.alert(strings.events.cancelError, result.message);
+          },
+        },
+      ],
+    );
   };
 
   // ReportPostModal closes itself on success / shows the mapped error otherwise;
@@ -139,7 +173,7 @@ export function EventDetailScreen({ route, navigation }: Props) {
   };
 
   // ⋯ overflow (top-right), mirroring the floating back button. Opens an action
-  // sheet — one action for now (Report); share/edit/delete land in later slices.
+  // sheet — Cancel (creator only, via canCancel) + Report; share/edit land later.
   const moreButton = (
     <Pressable
       accessibilityRole="button"
@@ -187,6 +221,20 @@ export function EventDetailScreen({ route, navigation }: Props) {
         <View style={styles.body}>
           <Text style={styles.title}>{event.title}</Text>
 
+          {isCancelled ? (
+            <View style={[styles.notice, styles.noticeCancelled]}>
+              <Text style={styles.noticeCancelledText}>
+                {strings.events.cancelledNotice}
+              </Text>
+            </View>
+          ) : event.past ? (
+            <View style={[styles.notice, styles.noticePast]}>
+              <Text style={styles.noticePastText}>
+                {strings.events.pastNotice}
+              </Text>
+            </View>
+          ) : null}
+
           {time ? (
             <View style={styles.row}>
               <Clock size={18} color={colors.textMuted} />
@@ -221,35 +269,46 @@ export function EventDetailScreen({ route, navigation }: Props) {
         </View>
       </ScrollView>
 
-      {/* Pinned action bar: the "Pójdę" (going) toggle. The Save button joins
-          it here in the Save slice (C) → the mockup's two-button bar. */}
+      {/* Pinned action bar: the "Pójdę" (going) toggle when the event is open;
+          a disabled labelled pill when cancelled/past (RSVP is closed — the
+          server rejects it too). The Save button joins here in slice C. */}
       <View
         style={[
           styles.bottomBar,
           { paddingBottom: insets.bottom + spacing.sm },
         ]}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={strings.events.rsvpGoing}
-          accessibilityState={{ selected: isGoing }}
-          disabled={submitting}
-          onPress={onToggleGoing}
-          style={({ pressed }) => [
-            styles.goBtn,
-            isGoing && styles.goBtnActive,
-            pressed && styles.goBtnPressed,
-          ]}
-        >
-          <Text
-            style={[styles.goBtnText, isGoing && styles.goBtnTextActive]}
-            numberOfLines={1}
+        {rsvpClosed ? (
+          <View style={styles.closedBtn}>
+            <Text style={styles.closedBtnText} numberOfLines={1}>
+              {isCancelled
+                ? strings.events.rsvpClosedCancelled
+                : strings.events.rsvpClosedPast}
+            </Text>
+          </View>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={strings.events.rsvpGoing}
+            accessibilityState={{ selected: isGoing }}
+            disabled={submitting}
+            onPress={onToggleGoing}
+            style={({ pressed }) => [
+              styles.goBtn,
+              isGoing && styles.goBtnActive,
+              pressed && styles.goBtnPressed,
+            ]}
           >
-            {isGoing
-              ? `✓ ${strings.events.rsvpGoing}`
-              : strings.events.rsvpGoing}
-          </Text>
-        </Pressable>
+            <Text
+              style={[styles.goBtnText, isGoing && styles.goBtnTextActive]}
+              numberOfLines={1}
+            >
+              {isGoing
+                ? `✓ ${strings.events.rsvpGoing}`
+                : strings.events.rsvpGoing}
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       {/* ⋯ action sheet — an absolute overlay (NOT a Modal) so opening the
@@ -266,6 +325,18 @@ export function EventDetailScreen({ route, navigation }: Props) {
             ]}
             onPress={() => {}}
           >
+            {event.canCancel ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={strings.events.cancelAction}
+                onPress={onCancelEvent}
+                style={styles.sheetRow}
+              >
+                <Text style={styles.sheetRowText}>
+                  {strings.events.cancelAction}
+                </Text>
+              </Pressable>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={strings.events.reportEvent}
@@ -438,6 +509,31 @@ function createStyles(colors: ThemeColors) {
       fontWeight: "800",
       marginBottom: spacing.md,
     },
+    notice: {
+      borderRadius: radius.md,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.md,
+      borderWidth: 1,
+    },
+    noticeCancelled: {
+      backgroundColor: colors.surface,
+      borderColor: colors.danger,
+    },
+    noticeCancelledText: {
+      color: colors.danger,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    noticePast: {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+    },
+    noticePastText: {
+      color: colors.textMuted,
+      fontSize: 14,
+      fontWeight: "600",
+    },
     row: {
       flexDirection: "row",
       alignItems: "center",
@@ -502,6 +598,19 @@ function createStyles(colors: ThemeColors) {
     },
     goBtnTextActive: {
       color: "#fff",
+    },
+    closedBtn: {
+      alignItems: "center",
+      paddingVertical: spacing.md,
+      borderRadius: radius.full,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    closedBtnText: {
+      color: colors.textMuted,
+      fontSize: 16,
+      fontWeight: "800",
     },
   });
 }

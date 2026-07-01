@@ -5,10 +5,10 @@ import { DataTable, type Column } from "../components/DataTable";
 import { StatusBadge } from "../components/StatusBadge";
 
 // Reports moderation queue + actions (docs/API.md §14). Resolve / dismiss a
-// report (PATCH /admin/reports/:id) and remove a reported post's content (POST
-// /admin/moderation/remove-content, post-only). Filterable by status; offset-
-// paginated. After any action the page reloads so it shows the server's true
-// state (e.g. a 409 "already actioned" simply re-renders the real status).
+// report (PATCH /admin/reports/:id) and remove reported content (POST
+// /admin/moderation/remove-content) — posts AND events. Filterable by status;
+// offset-paginated. After any action the page reloads so it shows the server's
+// true state (e.g. a 409 "already actioned" simply re-renders the real status).
 
 const STATUSES: { value: "" | ReportStatus; label: string }[] = [
   { value: "", label: "Wszystkie" },
@@ -80,18 +80,21 @@ export function ReportsPage() {
     }
   }
 
-  // Remove a reported post's content (post-only). Destructive → confirm first.
+  // Remove reported content (posts + events — the backend accepts both).
+  // Destructive → type-aware confirm first.
   async function removeContent(report: AdminReportDTO) {
-    if (
-      !window.confirm("Usunąć treść tego wpisu? Tej operacji nie można cofnąć.")
-    ) {
+    const confirmMsg =
+      report.resourceType === "event"
+        ? "Usunąć to wydarzenie? Tej operacji nie można cofnąć."
+        : "Usunąć treść tego wpisu? Tej operacji nie można cofnąć.";
+    if (!window.confirm(confirmMsg)) {
       return;
     }
     setBusy(report.id, true);
     setActionError(null);
     try {
       await adminFetch("POST", "/api/admin/moderation/remove-content", {
-        resourceType: "post",
+        resourceType: report.resourceType,
         resourceId: report.resourceId,
       });
     } catch {
@@ -149,13 +152,13 @@ export function ReportsPage() {
             >
               Odrzuć
             </button>
-            {r.resourceType === "post" && (
+            {(r.resourceType === "post" || r.resourceType === "event") && (
               <button
                 style={styles.dangerButton}
                 disabled={busy}
                 onClick={() => removeContent(r)}
               >
-                Usuń treść
+                {r.resourceType === "event" ? "Usuń wydarzenie" : "Usuń treść"}
               </button>
             )}
           </div>

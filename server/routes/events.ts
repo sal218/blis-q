@@ -14,6 +14,7 @@ import {
 import {
   checkContentCreateRateLimit,
   checkReportRateLimit,
+  checkEventCancelRateLimit,
 } from "../rateLimit";
 import { notifyCommunityMembers } from "../notifications";
 import { encodeEventCursor, decodeEventCursor } from "../cursor";
@@ -38,14 +39,19 @@ export function registerEventRoutes(app: Express): void {
   app.get("/api/v1/events/:id", isAuthenticated, handleGet);
   app.patch("/api/v1/events/:id", isAuthenticated, handleUpdate);
   app.delete("/api/v1/events/:id", isAuthenticated, handleDelete);
+  app.post("/api/v1/events/:id/cancel", isAuthenticated, handleCancel);
   app.post("/api/v1/events/:id/rsvp", isAuthenticated, handleRsvp);
   app.post("/api/v1/events/:id/report", isAuthenticated, handleReport);
 }
 
 // Deleted events are tombstones: title "[deleted]", description/location/image
 // stripped. goingCount is always the aggregate; rsvp is the caller's own status.
-function toEventDTO(row: EventRow): EventDTO {
+// `past` (server-computed) + `canCancel` (creator-only capability) drive the
+// cancel/past UI without ever serialising createdById.
+function toEventDTO(row: EventRow, callerId: string): EventDTO {
   const deleted = row.deletedAt !== null;
+  const cancelled = row.status === "cancelled";
+  const past = row.startsAt.getTime() < Date.now();
   return {
     id: row.id,
     communityId: row.communityId,
@@ -61,6 +67,10 @@ function toEventDTO(row: EventRow): EventDTO {
       ? { status: row.callerRsvpStatus as RsvpStatus }
       : null,
     deleted,
+    status: cancelled ? "cancelled" : "active",
+    cancelledAt: row.cancelledAt ? row.cancelledAt.toISOString() : null,
+    past,
+    canCancel: row.createdById === callerId && !cancelled && !past && !deleted,
   };
 }
 
@@ -79,14 +89,15 @@ async function handleList(req: Request, res: Response): Promise<Response> {
       cursor = decoded;
     }
 
+    const callerId = req.user!.id;
     const { rows, nextCursor } = await storage.listUpcomingEvents({
-      callerId: req.user!.id,
+      callerId,
       limit: q.limit,
       cursor,
     });
 
     const body: CursorPage<EventDTO> = {
-      data: rows.map(toEventDTO),
+      data: rows.map((row) => toEventDTO(row, callerId)),
       nextCursor: nextCursor ? encodeEventCursor(nextCursor) : null,
     };
     return res.status(200).json(body);
@@ -100,11 +111,12 @@ async function handleList(req: Request, res: Response): Promise<Response> {
 // soonest-first, capped. Caller-scoped; aggregate goingCount only.
 async function handleListMine(req: Request, res: Response): Promise<Response> {
   try {
+    const callerId = req.user!.id;
     const rows = await storage.listMyUpcomingEvents({
-      callerId: req.user!.id,
+      callerId,
       limit: HOME_EVENTS_LIMIT,
     });
-    const body: EventDTO[] = rows.map(toEventDTO);
+    const body: EventDTO[] = rows.map((row) => toEventDTO(row, callerId));
     return res.status(200).json(body);
   } catch (err) {
     console.error("[GET /api/v1/events/mine]", { code: safeErrorCode(err) });
@@ -155,7 +167,7 @@ async function handleCreate(req: Request, res: Response): Promise<Response> {
       )
       .catch(() => {});
 
-    return res.status(201).json(toEventDTO(result.event));
+    return res.status(201).json(toEventDTO(result.event, userId));
   } catch (err) {
     console.error("[POST /api/v1/communities/:id/events]", {
       code: safeErrorCode(err),
@@ -169,11 +181,12 @@ async function handleGet(req: Request, res: Response): Promise<Response> {
     const id = parseId(req);
     if (!id) return res.status(400).json({ error: "Invalid input" });
 
-    const event = await storage.getEvent(id, req.user!.id);
+    const callerId = req.user!.id;
+    const event = await storage.getEvent(id, callerId);
     if (!event || event.deletedAt) {
       return res.status(404).json({ error: "Not found" });
     }
-    return res.status(200).json(toEventDTO(event));
+    return res.status(200).json(toEventDTO(event, callerId));
   } catch (err) {
     console.error("[GET /api/v1/events/:id]", { code: safeErrorCode(err) });
     return res.status(500).json({ error: "Internal Server Error" });
@@ -211,7 +224,7 @@ async function handleUpdate(req: Request, res: Response): Promise<Response> {
 
     const event = await storage.getEvent(id, userId);
     if (!event) return res.status(404).json({ error: "Not found" });
-    return res.status(200).json(toEventDTO(event));
+    return res.status(200).json(toEventDTO(event, userId));
   } catch (err) {
     console.error("[PATCH /api/v1/events/:id]", { code: safeErrorCode(err) });
     return res.status(500).json({ error: "Internal Server Error" });
@@ -241,6 +254,41 @@ async function handleDelete(req: Request, res: Response): Promise<Response> {
   }
 }
 
+// POST /api/v1/events/:id/cancel — the creator marks their event cancelled (the
+// event stays visible with its content; only status/cancelledAt change). 403 for
+// non-creators, 404 missing/deleted, 409 already cancelled.
+async function handleCancel(req: Request, res: Response): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
+
+    const rate = await checkEventCancelRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const result = await storage.cancelEvent(id, userId, req.ip ?? null);
+    if (result === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    if (result === "forbidden") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    if (result === "already_cancelled") {
+      return res.status(409).json({ error: "Already cancelled" });
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[POST /api/v1/events/:id/cancel]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
 async function handleRsvp(req: Request, res: Response): Promise<Response> {
   try {
     const id = parseId(req);
@@ -259,6 +307,10 @@ async function handleRsvp(req: Request, res: Response): Promise<Response> {
     }
     if (result === "forbidden") {
       return res.status(403).json({ error: "Forbidden" });
+    }
+    if (result === "conflict") {
+      // Event was cancelled or has already started — RSVP is closed.
+      return res.status(409).json({ error: "Event not open for RSVP" });
     }
     return res.status(200).json({ status: parsed.data.status });
   } catch (err) {

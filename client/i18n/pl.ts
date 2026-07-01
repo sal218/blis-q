@@ -122,6 +122,7 @@ export const pl = {
     // API error copy
     notAvailable: "To wydarzenie nie jest już dostępne.", // "This event is no longer available."
     rsvpForbidden: "Dołącz do społeczności, aby potwierdzić udział.", // "Join the community to RSVP."
+    rsvpUnavailable: "To wydarzenie zostało odwołane lub już się odbyło.", // 409 — "This event was cancelled or has already taken place."
 
     // Detail ⋯ overflow menu + report
     moreActions: "Więcej opcji", // "More options" (the ⋯ a11y label)

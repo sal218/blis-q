@@ -222,6 +222,8 @@ export type EventRow = {
   callerRsvpStatus: string | null;
   createdAt: Date;
   deletedAt: Date | null;
+  status: string; // "active" | "cancelled" (DB text; route narrows to the union)
+  cancelledAt: Date | null;
 };
 
 // One row of the admin reports queue. `status`/`resourceType` are DB text
@@ -2146,6 +2148,8 @@ export class DatabaseStorage {
       callerRsvpStatus: this.callerRsvpSql(callerId),
       createdAt: events.createdAt,
       deletedAt: events.deletedAt,
+      status: events.status,
+      cancelledAt: events.cancelledAt,
     };
   }
 
@@ -2199,6 +2203,8 @@ export class DatabaseStorage {
           createdById: events.createdById,
           createdAt: events.createdAt,
           deletedAt: events.deletedAt,
+          status: events.status,
+          cancelledAt: events.cancelledAt,
         });
       await tx.insert(auditLog).values({
         actorId: creatorId,
@@ -2235,6 +2241,7 @@ export class DatabaseStorage {
 
     const conditions: (SQL | undefined)[] = [
       isNull(events.deletedAt),
+      eq(events.status, "active"), // discovery feed hides cancelled events
       gte(events.startsAt, now),
     ];
     if (blockedIds.length) {
@@ -2294,6 +2301,7 @@ export class DatabaseStorage {
 
     const conditions: (SQL | undefined)[] = [
       isNull(events.deletedAt),
+      eq(events.status, "active"), // the Home rail hides cancelled events too
       gte(events.startsAt, now),
     ];
     if (blockedIds.length) {
@@ -2501,28 +2509,125 @@ export class DatabaseStorage {
     });
   }
 
+  // Cancel an event (CREATOR ONLY — organiser lifecycle, distinct from the
+  // creator-or-mod/admin softDelete and the admin moderation remove). Unlike a
+  // soft-delete this keeps title/description/location/image so RSVP'd users still
+  // see WHAT was cancelled; it only flips status + stamps cancelledAt. Authorize
+  // precheck picks the right status code; the guarded UPDATE (WHERE status =
+  // 'active') is the race net + writes the event.cancelled audit once in the same
+  // tx. RSVPs are intentionally kept.
+  async cancelEvent(
+    id: string,
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<"cancelled" | "not_found" | "forbidden" | "already_cancelled"> {
+    const [ev] = await db
+      .select({
+        createdById: events.createdById,
+        status: events.status,
+        deletedAt: events.deletedAt,
+      })
+      .from(events)
+      .where(eq(events.id, id))
+      .limit(1);
+    if (!ev || ev.deletedAt) return "not_found";
+    if (ev.createdById !== actorId) return "forbidden";
+    if (ev.status === "cancelled") return "already_cancelled";
+
+    return db.transaction(async (tx) => {
+      const [cancelled] = await tx
+        .update(events)
+        .set({ status: "cancelled", cancelledAt: new Date() })
+        .where(
+          and(
+            eq(events.id, id),
+            eq(events.status, "active"),
+            isNull(events.deletedAt),
+          ),
+        )
+        .returning({ id: events.id });
+      if (!cancelled) {
+        // Lost a race between the precheck and here: re-read to classify a
+        // concurrent cancel (→ already_cancelled) vs a concurrent delete (→ 404).
+        const [now] = await tx
+          .select({ status: events.status, deletedAt: events.deletedAt })
+          .from(events)
+          .where(eq(events.id, id))
+          .limit(1);
+        if (now && !now.deletedAt && now.status === "cancelled") {
+          return "already_cancelled";
+        }
+        return "not_found";
+      }
+
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "event.cancelled",
+        resourceType: "event",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return "cancelled";
+    });
+  }
+
   // Upsert the caller's RSVP. Community-member-gated: only a member of the
   // event's community may RSVP (mirrors the in-group model). Visible-event-only
   // (getEvent hides deleted/community-deleted/block-hidden). Not audited (RSVP is
-  // a benign toggle; the row itself is the record). Returns "ok"/404/403.
+  // a benign toggle; the row itself is the record). Rejects a cancelled or
+  // already-started event with "conflict" (→ 409). Returns "ok"/404/403/409.
   async setRsvp(
     eventId: string,
     userId: string,
     status: "going" | "interested" | "not_going",
-  ): Promise<"ok" | "not_found" | "forbidden"> {
-    const event = await this.getEvent(eventId, userId);
-    if (!event || event.deletedAt) return "not_found";
-    if (!(await this.isCommunityMember(event.communityId, userId))) {
-      return "forbidden";
-    }
-    await db
-      .insert(eventRsvps)
-      .values({ eventId, userId, status })
-      .onConflictDoUpdate({
-        target: [eventRsvps.eventId, eventRsvps.userId],
-        set: { status },
-      });
-    return "ok";
+  ): Promise<"ok" | "not_found" | "forbidden" | "conflict"> {
+    return db.transaction(async (tx) => {
+      // Lock the event row so a concurrent creator-cancel can't slip in between
+      // the state check and the RSVP write. cancelEvent's guarded UPDATE takes the
+      // same row lock: it either commits first (we then read status = 'cancelled'
+      // → conflict) or waits behind us. This makes "no RSVP persists on a
+      // cancelled/past event" atomic, not a racy read-then-write.
+      const [ev] = await tx
+        .select({
+          communityId: events.communityId,
+          createdById: events.createdById,
+          status: events.status,
+          startsAt: events.startsAt,
+          deletedAt: events.deletedAt,
+        })
+        .from(events)
+        .where(eq(events.id, eventId))
+        .for("update");
+      if (!ev || ev.deletedAt) return "not_found";
+
+      // Same visibility rules as getEvent: the community must still be live, and a
+      // blocked creator hides the event (→ 404, no info leak).
+      if (!(await this.communityExists(ev.communityId))) return "not_found";
+      if (ev.createdById) {
+        const blockedIds = await this.getBlockedUserIds(userId);
+        if (blockedIds.includes(ev.createdById)) return "not_found";
+      }
+
+      // Member-gated (checked before lifecycle so non-members always get 403 and
+      // never learn whether the event was cancelled).
+      if (!(await this.isCommunityMember(ev.communityId, userId))) {
+        return "forbidden";
+      }
+
+      // Can't RSVP to a cancelled or already-started event.
+      if (ev.status === "cancelled" || ev.startsAt < new Date()) {
+        return "conflict";
+      }
+
+      await tx
+        .insert(eventRsvps)
+        .values({ eventId, userId, status })
+        .onConflictDoUpdate({
+          target: [eventRsvps.eventId, eventRsvps.userId],
+          set: { status },
+        });
+      return "ok";
+    });
   }
 
   // Admin content removal (moderation). Platform-admin authority — no community

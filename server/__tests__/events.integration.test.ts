@@ -31,6 +31,7 @@ jest.mock("../supabase", () => ({
 jest.mock("../rateLimit", () => ({
   checkContentCreateRateLimit: jest.fn(),
   checkReportRateLimit: jest.fn(),
+  checkEventCancelRateLimit: jest.fn(),
 }));
 
 jest.mock("../notifications", () => ({
@@ -41,6 +42,7 @@ import { registerEventRoutes } from "../routes/events";
 import {
   checkContentCreateRateLimit,
   checkReportRateLimit,
+  checkEventCancelRateLimit,
 } from "../rateLimit";
 import { notifyCommunityMembers } from "../notifications";
 import { storage } from "../storage";
@@ -63,6 +65,7 @@ jest.setTimeout(30000);
 
 const contentRl = checkContentCreateRateLimit as unknown as jest.Mock;
 const reportRl = checkReportRateLimit as unknown as jest.Mock;
+const cancelRl = checkEventCancelRateLimit as unknown as jest.Mock;
 const notifyMock = notifyCommunityMembers as unknown as jest.Mock;
 
 const POLICY_VERSION = "2026-06-10";
@@ -117,6 +120,7 @@ beforeEach(() => {
   mockUser = null;
   contentRl.mockResolvedValue({ allowed: true });
   reportRl.mockResolvedValue({ allowed: true });
+  cancelRl.mockResolvedValue({ allowed: true });
   notifyMock.mockResolvedValue(undefined);
 });
 
@@ -710,6 +714,215 @@ describe("POST /api/v1/events/:id/rsvp", () => {
       .post(`/api/v1/events/${randomUUID()}/rsvp`)
       .send({ status: "going" });
     expect(res.status).toBe(404);
+  });
+
+  it("RSVP to a cancelled event → 409 (no row persisted)", async () => {
+    const owner = await seedUser();
+    const member = await seedUser();
+    const cid = await seedCommunity(owner);
+    await storage.joinCommunity(cid, member);
+    const eid = await seedEvent(cid, owner);
+    await storage.cancelEvent(eid, owner);
+    mockUser = { id: member };
+
+    const res = await request(app)
+      .post(`/api/v1/events/${eid}/rsvp`)
+      .send({ status: "going" });
+    expect(res.status).toBe(409);
+
+    const rows = await db
+      .select()
+      .from(eventRsvps)
+      .where(eq(eventRsvps.eventId, eid));
+    expect(rows.filter((r) => r.userId === member)).toHaveLength(0);
+  });
+
+  it("RSVP to a past event → 409", async () => {
+    const owner = await seedUser();
+    const member = await seedUser();
+    const cid = await seedCommunity(owner);
+    await storage.joinCommunity(cid, member);
+    const eid = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() - HOUR),
+    });
+    mockUser = { id: member };
+
+    const res = await request(app)
+      .post(`/api/v1/events/${eid}/rsvp`)
+      .send({ status: "going" });
+    expect(res.status).toBe(409);
+  });
+
+  it("non-member on a cancelled event still gets 403 (no cancellation leak)", async () => {
+    const owner = await seedUser();
+    const outsider = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    await storage.cancelEvent(eid, owner);
+    mockUser = { id: outsider };
+
+    const res = await request(app)
+      .post(`/api/v1/events/${eid}/rsvp`)
+      .send({ status: "going" });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("POST /api/v1/events/:id/cancel", () => {
+  it("creator cancels → 200; status/cancelledAt set, content kept, audited", async () => {
+    const owner = await seedUser();
+    const member = await seedUser();
+    const cid = await seedCommunity(owner);
+    await storage.joinCommunity(cid, member);
+    const eid = await seedEvent(cid, member); // member is the creator
+    mockUser = { id: member };
+
+    const res = await request(app).post(`/api/v1/events/${eid}/cancel`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+
+    const [row] = await db.select().from(events).where(eq(events.id, eid));
+    expect(row.status).toBe("cancelled");
+    expect(row.cancelledAt).not.toBeNull();
+    expect(row.deletedAt).toBeNull();
+    expect(row.title).toBe("Wydarzenie"); // content kept, NOT scrubbed
+
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(inArray(auditLog.actorId, [member]));
+    expect(
+      audits.some(
+        (a) =>
+          a.action === "event.cancelled" &&
+          a.resourceType === "event" &&
+          a.resourceId === eid,
+      ),
+    ).toBe(true);
+  });
+
+  it("a community admin (non-creator) cannot cancel → 403", async () => {
+    const owner = await seedUser(); // community admin
+    const member = await seedUser();
+    const cid = await seedCommunity(owner);
+    await storage.joinCommunity(cid, member);
+    const eid = await seedEvent(cid, member); // member owns the event
+    mockUser = { id: owner };
+
+    expect(
+      (await request(app).post(`/api/v1/events/${eid}/cancel`)).status,
+    ).toBe(403);
+  });
+
+  it("already-cancelled → 409; audit written once", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    mockUser = { id: owner };
+
+    expect(
+      (await request(app).post(`/api/v1/events/${eid}/cancel`)).status,
+    ).toBe(200);
+    expect(
+      (await request(app).post(`/api/v1/events/${eid}/cancel`)).status,
+    ).toBe(409);
+
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(inArray(auditLog.actorId, [owner]));
+    expect(audits.filter((a) => a.action === "event.cancelled")).toHaveLength(
+      1,
+    );
+  });
+
+  it("missing → 404; soft-deleted → 404", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    mockUser = { id: owner };
+
+    expect(
+      (await request(app).post(`/api/v1/events/${randomUUID()}/cancel`)).status,
+    ).toBe(404);
+
+    await storage.softDeleteEvent(eid, owner);
+    expect(
+      (await request(app).post(`/api/v1/events/${eid}/cancel`)).status,
+    ).toBe(404);
+  });
+
+  it("rate-limited → 429", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    cancelRl.mockResolvedValueOnce({ allowed: false, retryAfter: 42 });
+    mockUser = { id: owner };
+
+    const res = await request(app).post(`/api/v1/events/${eid}/cancel`);
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBe(42);
+  });
+});
+
+describe("cancelled/past events in reads (DTO fields + feed exclusion)", () => {
+  it("cancelled events are excluded from the global feed and the Home rail", async () => {
+    const owner = await seedUser();
+    const caller = await seedUser();
+    const cid = await seedCommunity(owner);
+    await storage.joinCommunity(cid, caller);
+    const eid = await seedEvent(cid, owner);
+    await storage.setRsvp(eid, caller, "going");
+    await storage.cancelEvent(eid, owner);
+    mockUser = { id: caller };
+
+    const feed = await request(app).get(`/api/v1/events`);
+    expect(feed.body.data.map((e: { id: string }) => e.id)).not.toContain(eid);
+
+    const mine = await request(app).get(`/api/v1/events/mine`);
+    expect(mine.body.map((e: { id: string }) => e.id)).not.toContain(eid);
+  });
+
+  it("getEvent exposes status/cancelledAt/past/canCancel", async () => {
+    const creator = await seedUser();
+    const other = await seedUser();
+    const cid = await seedCommunity(creator);
+    await storage.joinCommunity(cid, other);
+    const eid = await seedEvent(cid, creator);
+
+    // creator on an active future event → canCancel true, past false
+    mockUser = { id: creator };
+    const asCreator = await request(app).get(`/api/v1/events/${eid}`);
+    expect(asCreator.body.status).toBe("active");
+    expect(asCreator.body.cancelledAt).toBeNull();
+    expect(asCreator.body.past).toBe(false);
+    expect(asCreator.body.canCancel).toBe(true);
+
+    // a non-creator never holds the cancel capability
+    mockUser = { id: other };
+    const asOther = await request(app).get(`/api/v1/events/${eid}`);
+    expect(asOther.body.canCancel).toBe(false);
+
+    // once cancelled → status cancelled, cancelledAt set, canCancel false
+    await storage.cancelEvent(eid, creator);
+    mockUser = { id: creator };
+    const afterCancel = await request(app).get(`/api/v1/events/${eid}`);
+    expect(afterCancel.body.status).toBe("cancelled");
+    expect(afterCancel.body.cancelledAt).not.toBeNull();
+    expect(afterCancel.body.canCancel).toBe(false);
+  });
+
+  it("a past event reads past=true and canCancel=false for its creator", async () => {
+    const creator = await seedUser();
+    const cid = await seedCommunity(creator);
+    const eid = await seedEvent(cid, creator, {
+      startsAt: new Date(Date.now() - HOUR),
+    });
+    mockUser = { id: creator };
+
+    const res = await request(app).get(`/api/v1/events/${eid}`);
+    expect(res.body.past).toBe(true);
+    expect(res.body.canCancel).toBe(false);
   });
 });
 

@@ -129,6 +129,8 @@ export function eventsApiErrorMessage(error: EventsApiError): string {
       return strings.events.notAvailable;
     case "forbidden":
       return strings.events.rsvpForbidden;
+    case "conflict":
+      return strings.events.rsvpUnavailable;
     case "validation":
     case "server":
       return strings.errors.generic;
@@ -165,6 +167,7 @@ export function createEventApiErrorMessage(error: EventsApiError): string {
       return strings.events.createForbidden;
     case "notFound":
       return strings.events.createCommunityGone;
+    case "conflict": // create never returns 409; here for exhaustiveness
     case "validation":
     case "server":
       return strings.errors.generic;

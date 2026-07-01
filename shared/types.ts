@@ -157,6 +157,13 @@ export type EventDTO = {
   goingCount: number; // attendees with status "going" (aggregate; no identities)
   rsvp: { status: RsvpStatus } | null; // caller's RSVP, if any
   deleted: boolean; // tombstone: title → "[deleted]", creator hidden
+  status: "active" | "cancelled"; // lifecycle; a cancelled event keeps its content
+  cancelledAt: string | null; // when it was cancelled (null while active)
+  past: boolean; // server-computed: startsAt is in the past (RSVP-closed)
+  // Capability flag for the caller: may they cancel this event now? True only for
+  // the creator on an active, non-past, non-deleted event. Never leaks WHO the
+  // creator is — just whether the caller holds the cancel capability.
+  canCancel: boolean;
 };
 
 export type SafePlaceDTO = {

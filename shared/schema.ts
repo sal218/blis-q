@@ -126,6 +126,12 @@ export const events = pgTable(
     createdById: uuid("created_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    // Lifecycle: "active" (default) or "cancelled". A cancelled event keeps its
+    // content (unlike a soft-deleted one, which is tombstoned) so RSVP'd users
+    // still see WHAT was cancelled; cancelledAt marks when. The creator-cancel
+    // path flips these via a guarded UPDATE ... WHERE status = 'active'.
+    status: text("status").notNull().default("active"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

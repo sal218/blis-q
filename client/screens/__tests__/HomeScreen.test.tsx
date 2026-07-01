@@ -54,6 +54,10 @@ function event(id: string, title: string): EventDTO {
     goingCount: 3,
     rsvp: { status: "going" },
     deleted: false,
+    status: "active",
+    cancelledAt: null,
+    past: false,
+    canCancel: false,
   };
 }
 

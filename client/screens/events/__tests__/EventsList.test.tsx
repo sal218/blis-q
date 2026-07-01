@@ -21,6 +21,10 @@ const ev = (id: string, title: string, location: string | null): EventDTO => ({
   goingCount: 1,
   rsvp: null,
   deleted: false,
+  status: "active",
+  cancelledAt: null,
+  past: false,
+  canCancel: false,
 });
 
 function state(over: Partial<ReturnType<typeof useEvents>> = {}) {

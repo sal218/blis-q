@@ -9,6 +9,7 @@ import {
   getEvent,
   setRsvp,
   createEvent,
+  reportEvent,
 } from "@/lib/api/events";
 
 const fetchMock = fetchWithAuth as unknown as jest.Mock;
@@ -111,6 +112,39 @@ describe("events API client — listMyEvents", () => {
 
     fetchMock.mockRejectedValueOnce(new Error("offline"));
     expect(await listMyEvents()).toEqual({
+      ok: false,
+      error: { kind: "network" },
+    });
+  });
+});
+
+describe("events API client — reportEvent", () => {
+  it("201 → ok and posts the reason to the report path", async () => {
+    fetchMock.mockResolvedValue(res(201, { ok: true }));
+    expect(await reportEvent("e1", "spam")).toEqual({
+      ok: true,
+      data: { ok: true },
+    });
+    expect(fetchMock).toHaveBeenCalledWith("POST", "/api/v1/events/e1/report", {
+      reason: "spam",
+    });
+  });
+
+  it("404 → notFound (event no longer visible); 429 → rateLimited; network", async () => {
+    fetchMock.mockResolvedValueOnce(res(404, {}));
+    expect(await reportEvent("e1", "x")).toEqual({
+      ok: false,
+      error: { kind: "notFound" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(429, { retryAfter: 20 }));
+    expect(await reportEvent("e1", "x")).toEqual({
+      ok: false,
+      error: { kind: "rateLimited", retryAfter: 20 },
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    expect(await reportEvent("e1", "x")).toEqual({
       ok: false,
       error: { kind: "network" },
     });

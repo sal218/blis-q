@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import Svg, { Defs, LinearGradient, Stop, Rect } from "react-native-svg";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
+import { ReportPostModal } from "@/components/ReportPostModal";
 import {
   Clock,
   MapPin,
@@ -69,9 +70,10 @@ export function EventDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { event, status, errorMessage, submitting, retry, setRsvp } = useEvent(
-    route.params.id,
-  );
+  const { event, status, errorMessage, submitting, retry, setRsvp, report } =
+    useEvent(route.params.id);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [reportVisible, setReportVisible] = useState(false);
 
   // The native header is hidden (full-bleed banner), so the screen owns its back
   // button — a floating circle that reads over the banner or a plain screen.
@@ -128,9 +130,32 @@ export function EventDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  // ReportPostModal closes itself on success / shows the mapped error otherwise;
+  // we add a brief success confirmation.
+  const onSubmitReport = async (reason: string) => {
+    const result = await report(reason);
+    if (result.ok) Alert.alert(strings.posts.reportSuccess);
+    return result;
+  };
+
+  // ⋯ overflow (top-right), mirroring the floating back button. Opens an action
+  // sheet — one action for now (Report); share/edit/delete land in later slices.
+  const moreButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={strings.events.moreActions}
+      hitSlop={8}
+      onPress={() => setMenuVisible(true)}
+      style={[styles.moreBtn, { top: insets.top + spacing.sm }]}
+    >
+      <Text style={styles.moreGlyph}>⋯</Text>
+    </Pressable>
+  );
+
   return (
     <View style={styles.root}>
       {backButton}
+      {moreButton}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -226,6 +251,55 @@ export function EventDetailScreen({ route, navigation }: Props) {
           </Text>
         </Pressable>
       </View>
+
+      {/* ⋯ action sheet — an absolute overlay (NOT a Modal) so opening the
+          report Modal right after doesn't hit the iOS modal-over-modal bug. */}
+      {menuVisible ? (
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setMenuVisible(false)}
+        >
+          <Pressable
+            style={[
+              styles.sheet,
+              { paddingBottom: insets.bottom + spacing.md },
+            ]}
+            onPress={() => {}}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.events.reportEvent}
+              onPress={() => {
+                setMenuVisible(false);
+                setReportVisible(true);
+              }}
+              style={styles.sheetRow}
+            >
+              <Text style={styles.sheetRowText}>
+                {strings.events.reportEvent}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.common.cancel}
+              onPress={() => setMenuVisible(false)}
+              style={styles.sheetRow}
+            >
+              <Text style={styles.sheetCancelText}>
+                {strings.common.cancel}
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      ) : null}
+
+      <ReportPostModal
+        visible={reportVisible}
+        onClose={() => setReportVisible(false)}
+        onSubmit={onSubmitReport}
+        title={strings.events.reportTitle}
+        placeholder={strings.events.reportPlaceholder}
+      />
     </View>
   );
 }
@@ -251,6 +325,50 @@ function createStyles(colors: ThemeColors) {
       // Translucent dark circle (like the date badge scrim) so the chevron reads
       // over any banner image AND over a plain loading/error screen.
       backgroundColor: BADGE_SCRIM,
+    },
+    moreBtn: {
+      position: "absolute",
+      right: spacing.lg,
+      zIndex: 10,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: BADGE_SCRIM,
+    },
+    moreGlyph: {
+      color: "#fff",
+      fontSize: 22,
+      fontWeight: "800",
+      lineHeight: 22,
+    },
+    sheetBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 20,
+      backgroundColor: "rgba(0,0,0,0.45)",
+      justifyContent: "flex-end",
+    },
+    sheet: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: radius.lg,
+      borderTopRightRadius: radius.lg,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+    },
+    sheetRow: {
+      paddingVertical: spacing.md,
+      alignItems: "center",
+    },
+    sheetRowText: {
+      color: colors.danger,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    sheetCancelText: {
+      color: colors.textMuted,
+      fontSize: 16,
+      fontWeight: "600",
     },
     centered: {
       flex: 1,

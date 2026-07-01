@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getEvent, setRsvp as apiSetRsvp } from "@/lib/api/events";
+import {
+  getEvent,
+  setRsvp as apiSetRsvp,
+  reportEvent as apiReportEvent,
+} from "@/lib/api/events";
 import { eventsApiErrorMessage } from "@/lib/messages";
 import type { EventDTO, RsvpStatus } from "@shared/types";
 
@@ -10,6 +14,8 @@ import type { EventDTO, RsvpStatus } from "@shared/types";
 
 export type EventDetailStatus = "loading" | "ready" | "error";
 
+// ok, or a mapped Polish message. Same shape as PostActionOutcome so it plugs
+// straight into the shared ReportPostModal. Covers both RSVP and report.
 export type RsvpOutcome = { ok: true } | { ok: false; message: string };
 
 export type UseEvent = {
@@ -19,6 +25,7 @@ export type UseEvent = {
   submitting: boolean;
   retry: () => void;
   setRsvp: (status: RsvpStatus) => Promise<RsvpOutcome>;
+  report: (reason: string) => Promise<RsvpOutcome>;
 };
 
 // goingCount delta from a status change: entering "going" +1, leaving "going" −1,
@@ -83,5 +90,16 @@ export function useEvent(eventId: string): UseEvent {
     [eventId],
   );
 
-  return { event, status, errorMessage, submitting, retry, setRsvp };
+  // Submit a moderation report for this event (no local state change). 404 =
+  // the event is no longer visible; the message is mapped for the screen.
+  const report = useCallback(
+    async (reason: string): Promise<RsvpOutcome> => {
+      const result = await apiReportEvent(eventId, reason);
+      if (result.ok) return { ok: true };
+      return { ok: false, message: eventsApiErrorMessage(result.error) };
+    },
+    [eventId],
+  );
+
+  return { event, status, errorMessage, submitting, retry, setRsvp, report };
 }

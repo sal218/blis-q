@@ -123,6 +123,12 @@ export const pl = {
     notAvailable: "To wydarzenie nie jest już dostępne.", // "This event is no longer available."
     rsvpForbidden: "Dołącz do społeczności, aby potwierdzić udział.", // "Join the community to RSVP."
 
+    // Detail ⋯ overflow menu + report
+    moreActions: "Więcej opcji", // "More options" (the ⋯ a11y label)
+    reportEvent: "Zgłoś wydarzenie", // "Report event" (menu row)
+    reportTitle: "Zgłoś wydarzenie", // report modal title
+    reportPlaceholder: "Opisz, co jest nie tak z tym wydarzeniem", // "Describe what's wrong with this event"
+
     // Create event (form on Community detail)
     createCta: "Utwórz wydarzenie", // "Create event" (the entry button)
     createTitle: "Nowe wydarzenie", // "New event" (screen header)

@@ -242,15 +242,16 @@ Hybrid: **HTTP for persistence + history, Supabase Realtime Broadcast for live d
 
 ## 10. Events & RSVPs — `/api/v1`
 
-| Method | Path                      | Class | Body/Query                                        | Success                                             |
-| ------ | ------------------------- | ----- | ------------------------------------------------- | --------------------------------------------------- |
-| GET    | `/events`                 | 🔑    | **cursor** (global UPCOMING feed, `startsAt` ASC) | `200 CursorPage<EventDTO>`                          |
-| GET    | `/events/mine`            | 🔑    | —                                                 | `200 EventDTO[]` (caller's upcoming `going` events) |
-| POST   | `/communities/:id/events` | 🔑    | `CreateEventInput`                                | `201 EventDTO` (member; fires `new_event`)          |
-| GET    | `/events/:id`             | 🔑    | —                                                 | `200 EventDTO` (404 if deleted)                     |
-| PATCH  | `/events/:id`             | 🔑    | `UpdateEventInput`                                | `200 EventDTO` (creator/mod)                        |
-| DELETE | `/events/:id`             | 🔑    | —                                                 | `200 { ok: true }` (creator/mod; soft delete)       |
-| POST   | `/events/:id/rsvp`        | 🔑    | `{ status }`                                      | `200 { status }` (upsert; community-member only)    |
+| Method | Path                      | Class | Body/Query                                        | Success                                               |
+| ------ | ------------------------- | ----- | ------------------------------------------------- | ----------------------------------------------------- |
+| GET    | `/events`                 | 🔑    | **cursor** (global UPCOMING feed, `startsAt` ASC) | `200 CursorPage<EventDTO>`                            |
+| GET    | `/events/mine`            | 🔑    | —                                                 | `200 EventDTO[]` (caller's upcoming `going` events)   |
+| POST   | `/communities/:id/events` | 🔑    | `CreateEventInput`                                | `201 EventDTO` (member; fires `new_event`)            |
+| GET    | `/events/:id`             | 🔑    | —                                                 | `200 EventDTO` (404 if deleted)                       |
+| PATCH  | `/events/:id`             | 🔑    | `UpdateEventInput`                                | `200 EventDTO` (creator/mod)                          |
+| DELETE | `/events/:id`             | 🔑    | —                                                 | `200 { ok: true }` (creator/mod; soft delete)         |
+| POST   | `/events/:id/rsvp`        | 🔑    | `{ status }`                                      | `200 { status }` (upsert; community-member only)      |
+| POST   | `/events/:id/report`      | 🔑    | `{ reason }`                                      | `201 { ok: true }` (visible-only → 404; `reportUser`) |
 
 `status ∈ {going, interested, not_going}`. The `GET /events` feed is global and **upcoming-only** (`startsAt >= now`), keyset-paginated ascending on `(startsAt, id)`, block-filtered on the creator, and across all non-deleted communities. **`GET /events/mine`** powers the Home "Upcoming events" rail: the **caller's own** upcoming events they RSVP'd **`going`** to (same visibility rules — non-deleted event + community, soonest-first, creator-block-filtered), capped (a short personal list, no cursor); caller-scoped (a user only ever sees their own RSVPs); `goingCount` aggregate only. `EventDTO` carries **`goingCount`** (aggregate count of `going` RSVPs) and the caller's own **`rsvp`** — but **never attendee identities**: attending an Article 9 community's event is sensitive, so there is **no "who's going" endpoint** in v1. A future attendee preview (the mockup avatars) requires an explicit privacy decision (members-only / opt-in) — deferred. **RSVP is community-member-gated** (only a member of the event's community may RSVP). `event_reminder` pushes are sent by the scheduled job (slice 3), keyed off the additive nullable `events.reminder_sent_at` marker (`NULL` = not sent), not an endpoint. Event `location` is free text (venue) — 🚧 no pin coordinates persisted in v1. Event images are deferred (no `imageKey` accepted yet).
 

@@ -8,6 +8,7 @@ jest.mock("@/lib/api/events", () => ({
 import { renderHook, act, waitFor } from "@testing-library/react-native";
 import { useEvent } from "@/hooks/useEvent";
 import { getEvent, setRsvp, reportEvent, cancelEvent } from "@/lib/api/events";
+import { strings } from "@/i18n";
 import type { EventDTO, RsvpStatus } from "@shared/types";
 
 const getMock = getEvent as unknown as jest.Mock;
@@ -186,7 +187,7 @@ describe("useEvent", () => {
     expect(result.current.event?.cancelledAt).toEqual(expect.any(String));
   });
 
-  it("cancel failure → { ok: false, message } (cancel mapper), state unchanged", async () => {
+  it("cancel failure → cancel-specific copy (403 ≠ RSVP copy), state unchanged", async () => {
     getMock.mockResolvedValue({
       ok: true,
       data: event({ canCancel: true }),
@@ -194,6 +195,7 @@ describe("useEvent", () => {
     const { result } = renderHook(() => useEvent("e1"));
     await waitFor(() => expect(result.current.status).toBe("ready"));
 
+    // 403 → "you can't cancel this", NOT the RSVP "join the community" copy.
     cancelMock.mockResolvedValueOnce({
       ok: false,
       error: { kind: "forbidden" },
@@ -203,9 +205,30 @@ describe("useEvent", () => {
       outcome = await result.current.cancel();
     });
     expect(outcome.ok).toBe(false);
-    expect(outcome.message).toEqual(expect.any(String));
-    // unchanged: still active + still cancellable
+    expect(outcome.message).toBe(strings.events.cancelForbidden);
+    expect(outcome.message).not.toBe(strings.events.rsvpForbidden);
+    // state unchanged: still active + still cancellable
     expect(result.current.event?.status).toBe("active");
     expect(result.current.event?.canCancel).toBe(true);
+
+    // 404 → event no longer available
+    cancelMock.mockResolvedValueOnce({
+      ok: false,
+      error: { kind: "notFound" },
+    });
+    await act(async () => {
+      outcome = await result.current.cancel();
+    });
+    expect(outcome.message).toBe(strings.events.notAvailable);
+
+    // 409 → already cancelled or past
+    cancelMock.mockResolvedValueOnce({
+      ok: false,
+      error: { kind: "conflict" },
+    });
+    await act(async () => {
+      outcome = await result.current.cancel();
+    });
+    expect(outcome.message).toBe(strings.events.rsvpUnavailable);
   });
 });

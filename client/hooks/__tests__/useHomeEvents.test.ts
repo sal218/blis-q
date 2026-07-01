@@ -33,6 +33,10 @@ const ev = (id: string): EventDTO => ({
   goingCount: 1,
   rsvp: { status: "going" },
   deleted: false,
+  status: "active",
+  cancelledAt: null,
+  past: false,
+  canCancel: false,
 });
 
 beforeEach(() => {

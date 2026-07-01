@@ -10,6 +10,7 @@ import {
   setRsvp,
   createEvent,
   reportEvent,
+  cancelEvent,
 } from "@/lib/api/events";
 
 const fetchMock = fetchWithAuth as unknown as jest.Mock;
@@ -35,6 +36,10 @@ const EVENT = {
   goingCount: 3,
   rsvp: null,
   deleted: false,
+  status: "active",
+  cancelledAt: null,
+  past: false,
+  canCancel: false,
 };
 const PAGE = { data: [EVENT], nextCursor: "cursor-2" };
 
@@ -210,6 +215,52 @@ describe("events API client — setRsvp", () => {
 
     fetchMock.mockRejectedValueOnce(new Error("offline"));
     expect(await setRsvp("e1", "going")).toEqual({
+      ok: false,
+      error: { kind: "network" },
+    });
+  });
+
+  it("409 → conflict (event cancelled or past)", async () => {
+    fetchMock.mockResolvedValueOnce(res(409, {}));
+    expect(await setRsvp("e1", "going")).toEqual({
+      ok: false,
+      error: { kind: "conflict" },
+    });
+  });
+});
+
+describe("events API client — cancelEvent", () => {
+  it("200 → ok; posts to the cancel path with no body", async () => {
+    fetchMock.mockResolvedValue(res(200, { ok: true }));
+    expect(await cancelEvent("e1")).toEqual({ ok: true, data: { ok: true } });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/v1/events/e1/cancel",
+      undefined,
+    );
+  });
+
+  it("403 → forbidden; 404 → notFound; 409 → conflict (already cancelled); network", async () => {
+    fetchMock.mockResolvedValueOnce(res(403, {}));
+    expect(await cancelEvent("e1")).toEqual({
+      ok: false,
+      error: { kind: "forbidden" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(404, {}));
+    expect(await cancelEvent("e1")).toEqual({
+      ok: false,
+      error: { kind: "notFound" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(409, {}));
+    expect(await cancelEvent("e1")).toEqual({
+      ok: false,
+      error: { kind: "conflict" },
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    expect(await cancelEvent("e1")).toEqual({
       ok: false,
       error: { kind: "network" },
     });

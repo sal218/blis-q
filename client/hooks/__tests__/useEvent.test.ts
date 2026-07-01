@@ -26,6 +26,10 @@ const event = (over: Partial<EventDTO> = {}): EventDTO => ({
   goingCount: 5,
   rsvp: null,
   deleted: false,
+  status: "active",
+  cancelledAt: null,
+  past: false,
+  canCancel: false,
   ...over,
 });
 

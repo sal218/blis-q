@@ -3,8 +3,12 @@ import {
   getEvent,
   setRsvp as apiSetRsvp,
   reportEvent as apiReportEvent,
+  cancelEvent as apiCancelEvent,
 } from "@/lib/api/events";
-import { eventsApiErrorMessage } from "@/lib/messages";
+import {
+  eventsApiErrorMessage,
+  cancelEventApiErrorMessage,
+} from "@/lib/messages";
 import type { EventDTO, RsvpStatus } from "@shared/types";
 
 // Data hook for a single event's detail + the caller's RSVP. Loads the event,
@@ -26,6 +30,7 @@ export type UseEvent = {
   retry: () => void;
   setRsvp: (status: RsvpStatus) => Promise<RsvpOutcome>;
   report: (reason: string) => Promise<RsvpOutcome>;
+  cancel: () => Promise<RsvpOutcome>;
 };
 
 // goingCount delta from a status change: entering "going" +1, leaving "going" −1,
@@ -101,5 +106,39 @@ export function useEvent(eventId: string): UseEvent {
     [eventId],
   );
 
-  return { event, status, errorMessage, submitting, retry, setRsvp, report };
+  // Creator cancels the event. On success, patch local state to cancelled (the
+  // event stays visible with its content; canCancel flips off) using the same
+  // stale-guard as setRsvp so a slow in-flight load can't clobber it. Uses the
+  // cancel-specific error mapper (403 = not the creator, not an RSVP message).
+  const cancel = useCallback(async (): Promise<RsvpOutcome> => {
+    setSubmitting(true);
+    const result = await apiCancelEvent(eventId);
+    setSubmitting(false);
+    if (!result.ok) {
+      return { ok: false, message: cancelEventApiErrorMessage(result.error) };
+    }
+    requestSeq.current++;
+    setEvent((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: "cancelled",
+            cancelledAt: new Date().toISOString(),
+            canCancel: false,
+          }
+        : prev,
+    );
+    return { ok: true };
+  }, [eventId]);
+
+  return {
+    event,
+    status,
+    errorMessage,
+    submitting,
+    retry,
+    setRsvp,
+    report,
+    cancel,
+  };
 }

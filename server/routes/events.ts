@@ -280,6 +280,9 @@ async function handleCancel(req: Request, res: Response): Promise<Response> {
     if (result === "already_cancelled") {
       return res.status(409).json({ error: "Already cancelled" });
     }
+    if (result === "past") {
+      return res.status(409).json({ error: "Event already started" });
+    }
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("[POST /api/v1/events/:id/cancel]", {

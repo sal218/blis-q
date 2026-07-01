@@ -130,6 +130,18 @@ export const pl = {
     reportTitle: "Zgłoś wydarzenie", // report modal title
     reportPlaceholder: "Opisz, co jest nie tak z tym wydarzeniem", // "Describe what's wrong with this event"
 
+    // Cancelled / past states (slice B2)
+    cancelledNotice: "To wydarzenie zostało odwołane.", // "This event was cancelled."
+    pastNotice: "To wydarzenie już się odbyło.", // "This event has already taken place."
+    rsvpClosedCancelled: "Wydarzenie odwołane", // disabled RSVP bar — cancelled
+    rsvpClosedPast: "Wydarzenie minęło", // disabled RSVP bar — past
+    cancelAction: "Anuluj wydarzenie", // ⋯ row + the destructive confirm button
+    cancelConfirmTitle: "Anulować wydarzenie?", // "Cancel this event?"
+    cancelConfirmBody:
+      "Uczestnicy zobaczą, że wydarzenie zostało odwołane. Tej operacji nie można cofnąć.", // "Attendees will see it was cancelled. This can't be undone."
+    cancelForbidden: "Nie możesz anulować tego wydarzenia.", // 403 — "You can't cancel this event."
+    cancelError: "Nie udało się anulować wydarzenia. Spróbuj ponownie.", // generic cancel failure
+
     // Create event (form on Community detail)
     createCta: "Utwórz wydarzenie", // "Create event" (the entry button)
     createTitle: "Nowe wydarzenie", // "New event" (screen header)

@@ -11,9 +11,19 @@
 -- `chat:{communityId}`. Without authorization, anyone with the anon key could
 -- subscribe and read a community's live messages — an Article 9 leak. With this
 -- policy, a client may only RECEIVE on `chat:{communityId}` if it is an
--- authenticated member of that (non-deleted) community. The client authenticates
--- its Realtime socket with the user's Supabase JWT (realtime.setAuth) so
--- `auth.uid()` resolves here.
+-- authenticated, NON-BANNED, NON-ERASED member of that (non-deleted) community.
+-- The client authenticates its Realtime socket with the user's Supabase JWT
+-- (realtime.setAuth) so `auth.uid()` resolves here.
+--
+-- Ban/erasure gate (AUTH-1): the predicate joins `public.users` and requires
+-- `banned_at IS NULL AND deleted_at IS NULL`, mirroring the HTTP isAuthenticated
+-- ban/deleted gate at the Realtime layer. A ban sets `users.banned_at` but cannot
+-- revoke the target's Supabase session by user id (see CLAUDE.md P-8), so without
+-- this join a just-banned user's still-valid JWT would keep authorizing chat
+-- subscriptions and receiving live messages until the token expired. The join
+-- denies them at the next subscribe/setAuth check instead. (Instant kill of an
+-- already-open pre-ban socket is deferred to P-8's session-revocation work; the
+-- residual is bounded to the access-token lifetime.)
 --
 -- SELECT only: clients only RECEIVE broadcasts. The server PUBLISHES via the
 -- service_role (HTTP broadcast endpoint, server/realtime.ts), which bypasses RLS
@@ -29,8 +39,9 @@
 -- read membership despite the app-table deny-all; it returns ONLY a boolean
 -- decision and never exposes rows. Hardened: empty search_path, schema-qualified
 -- tables, anchored topic regex + exception-safe uuid cast (topic injection →
--- false), and the live-community gate (a soft-deleted community authorizes no
--- one — mirrors the GET /messages gate in server/routes/chat.ts).
+-- false), the live-community gate (a soft-deleted community authorizes no one),
+-- and the caller-active gate (banned_at/deleted_at IS NULL) — together mirroring
+-- the GET /messages + isAuthenticated gates in server/routes/chat.ts + auth.ts.
 CREATE OR REPLACE FUNCTION public.chat_topic_is_member(topic text)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -52,9 +63,12 @@ BEGIN
     SELECT 1
     FROM public.community_memberships m
     JOIN public.communities c ON c.id = m.community_id
+    JOIN public.users u ON u.id = m.user_id
     WHERE m.community_id = cid
       AND m.user_id = auth.uid()
       AND c.deleted_at IS NULL
+      AND u.banned_at IS NULL
+      AND u.deleted_at IS NULL
   );
 END;
 $$;

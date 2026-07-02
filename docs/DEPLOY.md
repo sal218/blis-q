@@ -85,13 +85,20 @@ for the project (private channels).
 ### Live authorization spike checklist (do before relying on it)
 
 On a dev/test Supabase project with the SQL applied, verify the policy actually
-gates subscriptions (it cannot be unit-tested without a live connection):
+gates subscriptions (it cannot be unit-tested against a live socket without a
+real Realtime connection — but the predicate logic itself IS regression-tested in
+`server/__tests__/realtime-auth.integration.test.ts`, which calls
+`chat_topic_is_member` directly as the `authenticated` role):
 
 1. A **member** of community X can subscribe to `chat:{X}` and receives broadcasts.
 2. A **non-member** subscribing to `chat:{X}` is **rejected** (no messages).
 3. A member of a **soft-deleted** community (`communities.deleted_at` set) is
    **rejected**.
 4. A malformed topic (not `chat:{uuid}`) is **rejected**.
+5. **(AUTH-1)** A **banned** member (`users.banned_at` set) is **rejected** — and
+   for an already-open pre-ban socket, receiving stops by the next Realtime auth
+   check / access-token expiry (instant kill is deferred to P-8).
+6. **(AUTH-1)** An **erased** member (`users.deleted_at` set) is **rejected**.
 
 If Realtime Authorization proves unworkable for our model, fall back to a
 backend-issued opaque per-membership channel token (tracked under P-24) — weaker

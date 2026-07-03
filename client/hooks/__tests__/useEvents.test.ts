@@ -122,8 +122,8 @@ describe("useEvents", () => {
     await waitFor(() =>
       expect(result.current.events).toEqual([ev("e1"), ev("e2")]),
     );
-    // second call carried the page-1 cursor
-    expect(listMock).toHaveBeenLastCalledWith("cursor-2");
+    // second call carried the page-1 cursor (+ no active category filter)
+    expect(listMock).toHaveBeenLastCalledWith("cursor-2", undefined);
   });
 
   it("load-more is a no-op when there is no next cursor", async () => {
@@ -164,5 +164,75 @@ describe("useEvents", () => {
       resolveMore(page([ev("e1b")], null));
     });
     expect(result.current.events).toEqual([ev("e9")]);
+  });
+
+  // ── category filter (slice D2) ──────────────────────────────────────────────
+
+  it("setCategory refetches with the category and replaces the list", async () => {
+    listMock.mockResolvedValueOnce(page([ev("e1")], null)); // initial (all)
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(result.current.category).toBeNull();
+
+    listMock.mockResolvedValueOnce(page([ev("s1")], null)); // support page
+    await act(async () => {
+      result.current.setCategory("support");
+    });
+    await waitFor(() => expect(result.current.events).toEqual([ev("s1")]));
+    expect(result.current.category).toBe("support");
+    // the refetch carried the category (replace mode → no cursor)
+    expect(listMock).toHaveBeenLastCalledWith(undefined, "support");
+  });
+
+  it("load-more within a category carries the active category", async () => {
+    listMock.mockResolvedValueOnce(page([ev("e1")], null)); // initial (all)
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    listMock.mockResolvedValueOnce(page([ev("s1")], "cur2")); // support p1
+    await act(async () => {
+      result.current.setCategory("support");
+    });
+    await waitFor(() => expect(result.current.events).toEqual([ev("s1")]));
+
+    listMock.mockResolvedValueOnce(page([ev("s2")], null)); // support p2
+    await act(async () => {
+      result.current.loadMore();
+    });
+    await waitFor(() =>
+      expect(result.current.events).toEqual([ev("s1"), ev("s2")]),
+    );
+    expect(listMock).toHaveBeenLastCalledWith("cur2", "support");
+  });
+
+  it("clearing the category refetches the unfiltered feed", async () => {
+    listMock.mockResolvedValueOnce(page([ev("e1")], null)); // all
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    listMock.mockResolvedValueOnce(page([ev("s1")], null)); // support
+    await act(async () => {
+      result.current.setCategory("support");
+    });
+    await waitFor(() => expect(result.current.category).toBe("support"));
+
+    listMock.mockResolvedValueOnce(page([ev("e1")], null)); // back to all
+    await act(async () => {
+      result.current.setCategory(null);
+    });
+    await waitFor(() => expect(result.current.category).toBeNull());
+    expect(listMock).toHaveBeenLastCalledWith(undefined, undefined);
+  });
+
+  it("setCategory to the current value is a no-op (no refetch)", async () => {
+    listMock.mockResolvedValue(page([ev("e1")], null));
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    const before = listMock.mock.calls.length;
+    await act(async () => {
+      result.current.setCategory(null); // already null
+    });
+    expect(listMock.mock.calls.length).toBe(before);
   });
 });

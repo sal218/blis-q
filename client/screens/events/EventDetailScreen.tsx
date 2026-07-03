@@ -16,6 +16,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { ReportPostModal } from "@/components/ReportPostModal";
+import { CategoryChip } from "@/components/CategoryChip";
 import {
   Clock,
   MapPin,
@@ -252,6 +253,12 @@ export function EventDetailScreen({ route, navigation }: Props) {
 
         <View style={styles.body}>
           <Text style={styles.title}>{event.title}</Text>
+
+          {event.category ? (
+            <View style={styles.categoryRow}>
+              <CategoryChip label={strings.events.categories[event.category]} />
+            </View>
+          ) : null}
 
           {isCancelled ? (
             <View style={[styles.notice, styles.noticeCancelled]}>
@@ -589,6 +596,14 @@ function createStyles(colors: ThemeColors) {
       color: colors.text,
       fontSize: 26,
       fontWeight: "800",
+      marginBottom: spacing.md,
+    },
+    // The category chip sits just under the title (a row so it hugs its content
+    // width instead of stretching). Negative top margin tucks it up under the
+    // title's bottom margin without over-spacing.
+    categoryRow: {
+      flexDirection: "row",
+      marginTop: -spacing.xs,
       marginBottom: spacing.md,
     },
     notice: {

@@ -67,6 +67,26 @@ describe("events API client — listEvents", () => {
     );
   });
 
+  it("appends ?category= when filtering (no cursor)", async () => {
+    fetchMock.mockResolvedValue(res(200, PAGE));
+    await listEvents(undefined, "support");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "GET",
+      "/api/v1/events?category=support",
+      undefined,
+    );
+  });
+
+  it("composes BOTH cursor and category (cursor within a category)", async () => {
+    fetchMock.mockResolvedValue(res(200, PAGE));
+    await listEvents("cur", "culture");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "GET",
+      "/api/v1/events?cursor=cur&category=culture",
+      undefined,
+    );
+  });
+
   it("404 → notFound; 400 → validation; 429 → rateLimited(retryAfter); 5xx → server", async () => {
     fetchMock.mockResolvedValueOnce(res(404, {}));
     expect(await listEvents()).toEqual({
@@ -286,6 +306,16 @@ describe("events API client — createEvent", () => {
       "POST",
       "/api/v1/communities/c1/events",
       input,
+    );
+  });
+
+  it("forwards an optional category in the create body", async () => {
+    fetchMock.mockResolvedValue(res(201, EVENT));
+    await createEvent("c1", { ...input, category: "education" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/v1/communities/c1/events",
+      { ...input, category: "education" },
     );
   });
 

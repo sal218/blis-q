@@ -1,4 +1,9 @@
-import type { CursorPage, EventDTO, RsvpStatus } from "@shared/types";
+import type {
+  CursorPage,
+  EventDTO,
+  RsvpStatus,
+  EventCategory,
+} from "@shared/types";
 import { request, commonApiError } from "@/lib/api/http";
 
 // Typed client for the events feed + RSVP (docs/API.md §10). Screens go through
@@ -33,8 +38,14 @@ async function toEventsError(res: Response): Promise<EventsApiError> {
 // Pass the previous page's nextCursor to fetch the next page; omit for page 1.
 export function listEvents(
   cursor?: string,
+  category?: EventCategory,
 ): Promise<EventsResult<CursorPage<EventDTO>>> {
-  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  // `category` (slice D2) filters server-side to one predefined category; omit
+  // for the unfiltered feed. Both params compose (a cursor within a category).
+  const parts: string[] = [];
+  if (cursor) parts.push(`cursor=${encodeURIComponent(cursor)}`);
+  if (category) parts.push(`category=${encodeURIComponent(category)}`);
+  const query = parts.length ? `?${parts.join("&")}` : "";
   return request(
     "GET",
     `/api/v1/events${query}`,
@@ -114,6 +125,7 @@ export function createEvent(
     location?: string;
     startsAt: string;
     endsAt?: string;
+    category?: EventCategory;
   },
 ): Promise<EventsResult<EventDTO>> {
   return request(

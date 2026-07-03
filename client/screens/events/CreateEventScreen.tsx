@@ -15,6 +15,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { TextField } from "@/components/forms/TextField";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { FormError } from "@/components/forms/FormError";
+import { CategoryChip } from "@/components/CategoryChip";
 import { createEvent } from "@/lib/api/events";
 import {
   validateEventTitle,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/messages";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
+import { EVENT_CATEGORIES, type EventCategory } from "@shared/types";
 import type { EventsStackParamList } from "@/navigation/AppTabs";
 
 // Create-event form (entry: the member-only button on Community detail). Mirrors
@@ -141,6 +143,10 @@ export function CreateEventScreen({ route, navigation }: Props) {
   const [location, setLocation] = useState("");
   const [startsAt, setStartsAt] = useState<Date>(nextTopOfHour);
   const [endsAt, setEndsAt] = useState<Date | null>(null);
+  // Optional predefined category (slice D2). null = unset; tapping the selected
+  // chip again clears it. The picker only offers valid EVENT_CATEGORIES, so the
+  // server enum can't reject it.
+  const [category, setCategory] = useState<EventCategory | null>(null);
 
   const [titleError, setTitleError] = useState<string | null>(null);
   const [descriptionError, setDescriptionError] = useState<string | null>(null);
@@ -168,6 +174,7 @@ export function CreateEventScreen({ route, navigation }: Props) {
       location: location.trim() || undefined,
       startsAt: startsAt.toISOString(),
       endsAt: endsAt ? endsAt.toISOString() : undefined,
+      category: category ?? undefined,
     });
     setSubmitting(false);
 
@@ -211,6 +218,20 @@ export function CreateEventScreen({ route, navigation }: Props) {
         error={locationError}
         autoCapitalize="sentences"
       />
+
+      {/* Category (optional) — a wrap of toggle chips; tap the active one again
+          to clear. Only predefined categories are offered. */}
+      <Text style={styles.fieldLabel}>{strings.events.categoryLabel}</Text>
+      <View style={styles.categoryWrap}>
+        {EVENT_CATEGORIES.map((c) => (
+          <CategoryChip
+            key={c}
+            label={strings.events.categories[c]}
+            selected={category === c}
+            onPress={() => setCategory((cur) => (cur === c ? null : c))}
+          />
+        ))}
+      </View>
 
       {/* Start */}
       <Text style={styles.fieldLabel}>{strings.events.startLabel}</Text>
@@ -313,6 +334,12 @@ function createStyles(colors: ThemeColors) {
       flexDirection: "row",
       alignItems: "center",
       gap: spacing.md,
+    },
+    categoryWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: spacing.sm,
+      marginTop: spacing.xs,
     },
     // Add/remove end time: a clearly-tappable bordered pill (not bare text).
     endToggle: {

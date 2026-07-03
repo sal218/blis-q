@@ -100,9 +100,25 @@ export const pl = {
     searchPlaceholder: "Szukaj wydarzeń", // "Search events"
     empty: "Nie ma jeszcze żadnych nadchodzących wydarzeń.", // "No upcoming events yet."
     emptySearch: "Brak wyników dla tego wyszukiwania.", // "No results for this search."
+    emptyCategory: "Brak wydarzeń w tej kategorii.", // "No events in this category."
     loadError: "Nie udało się załadować wydarzeń.", // "Couldn't load events."
     retry: "Spróbuj ponownie", // "Try again"
     goingCount: "{count} idzie", // "{count} going"
+
+    // Categories (slice D2). Keys MUST match EVENT_CATEGORIES in shared/types.ts.
+    // Coarse event-TYPE labels — never identity/orientation (Article 9).
+    filterAll: "Wszystkie", // "All" — the feed filter chip that clears the category
+    categoryLabel: "Kategoria (opcjonalnie)", // create-form picker label
+    categories: {
+      social: "Towarzyskie", // "Social"
+      support: "Wsparcie", // "Support"
+      activism: "Aktywizm", // "Activism"
+      education: "Edukacja", // "Education"
+      culture: "Kultura", // "Culture"
+      sports: "Sport", // "Sports"
+      health: "Zdrowie", // "Health"
+      other: "Inne", // "Other"
+    },
 
     // Detail
     detailLoadError: "Nie udało się załadować wydarzenia.", // "Couldn't load the event."

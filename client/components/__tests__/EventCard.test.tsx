@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react-native";
 import { EventCard } from "@/components/EventCard";
+import { strings } from "@/i18n";
 import type { EventDTO } from "@shared/types";
 
 // Local (no-Z) datetimes → getDay()/getHours() are deterministic regardless of
@@ -50,5 +51,20 @@ describe("EventCard", () => {
     );
     expect(screen.getByText(/16:00/)).toBeTruthy();
     expect(screen.queryByText(/–/)).toBeNull();
+  });
+
+  it("renders the category chip when the event has a category (slice D2)", () => {
+    render(
+      <EventCard
+        event={{ ...event, category: "support" }}
+        onPress={jest.fn()}
+      />,
+    );
+    expect(screen.getByText(strings.events.categories.support)).toBeTruthy();
+  });
+
+  it("renders no category chip when category is null", () => {
+    render(<EventCard event={event} onPress={jest.fn()} />); // category null
+    expect(screen.queryByText(strings.events.categories.support)).toBeNull();
   });
 });

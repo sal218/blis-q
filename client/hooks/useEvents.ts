@@ -2,17 +2,18 @@ import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { listEvents } from "@/lib/api/events";
 import { eventsApiErrorMessage } from "@/lib/messages";
-import type { EventDTO } from "@shared/types";
+import type { EventDTO, EventCategory } from "@shared/types";
 
 // Data hook for the global UPCOMING events feed: cursor pagination (load-more),
-// pull-to-refresh, a stale-response guard, and a SILENT refetch-on-focus (events
-// change between visits, like the chat inbox). The screen renders state and wires
-// handlers; it owns no fetching logic. Read-only here (RSVP lives in useEvent).
+// pull-to-refresh, a stale-response guard, a SILENT refetch-on-focus (events
+// change between visits, like the chat inbox), and a server-side CATEGORY filter
+// (slice D2). The screen renders state and wires handlers; it owns no fetching
+// logic. Read-only here (RSVP lives in useEvent).
 //
 // Stale-response guard (mirrors useCommunityPosts/useChats): every fetch bumps a
 // monotonic sequence id; a response is applied only if its id is still the latest
-// — so a slow load-more resolving AFTER a refresh can't append a stale/duplicate
-// page into the id-keyed FlatList.
+// — so a slow load-more resolving AFTER a refresh (or a category switch) can't
+// append a stale/duplicate page into the id-keyed FlatList.
 
 export type EventsStatus = "loading" | "ready" | "error";
 
@@ -24,6 +25,8 @@ export type UseEvents = {
   errorMessage: string | null;
   refreshing: boolean;
   loadingMore: boolean;
+  category: EventCategory | null; // active feed filter (null = all)
+  setCategory: (category: EventCategory | null) => void;
   refresh: () => void;
   loadMore: () => void;
   retry: () => void;
@@ -36,9 +39,14 @@ export function useEvents(): UseEvents {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [category, setCategoryState] = useState<EventCategory | null>(null);
 
   const requestSeq = useRef(0);
   const loadedOnce = useRef(false);
+  // The active category is read from a ref inside fetchPage so focus-refetch and
+  // load-more always use the CURRENT filter (setCategory updates it synchronously
+  // before it triggers the reload — a re-render alone would lag the closure).
+  const categoryRef = useRef<EventCategory | null>(null);
 
   const fetchPage = useCallback(
     async (cursor: string | undefined, mode: LoadMode) => {
@@ -48,7 +56,7 @@ export function useEvents(): UseEvents {
       else if (mode === "replace") setStatus("loading");
       // "silent": no spinner — the existing list stays on screen.
 
-      const result = await listEvents(cursor);
+      const result = await listEvents(cursor, categoryRef.current ?? undefined);
 
       if (mode === "more") setLoadingMore(false);
       else if (mode === "refresh") setRefreshing(false);
@@ -90,6 +98,20 @@ export function useEvents(): UseEvents {
 
   const retry = useCallback(() => fetchPage(undefined, "replace"), [fetchPage]);
 
+  // Switch the server-side category filter (null = all). Sets the ref FIRST (so
+  // the immediate reload — and any focus-refetch/load-more — uses the new value)
+  // then reloads from scratch with a spinner. requestSeq drops any in-flight page
+  // from the previous category. A no-op if the category is unchanged.
+  const setCategory = useCallback(
+    (next: EventCategory | null) => {
+      if (next === categoryRef.current) return;
+      categoryRef.current = next;
+      setCategoryState(next);
+      void fetchPage(undefined, "replace");
+    },
+    [fetchPage],
+  );
+
   const loadMore = useCallback(() => {
     // Block while a refresh/replace is active or there is no next page.
     if (
@@ -109,6 +131,8 @@ export function useEvents(): UseEvents {
     errorMessage,
     refreshing,
     loadingMore,
+    category,
+    setCategory,
     refresh,
     loadMore,
     retry,

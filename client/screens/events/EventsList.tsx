@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   FlatList,
+  ScrollView,
   ActivityIndicator,
   RefreshControl,
   StyleSheet,
@@ -11,16 +12,19 @@ import {
 import { useTheme } from "@/contexts/ThemeContext";
 import { MagnifyingGlass } from "@/components/icons/PhosphorIcons";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
+import { CategoryChip } from "@/components/CategoryChip";
 import { EventCard } from "@/components/EventCard";
 import { useEvents } from "@/hooks/useEvents";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
+import { EVENT_CATEGORIES } from "@shared/types";
 
 // The Events segment of the Events tab (design ref: events-screen.png): a search
-// box + the global upcoming-events feed. Search filters the LOADED events
-// client-side (title/location); server-side search + the category filter chips
-// are deferred (P-28). The card shows the going count only — no attendee
-// identities. Tap a card → the detail screen (RSVP lives there).
+// box, a server-side CATEGORY filter chip row (slice D2), and the global
+// upcoming-events feed. Search filters the LOADED events client-side
+// (title/location); the category filter is server-side (?category=). Server-side
+// full-text search is still deferred (P-28). The card shows the going count only
+// — no attendee identities. Tap a card → the detail screen (RSVP lives there).
 
 type Props = { onOpenEvent: (id: string) => void };
 
@@ -33,6 +37,8 @@ export function EventsList({ onOpenEvent }: Props) {
     errorMessage,
     refreshing,
     loadingMore,
+    category,
+    setCategory,
     refresh,
     loadMore,
     retry,
@@ -47,6 +53,15 @@ export function EventsList({ onOpenEvent }: Props) {
           (e.location ?? "").toLowerCase().includes(trimmed),
       )
     : events;
+
+  // Empty-state copy precedence: an active SEARCH that narrows to nothing always
+  // shows the search message (even inside a category); otherwise an active
+  // CATEGORY filter shows the category message; otherwise the plain empty feed.
+  const emptyText = trimmed
+    ? strings.events.emptySearch
+    : category
+      ? strings.events.emptyCategory
+      : strings.events.empty;
 
   if (status === "loading" && events.length === 0) {
     return (
@@ -86,6 +101,28 @@ export function EventsList({ onOpenEvent }: Props) {
         />
       </View>
 
+      {/* Server-side category filter: "All" clears; each chip refetches the feed
+          via ?category=. Horizontal scroll so all 8 + All fit on small screens. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      >
+        <CategoryChip
+          label={strings.events.filterAll}
+          selected={category === null}
+          onPress={() => setCategory(null)}
+        />
+        {EVENT_CATEGORIES.map((c) => (
+          <CategoryChip
+            key={c}
+            label={strings.events.categories[c]}
+            selected={category === c}
+            onPress={() => setCategory(c)}
+          />
+        ))}
+      </ScrollView>
+
       <FlatList
         testID="events-list"
         showsVerticalScrollIndicator={false}
@@ -110,11 +147,7 @@ export function EventsList({ onOpenEvent }: Props) {
             <ActivityIndicator style={styles.footer} color={colors.primary} />
           ) : null
         }
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>
-            {trimmed ? strings.events.emptySearch : strings.events.empty}
-          </Text>
-        }
+        ListEmptyComponent={<Text style={styles.emptyText}>{emptyText}</Text>}
       />
     </View>
   );
@@ -156,6 +189,12 @@ function createStyles(colors: ThemeColors) {
       marginLeft: spacing.sm,
       color: colors.text,
       fontSize: 16,
+    },
+    filterRow: {
+      flexDirection: "row",
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
     },
     listContent: {
       paddingHorizontal: spacing.lg,

@@ -80,9 +80,42 @@ describe("CreateEventScreen", () => {
     expect(payload.title).toBe("Spotkanie"); // trimmed
     expect(payload.startsAt).toEqual(expect.any(String));
     expect(payload.endsAt).toBeUndefined();
+    expect(payload.category).toBeUndefined(); // no category selected → omitted
     expect(navigation.replace).toHaveBeenCalledWith("EventDetail", {
       id: "e9",
     });
+  });
+
+  it("selecting a category includes it in the create payload (slice D2)", async () => {
+    createMock.mockResolvedValue({ ok: true, data: { id: "e9" } });
+    renderScreen();
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText(strings.events.titlePlaceholder),
+      "Spotkanie",
+    );
+    fireEvent.press(screen.getByText(strings.events.categories.education));
+    fireEvent.press(screen.getByText(strings.events.create));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+    expect(createMock.mock.calls[0][1].category).toBe("education");
+  });
+
+  it("tapping the selected category chip again clears it (omitted from payload)", async () => {
+    createMock.mockResolvedValue({ ok: true, data: { id: "e9" } });
+    renderScreen();
+
+    fireEvent.changeText(
+      screen.getByPlaceholderText(strings.events.titlePlaceholder),
+      "Spotkanie",
+    );
+    const chip = screen.getByText(strings.events.categories.education);
+    fireEvent.press(chip); // select
+    fireEvent.press(chip); // deselect
+    fireEvent.press(screen.getByText(strings.events.create));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+    expect(createMock.mock.calls[0][1].category).toBeUndefined();
   });
 
   it("an end time before the start → endBeforeStart, no API call", async () => {

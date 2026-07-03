@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
+import { CategoryChip } from "@/components/CategoryChip";
 import { formatEventDateBadge, formatEventTimeRange } from "@/lib/relativeTime";
 import { strings, format } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
@@ -42,9 +43,14 @@ export function EventCard({ event, onPress }: Props) {
             {meta}
           </Text>
         ) : null}
-        <Text style={styles.going}>
-          {format(strings.events.goingCount, { count: event.goingCount })}
-        </Text>
+        <View style={styles.footer}>
+          <Text style={styles.going}>
+            {format(strings.events.goingCount, { count: event.goingCount })}
+          </Text>
+          {event.category ? (
+            <CategoryChip label={strings.events.categories[event.category]} />
+          ) : null}
+        </View>
       </View>
     </Pressable>
   );
@@ -92,10 +98,16 @@ function createStyles(colors: ThemeColors) {
       fontSize: 13,
       marginTop: 2,
     },
+    footer: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: spacing.xs,
+      gap: spacing.sm,
+    },
     going: {
       color: colors.textMuted,
       fontSize: 13,
-      marginTop: spacing.xs,
     },
   });
 }

@@ -242,4 +242,16 @@ describe("EventDetailScreen", () => {
     expect(screen.queryByLabelText(strings.events.saveAction)).toBeNull();
     expect(screen.queryByLabelText(strings.events.savedAction)).toBeNull();
   });
+
+  it("renders the category chip when the event has a category (slice D2)", () => {
+    eventMock.mockReturnValue(state({ event: event({ category: "culture" }) }));
+    renderDetail();
+    expect(screen.getByText(strings.events.categories.culture)).toBeTruthy();
+  });
+
+  it("renders no category chip when the event has none", () => {
+    eventMock.mockReturnValue(state({ event: event({ category: null }) }));
+    renderDetail();
+    expect(screen.queryByText(strings.events.categories.culture)).toBeNull();
+  });
 });

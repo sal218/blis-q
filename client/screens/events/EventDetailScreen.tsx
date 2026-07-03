@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
+  Animated,
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +21,8 @@ import {
   MapPin,
   CalendarBlank,
   CaretLeft,
+  Bookmark,
+  Check,
 } from "@/components/icons/PhosphorIcons";
 import { useEvent } from "@/hooks/useEvent";
 import {
@@ -35,10 +38,10 @@ import type { EventsStackParamList } from "@/navigation/AppTabs";
 // edge-to-edge banner (the event image, or a brand gradient placeholder) with
 // rounded bottom corners and a stacked date badge at its bottom-left, then the
 // title + icon rows (time / location / full date) + About, and a pinned bottom
-// RSVP bar. The going count is AGGREGATE ONLY — attendee identities are never
-// shown (Article 9). Cancelled/past events show a notice + a closed RSVP bar,
-// and the creator can cancel from the ⋯ sheet (slice B2). Banner UPLOAD (R2),
-// Save, and tags are deferred to later events-detail slices.
+// RSVP bar (the "Pójdę + Zapisz" two-button row when open). The going count is
+// AGGREGATE ONLY — attendee identities are never shown (Article 9). Cancelled/
+// past events show a notice + a closed RSVP bar, and the creator can cancel from
+// the ⋯ sheet (slice B2). Banner UPLOAD (R2) and tags are deferred.
 
 type Props = NativeStackScreenProps<EventsStackParamList, "EventDetail">;
 
@@ -80,9 +83,29 @@ export function EventDetailScreen({ route, navigation }: Props) {
     setRsvp,
     report,
     cancel,
+    toggleSave,
+    saving,
   } = useEvent(route.params.id);
   const [menuVisible, setMenuVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
+  // ⋯ action sheet slide-up: 0 = hidden (translated below), 1 = shown.
+  const sheetAnim = useRef(new Animated.Value(0)).current;
+
+  const openMenu = () => {
+    setMenuVisible(true);
+    Animated.timing(sheetAnim, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+  };
+  const closeMenu = () => {
+    Animated.timing(sheetAnim, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setMenuVisible(false));
+  };
 
   // The native header is hidden (full-bleed banner), so the screen owns its back
   // button — a floating circle that reads over the banner or a plain screen.
@@ -127,8 +150,8 @@ export function EventDetailScreen({ route, navigation }: Props) {
   const fullWhen = formatEventDateLong(event.startsAt);
 
   // Binary "going" toggle (the client mockup's "I'm going" model). Tap to mark
-  // going; tap again to clear it (→ not_going). Save joins this bar in the Save
-  // slice (C); Interested isn't in the client design.
+  // going; tap again to clear it (→ not_going). The Save button sits beside it
+  // (slice C2). Interested isn't in the client design.
   const isGoing = event.rsvp?.status === "going";
   // A cancelled or past event is closed to RSVP (the server rejects it too).
   const isCancelled = event.status === "cancelled";
@@ -142,10 +165,19 @@ export function EventDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  // Optimistic save toggle; a failure has already reverted the flip in the hook.
+  const isSaved = event.saved;
+  const onToggleSave = async () => {
+    const result = await toggleSave();
+    if (!result.ok) {
+      Alert.alert(strings.events.saveError, result.message);
+    }
+  };
+
   // Creator cancels the event — confirm first (mirrors the post-delete flow),
   // then call cancel(); a failure surfaces the mapped message.
   const onCancelEvent = () => {
-    setMenuVisible(false);
+    closeMenu();
     Alert.alert(
       strings.events.cancelConfirmTitle,
       strings.events.cancelConfirmBody,
@@ -179,7 +211,7 @@ export function EventDetailScreen({ route, navigation }: Props) {
       accessibilityRole="button"
       accessibilityLabel={strings.events.moreActions}
       hitSlop={8}
-      onPress={() => setMenuVisible(true)}
+      onPress={openMenu}
       style={[styles.moreBtn, { top: insets.top + spacing.sm }]}
     >
       <Text style={styles.moreGlyph}>⋯</Text>
@@ -287,43 +319,90 @@ export function EventDetailScreen({ route, navigation }: Props) {
             </Text>
           </View>
         ) : (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={strings.events.rsvpGoing}
-            accessibilityState={{ selected: isGoing }}
-            disabled={submitting}
-            onPress={onToggleGoing}
-            style={({ pressed }) => [
-              styles.goBtn,
-              isGoing && styles.goBtnActive,
-              pressed && styles.goBtnPressed,
-            ]}
-          >
-            <Text
-              style={[styles.goBtnText, isGoing && styles.goBtnTextActive]}
-              numberOfLines={1}
+          <View style={styles.actionRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.events.rsvpGoing}
+              accessibilityState={{ selected: isGoing }}
+              disabled={submitting}
+              onPress={onToggleGoing}
+              style={({ pressed }) => [
+                styles.goBtn,
+                styles.goBtnFlex,
+                isGoing && styles.goBtnActive,
+                pressed && styles.goBtnPressed,
+              ]}
             >
-              {isGoing
-                ? `✓ ${strings.events.rsvpGoing}`
-                : strings.events.rsvpGoing}
-            </Text>
-          </Pressable>
+              {isGoing ? <Check size={18} color="#fff" /> : null}
+              <Text
+                style={[styles.goBtnText, isGoing && styles.goBtnTextActive]}
+                numberOfLines={1}
+              >
+                {strings.events.rsvpGoing}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                isSaved ? strings.events.savedAction : strings.events.saveAction
+              }
+              accessibilityState={{ selected: isSaved, disabled: saving }}
+              disabled={saving}
+              onPress={onToggleSave}
+              style={({ pressed }) => [
+                styles.saveBtn,
+                isSaved && styles.saveBtnActive,
+                pressed && styles.goBtnPressed,
+              ]}
+            >
+              <Bookmark
+                size={18}
+                filled={isSaved}
+                color={isSaved ? "#fff" : colors.primary}
+              />
+              <Text
+                style={[
+                  styles.saveBtnText,
+                  isSaved && styles.saveBtnTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {isSaved
+                  ? strings.events.savedAction
+                  : strings.events.saveAction}
+              </Text>
+            </Pressable>
+          </View>
         )}
       </View>
 
       {/* ⋯ action sheet — an absolute overlay (NOT a Modal) so opening the
-          report Modal right after doesn't hit the iOS modal-over-modal bug. */}
+          report Modal right after doesn't hit the iOS modal-over-modal bug. It
+          slides up (translateY) with a fading backdrop instead of appearing. */}
       {menuVisible ? (
-        <Pressable
-          style={styles.sheetBackdrop}
-          onPress={() => setMenuVisible(false)}
-        >
-          <Pressable
+        <View style={styles.sheetOverlay}>
+          <Animated.View style={[styles.sheetBackdrop, { opacity: sheetAnim }]}>
+            <Pressable
+              accessibilityLabel={strings.common.cancel}
+              style={StyleSheet.absoluteFill}
+              onPress={closeMenu}
+            />
+          </Animated.View>
+          <Animated.View
             style={[
               styles.sheet,
-              { paddingBottom: insets.bottom + spacing.md },
+              {
+                paddingBottom: insets.bottom + spacing.md,
+                transform: [
+                  {
+                    translateY: sheetAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [400, 0],
+                    }),
+                  },
+                ],
+              },
             ]}
-            onPress={() => {}}
           >
             {event.canCancel ? (
               <Pressable
@@ -341,7 +420,7 @@ export function EventDetailScreen({ route, navigation }: Props) {
               accessibilityRole="button"
               accessibilityLabel={strings.events.reportEvent}
               onPress={() => {
-                setMenuVisible(false);
+                closeMenu();
                 setReportVisible(true);
               }}
               style={styles.sheetRow}
@@ -353,15 +432,15 @@ export function EventDetailScreen({ route, navigation }: Props) {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={strings.common.cancel}
-              onPress={() => setMenuVisible(false)}
+              onPress={closeMenu}
               style={styles.sheetRow}
             >
               <Text style={styles.sheetCancelText}>
                 {strings.common.cancel}
               </Text>
             </Pressable>
-          </Pressable>
-        </Pressable>
+          </Animated.View>
+        </View>
       ) : null}
 
       <ReportPostModal
@@ -414,11 +493,14 @@ function createStyles(colors: ThemeColors) {
       fontWeight: "800",
       lineHeight: 22,
     },
-    sheetBackdrop: {
+    sheetOverlay: {
       ...StyleSheet.absoluteFillObject,
       zIndex: 20,
-      backgroundColor: "rgba(0,0,0,0.45)",
       justifyContent: "flex-end",
+    },
+    sheetBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(0,0,0,0.45)",
     },
     sheet: {
       backgroundColor: colors.background,
@@ -576,17 +658,54 @@ function createStyles(colors: ThemeColors) {
       borderTopColor: colors.border,
       backgroundColor: colors.background,
     },
+    actionRow: {
+      flexDirection: "row",
+      alignItems: "stretch",
+      gap: spacing.sm,
+    },
     goBtn: {
+      flexDirection: "row",
       alignItems: "center",
+      justifyContent: "center",
+      gap: spacing.xs,
       paddingVertical: spacing.md,
-      borderRadius: radius.full,
+      borderRadius: radius.lg, // squircle, not a pill (matches the mockup)
       borderWidth: 1.5,
       borderColor: colors.primary,
       backgroundColor: colors.surface,
     },
+    goBtnFlex: {
+      flex: 1,
+    },
     goBtnActive: {
       backgroundColor: colors.primary,
       borderColor: colors.primary,
+    },
+    saveBtn: {
+      // Fixed width so the "Zapisz" → "Zapisano" label change never resizes this
+      // button (and therefore never reflows the flex "Pójdę" button beside it).
+      width: 132,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: spacing.xs,
+      paddingVertical: spacing.md,
+      borderRadius: radius.lg, // squircle, matches the going button
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      backgroundColor: colors.surface,
+    },
+    saveBtnActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    saveBtnText: {
+      color: colors.primary,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    saveBtnTextActive: {
+      color: "#fff",
     },
     goBtnPressed: {
       opacity: 0.85,
@@ -602,7 +721,7 @@ function createStyles(colors: ThemeColors) {
     closedBtn: {
       alignItems: "center",
       paddingVertical: spacing.md,
-      borderRadius: radius.full,
+      borderRadius: radius.lg,
       borderWidth: 1.5,
       borderColor: colors.border,
       backgroundColor: colors.surface,

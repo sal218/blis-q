@@ -3,11 +3,20 @@ jest.mock("@/lib/api/events", () => ({
   setRsvp: jest.fn(),
   reportEvent: jest.fn(),
   cancelEvent: jest.fn(),
+  saveEvent: jest.fn(),
+  unsaveEvent: jest.fn(),
 }));
 
 import { renderHook, act, waitFor } from "@testing-library/react-native";
 import { useEvent } from "@/hooks/useEvent";
-import { getEvent, setRsvp, reportEvent, cancelEvent } from "@/lib/api/events";
+import {
+  getEvent,
+  setRsvp,
+  reportEvent,
+  cancelEvent,
+  saveEvent,
+  unsaveEvent,
+} from "@/lib/api/events";
 import { strings } from "@/i18n";
 import type { EventDTO, RsvpStatus } from "@shared/types";
 
@@ -15,6 +24,8 @@ const getMock = getEvent as unknown as jest.Mock;
 const rsvpMock = setRsvp as unknown as jest.Mock;
 const reportMock = reportEvent as unknown as jest.Mock;
 const cancelMock = cancelEvent as unknown as jest.Mock;
+const saveMock = saveEvent as unknown as jest.Mock;
+const unsaveMock = unsaveEvent as unknown as jest.Mock;
 
 const event = (over: Partial<EventDTO> = {}): EventDTO => ({
   id: "e1",
@@ -42,6 +53,8 @@ beforeEach(() => {
   rsvpMock.mockReset();
   reportMock.mockReset();
   cancelMock.mockReset();
+  saveMock.mockReset();
+  unsaveMock.mockReset();
 });
 
 describe("useEvent", () => {
@@ -116,7 +129,96 @@ describe("useEvent", () => {
     expect(result.current.event?.goingCount).toBe(4);
   });
 
-  it("RSVP failure → message, state unchanged", async () => {
+  it("RSVP is optimistic — flips going + goingCount BEFORE the API resolves", async () => {
+    getMock.mockResolvedValue({
+      ok: true,
+      data: event({ goingCount: 5, rsvp: null }),
+    });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // Hold the RSVP request open; the UI must update instantly regardless.
+    let resolveRsvp!: (v: unknown) => void;
+    rsvpMock.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveRsvp = r;
+      }),
+    );
+    act(() => {
+      void result.current.setRsvp("going");
+    });
+    // Instant: rsvp + goingCount already reflect "going" before the network resolves.
+    expect(result.current.event?.rsvp).toEqual({ status: "going" });
+    expect(result.current.event?.goingCount).toBe(6);
+
+    await act(async () => {
+      resolveRsvp({ ok: true, data: { status: "going" } });
+    });
+    expect(result.current.event?.rsvp).toEqual({ status: "going" });
+    expect(result.current.event?.goingCount).toBe(6);
+  });
+
+  it("ignores a second setRsvp while the first is in flight (no double-increment)", async () => {
+    getMock.mockResolvedValue({
+      ok: true,
+      data: event({ goingCount: 5, rsvp: null }),
+    });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // Hold the first RSVP open.
+    let resolveRsvp!: (v: unknown) => void;
+    rsvpMock.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveRsvp = r;
+      }),
+    );
+    act(() => {
+      void result.current.setRsvp("going"); // first: optimistic +1 → 6, in flight
+    });
+    // A second immediate tap is IGNORED — no second dispatch, no double-increment.
+    await act(async () => {
+      await result.current.setRsvp("going");
+    });
+    expect(rsvpMock).toHaveBeenCalledTimes(1);
+    expect(result.current.event?.goingCount).toBe(6);
+
+    await act(async () => {
+      resolveRsvp({ ok: true, data: { status: "going" } });
+    });
+    expect(result.current.event?.goingCount).toBe(6);
+  });
+
+  it("clears the guard + reverts if apiSetRsvp REJECTS (button not stuck)", async () => {
+    getMock.mockResolvedValue({
+      ok: true,
+      data: event({ goingCount: 5, rsvp: null }),
+    });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // request() can throw (e.g. an onOk-body parse) rather than resolve ok:false.
+    rsvpMock.mockRejectedValueOnce(new Error("boom"));
+    let outcome!: { ok: boolean };
+    await act(async () => {
+      outcome = await result.current.setRsvp("going");
+    });
+    expect(outcome.ok).toBe(false);
+    // optimistic flip reverted, submitting cleared
+    expect(result.current.event?.rsvp).toBeNull();
+    expect(result.current.event?.goingCount).toBe(5);
+    expect(result.current.submitting).toBe(false);
+
+    // the guard was released → a subsequent tap dispatches again (not stuck)
+    rsvpMock.mockResolvedValueOnce({ ok: true, data: { status: "going" } });
+    await act(async () => {
+      await result.current.setRsvp("going");
+    });
+    expect(rsvpMock).toHaveBeenCalledTimes(2);
+    expect(result.current.event?.rsvp).toEqual({ status: "going" });
+  });
+
+  it("RSVP failure → message, state reverted (unchanged)", async () => {
     getMock.mockResolvedValue({
       ok: true,
       data: event({ goingCount: 5, rsvp: null }),
@@ -231,5 +333,131 @@ describe("useEvent", () => {
       outcome = await result.current.cancel();
     });
     expect(outcome.message).toBe(strings.events.rsvpUnavailable);
+  });
+
+  it("toggleSave optimistically flips saved on/off (save then unsave)", async () => {
+    getMock.mockResolvedValue({ ok: true, data: event({ saved: false }) });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    saveMock.mockResolvedValueOnce({ ok: true, data: { ok: true } });
+    await act(async () => {
+      await result.current.toggleSave();
+    });
+    expect(result.current.event?.saved).toBe(true);
+    expect(saveMock).toHaveBeenCalledWith("e1");
+
+    unsaveMock.mockResolvedValueOnce({ ok: true, data: { ok: true } });
+    await act(async () => {
+      await result.current.toggleSave();
+    });
+    expect(result.current.event?.saved).toBe(false);
+    expect(unsaveMock).toHaveBeenCalledWith("e1");
+  });
+
+  it("toggleSave reverts the optimistic flip on failure + maps the message", async () => {
+    getMock.mockResolvedValue({ ok: true, data: event({ saved: false }) });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    saveMock.mockResolvedValueOnce({ ok: false, error: { kind: "notFound" } });
+    let outcome: { ok: boolean; message?: string } = { ok: true };
+    await act(async () => {
+      outcome = await result.current.toggleSave();
+    });
+    expect(outcome.ok).toBe(false);
+    expect(outcome.message).toEqual(expect.any(String));
+    // reverted: saved is back to false
+    expect(result.current.event?.saved).toBe(false);
+  });
+
+  it("a slow load resolving after an optimistic save is DROPPED (stale-guard)", async () => {
+    // First load resolves saved:false and readies the hook.
+    getMock.mockResolvedValueOnce({ ok: true, data: event({ saved: false }) });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // A retry() kicks off a SLOW getEvent (still saved:false) that we hold open.
+    let resolveSlow!: (v: unknown) => void;
+    getMock.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveSlow = r;
+      }),
+    );
+    act(() => {
+      result.current.retry();
+    });
+
+    // While that load is in flight, the user optimistically saves.
+    saveMock.mockResolvedValueOnce({ ok: true, data: { ok: true } });
+    await act(async () => {
+      await result.current.toggleSave();
+    });
+    expect(result.current.event?.saved).toBe(true);
+
+    // The slow load now resolves with the STALE saved:false — it must be dropped
+    // (requestSeq was bumped by toggleSave) and NOT clobber the optimistic true.
+    await act(async () => {
+      resolveSlow({ ok: true, data: event({ saved: false }) });
+    });
+    expect(result.current.event?.saved).toBe(true);
+  });
+
+  it("ignores a second toggleSave while the first is in flight (no concurrent save+unsave)", async () => {
+    getMock.mockResolvedValue({ ok: true, data: event({ saved: false }) });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // Hold the first save open so it's in flight.
+    let resolveSave!: (v: unknown) => void;
+    saveMock.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveSave = r;
+      }),
+    );
+    act(() => {
+      void result.current.toggleSave(); // optimistic → saved true, in flight
+    });
+    expect(result.current.event?.saved).toBe(true);
+    expect(result.current.saving).toBe(true);
+
+    // A second tap while in flight is IGNORED — no unsave dispatched, no flip.
+    await act(async () => {
+      await result.current.toggleSave();
+    });
+    expect(unsaveMock).not.toHaveBeenCalled();
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(result.current.event?.saved).toBe(true);
+
+    // First resolves → saving clears, saved stays true.
+    await act(async () => {
+      resolveSave({ ok: true, data: { ok: true } });
+    });
+    expect(result.current.saving).toBe(false);
+    expect(result.current.event?.saved).toBe(true);
+  });
+
+  it("clears the save guard + reverts if the save REJECTS (button not stuck)", async () => {
+    getMock.mockResolvedValue({ ok: true, data: event({ saved: false }) });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // request() can throw rather than resolve ok:false.
+    saveMock.mockRejectedValueOnce(new Error("boom"));
+    let outcome!: { ok: boolean };
+    await act(async () => {
+      outcome = await result.current.toggleSave();
+    });
+    expect(outcome.ok).toBe(false);
+    expect(result.current.event?.saved).toBe(false); // reverted
+    expect(result.current.saving).toBe(false);
+
+    // guard released → a subsequent tap dispatches again (not stuck)
+    saveMock.mockResolvedValueOnce({ ok: true, data: { ok: true } });
+    await act(async () => {
+      await result.current.toggleSave();
+    });
+    expect(saveMock).toHaveBeenCalledTimes(2);
+    expect(result.current.event?.saved).toBe(true);
   });
 });

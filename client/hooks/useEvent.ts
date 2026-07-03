@@ -4,6 +4,8 @@ import {
   setRsvp as apiSetRsvp,
   reportEvent as apiReportEvent,
   cancelEvent as apiCancelEvent,
+  saveEvent as apiSaveEvent,
+  unsaveEvent as apiUnsaveEvent,
 } from "@/lib/api/events";
 import {
   eventsApiErrorMessage,
@@ -31,6 +33,8 @@ export type UseEvent = {
   setRsvp: (status: RsvpStatus) => Promise<RsvpOutcome>;
   report: (reason: string) => Promise<RsvpOutcome>;
   cancel: () => Promise<RsvpOutcome>;
+  toggleSave: () => Promise<RsvpOutcome>;
+  saving: boolean; // a save toggle is in flight (Save button disabled)
 };
 
 // goingCount delta from a status change: entering "going" +1, leaving "going" −1,
@@ -44,8 +48,15 @@ export function useEvent(eventId: string): UseEvent {
   const [status, setStatus] = useState<EventDetailStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const requestSeq = useRef(0);
+  // Synchronous guards: serialize the optimistic toggles so a rapid double-tap
+  // (fired before React re-renders the disabled state) can't dispatch two
+  // requests and double-apply the optimistic delta. A tap while one is in flight
+  // is ignored. `rsvpRef` for the going toggle; `savingRef` for the save toggle.
+  const rsvpRef = useRef(false);
+  const savingRef = useRef(false);
 
   const load = useCallback(async () => {
     const seq = ++requestSeq.current;
@@ -70,29 +81,59 @@ export function useEvent(eventId: string): UseEvent {
     load();
   }, [load]);
 
+  // OPTIMISTIC: flip the caller's rsvp + goingCount IMMEDIATELY (so the UI reacts
+  // instantly, not after the network round-trip), bumping requestSeq first so a
+  // slow in-flight load can't clobber it; revert exactly this change on failure.
+  // `submitting` serializes taps. prev values are captured from the event closure.
   const setRsvp = useCallback(
     async (next: RsvpStatus): Promise<RsvpOutcome> => {
+      // Ignore a tap while an RSVP change is already in flight (synchronous ref,
+      // not the `submitting` state, so a rapid double-tap can't double-dispatch).
+      if (!event || rsvpRef.current) return { ok: true };
+      rsvpRef.current = true;
+      const prevRsvp = event.rsvp;
+      const prevGoingCount = event.goingCount;
+      const delta = goingDelta(prevRsvp?.status ?? null, next);
+
       setSubmitting(true);
-      const result = await apiSetRsvp(eventId, next);
-      setSubmitting(false);
-      if (!result.ok) {
-        return { ok: false, message: eventsApiErrorMessage(result.error) };
-      }
-      // Invalidate any in-flight load so a slow getEvent can't clobber this, then
-      // patch in place (functional updater guards against a stale snapshot).
       requestSeq.current++;
-      setEvent((prev) => {
-        if (!prev) return prev;
-        const delta = goingDelta(prev.rsvp?.status ?? null, result.data.status);
+      setEvent((prev) =>
+        prev
+          ? {
+              ...prev,
+              rsvp: { status: next },
+              goingCount: Math.max(0, prev.goingCount + delta),
+            }
+          : prev,
+      );
+
+      const revert = () =>
+        setEvent((prev) =>
+          prev ? { ...prev, rsvp: prevRsvp, goingCount: prevGoingCount } : prev,
+        );
+      try {
+        // request() can reject on an unexpected onOk-body parse, not just resolve
+        // to { ok:false } — treat a throw like a network failure and revert.
+        const result = await apiSetRsvp(eventId, next);
+        if (!result.ok) {
+          revert();
+          return { ok: false, message: eventsApiErrorMessage(result.error) };
+        }
+        return { ok: true };
+      } catch {
+        revert();
         return {
-          ...prev,
-          rsvp: { status: result.data.status },
-          goingCount: Math.max(0, prev.goingCount + delta),
+          ok: false,
+          message: eventsApiErrorMessage({ kind: "network" }),
         };
-      });
-      return { ok: true };
+      } finally {
+        // Always clear the guard + submitting, even if the await threw, so the
+        // button can never get stuck disabled.
+        rsvpRef.current = false;
+        setSubmitting(false);
+      }
     },
-    [eventId],
+    [eventId, event],
   );
 
   // Submit a moderation report for this event (no local state change). 404 =
@@ -131,6 +172,45 @@ export function useEvent(eventId: string): UseEvent {
     return { ok: true };
   }, [eventId]);
 
+  // Toggle the caller's save/bookmark. OPTIMISTIC: bump requestSeq FIRST (so a
+  // slow in-flight load() — which drops its result when the seq no longer matches
+  // — can't clobber the optimistic UI), then flip `saved` immediately. On failure
+  // revert exactly that flip. `prevSaved` is read from the current event closure
+  // (event is a dep), so the decision (save vs unsave) matches what the user saw.
+  const toggleSave = useCallback(async (): Promise<RsvpOutcome> => {
+    // Ignore a tap while a save toggle is already in flight (serialized).
+    if (!event || savingRef.current) return { ok: true };
+    savingRef.current = true;
+    setSaving(true);
+    const prevSaved = event.saved;
+
+    requestSeq.current++;
+    setEvent((prev) => (prev ? { ...prev, saved: !prevSaved } : prev));
+
+    const revert = () =>
+      setEvent((prev) => (prev ? { ...prev, saved: prevSaved } : prev));
+    try {
+      // request() can reject on an unexpected onOk-body parse — treat a throw
+      // like a network failure and revert the optimistic flip.
+      const result = prevSaved
+        ? await apiUnsaveEvent(eventId)
+        : await apiSaveEvent(eventId);
+      if (!result.ok) {
+        revert();
+        return { ok: false, message: eventsApiErrorMessage(result.error) };
+      }
+      return { ok: true };
+    } catch {
+      revert();
+      return { ok: false, message: eventsApiErrorMessage({ kind: "network" }) };
+    } finally {
+      // Always clear the guard + saving flag, even on a throw, so the Save
+      // button can never get stuck disabled.
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }, [eventId, event]);
+
   return {
     event,
     status,
@@ -140,5 +220,7 @@ export function useEvent(eventId: string): UseEvent {
     setRsvp,
     report,
     cancel,
+    toggleSave,
+    saving,
   };
 }

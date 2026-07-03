@@ -12,6 +12,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { EventsScreen } from "@/screens/events/EventsScreen";
 import { EventDetailScreen } from "@/screens/events/EventDetailScreen";
+import { SavedEventsScreen } from "@/screens/events/SavedEventsScreen";
 import { CreateEventScreen } from "@/screens/events/CreateEventScreen";
 import { CommunityDetailScreen } from "@/screens/communities/CommunityDetailScreen";
 import { CreateCommunityScreen } from "@/screens/communities/CreateCommunityScreen";
@@ -50,6 +51,7 @@ export type AppTabsParamList = {
 export type EventsStackParamList = {
   EventsHome: undefined;
   EventDetail: { id: string };
+  SavedEvents: undefined;
   CreateEvent: { communityId: string };
   CommunityDetail: { id: string };
   CreateCommunity: undefined;
@@ -97,6 +99,11 @@ function EventsStack() {
         // edge-to-edge under the status bar (immersive, per the mockup). The
         // screen renders its own floating back button.
         options={{ headerShown: false }}
+      />
+      <EventsStackNav.Screen
+        name="SavedEvents"
+        component={SavedEventsScreen}
+        options={{ title: strings.events.savedTitle }}
       />
       <EventsStackNav.Screen
         name="CreateEvent"

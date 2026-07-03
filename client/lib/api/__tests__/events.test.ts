@@ -11,6 +11,9 @@ import {
   createEvent,
   reportEvent,
   cancelEvent,
+  saveEvent,
+  unsaveEvent,
+  listSavedEvents,
 } from "@/lib/api/events";
 
 const fetchMock = fetchWithAuth as unknown as jest.Mock;
@@ -314,6 +317,64 @@ describe("events API client — createEvent", () => {
     expect(await createEvent("c1", input)).toEqual({
       ok: false,
       error: { kind: "network" },
+    });
+  });
+});
+
+describe("events API client — save / unsave / listSaved", () => {
+  it("saveEvent 200 → ok; posts to the save path with no body", async () => {
+    fetchMock.mockResolvedValue(res(200, { ok: true }));
+    expect(await saveEvent("e1")).toEqual({ ok: true, data: { ok: true } });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/v1/events/e1/save",
+      undefined,
+    );
+  });
+
+  it("unsaveEvent 200 → ok; DELETEs the save path", async () => {
+    fetchMock.mockResolvedValue(res(200, { ok: true }));
+    expect(await unsaveEvent("e1")).toEqual({ ok: true, data: { ok: true } });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "DELETE",
+      "/api/v1/events/e1/save",
+      undefined,
+    );
+  });
+
+  it("save 404 → notFound; 429 → rateLimited; network", async () => {
+    fetchMock.mockResolvedValueOnce(res(404, {}));
+    expect(await saveEvent("e1")).toEqual({
+      ok: false,
+      error: { kind: "notFound" },
+    });
+
+    fetchMock.mockResolvedValueOnce(res(429, { retryAfter: 12 }));
+    expect(await saveEvent("e1")).toEqual({
+      ok: false,
+      error: { kind: "rateLimited", retryAfter: 12 },
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    expect(await unsaveEvent("e1")).toEqual({
+      ok: false,
+      error: { kind: "network" },
+    });
+  });
+
+  it("listSavedEvents 200 → ok with the array at /events/saved; 5xx → server", async () => {
+    fetchMock.mockResolvedValue(res(200, [EVENT]));
+    expect(await listSavedEvents()).toEqual({ ok: true, data: [EVENT] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "GET",
+      "/api/v1/events/saved",
+      undefined,
+    );
+
+    fetchMock.mockResolvedValueOnce(res(500, {}));
+    expect(await listSavedEvents()).toEqual({
+      ok: false,
+      error: { kind: "server" },
     });
   });
 });

@@ -240,7 +240,9 @@ describe("DELETE /api/v1/blocks/:userId", () => {
       .select()
       .from(auditLog)
       .where(eq(auditLog.actorId, blocker));
-    expect(audits.some((a) => a.action === "user.unblocked")).toBe(true);
+    // Exactly one user.unblocked despite unblocking twice — the no-op second
+    // unblock (not_blocked) wrote no phantom audit row (TXN-1 atomicity).
+    expect(audits.filter((a) => a.action === "user.unblocked")).toHaveLength(1);
 
     const bad = await request(app).delete("/api/v1/blocks/not-a-uuid");
     expect(bad.status).toBe(400);

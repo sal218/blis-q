@@ -77,7 +77,13 @@ async function handleCreate(req: Request, res: Response): Promise<Response> {
 async function handleList(req: Request, res: Response): Promise<Response> {
   try {
     const userId = req.user!.id;
-    const q = offsetPageQuerySchema.parse(req.query); // lenient: ignores extras
+    const parsed = offsetPageQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const q = parsed.data; // lenient: ignores extras
     const search =
       typeof req.query.search === "string" && req.query.search.trim()
         ? req.query.search.trim().slice(0, 100)

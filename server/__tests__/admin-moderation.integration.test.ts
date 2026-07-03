@@ -320,6 +320,15 @@ describe("GET /api/admin/reports (AdminReportDTO)", () => {
     expect(entry.reviewedAt).not.toBeNull();
     expect(entry.resolution).toBe("handled");
   });
+
+  it("an invalid ?status → 400, not 500 (IV-1)", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+    // status fails the enum → the query safeParse returns 400 (was a 500).
+    const res = await request(app).get("/api/admin/reports?status=bogus");
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid input");
+  });
 });
 
 describe("POST /api/admin/moderation/remove-content", () => {

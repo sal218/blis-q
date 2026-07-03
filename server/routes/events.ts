@@ -82,7 +82,13 @@ function parseId(req: Request): string | null {
 
 async function handleList(req: Request, res: Response): Promise<Response> {
   try {
-    const q = cursorPageQuerySchema.parse(req.query); // lenient: ignores extras
+    const parsed = cursorPageQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const q = parsed.data; // lenient: ignores extras
     let cursor: { startsAt: Date; id: string } | undefined;
     if (q.cursor) {
       const decoded = decodeEventCursor(q.cursor);

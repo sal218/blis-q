@@ -150,7 +150,13 @@ async function handleListCommunities(
   res: Response,
 ): Promise<Response> {
   try {
-    const q = offsetPageQuerySchema.parse(req.query); // lenient: ignores extras
+    const parsed = offsetPageQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const q = parsed.data; // lenient: ignores extras
     const search =
       typeof req.query.search === "string" && req.query.search.trim()
         ? req.query.search.trim().slice(0, 100)
@@ -309,7 +315,13 @@ async function handleListReports(
   res: Response,
 ): Promise<Response> {
   try {
-    const q = adminReportsQuerySchema.parse(req.query); // lenient: ignores extras
+    const parsed = adminReportsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const q = parsed.data; // lenient: ignores extras
 
     const { rows, total } = await storage.listReports({
       offset: (q.page - 1) * q.pageSize,
@@ -428,7 +440,13 @@ async function handleRemoveContent(
 
 async function handleListUsers(req: Request, res: Response): Promise<Response> {
   try {
-    const q = adminUsersQuerySchema.parse(req.query); // lenient: ignores extras
+    const parsed = adminUsersQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const q = parsed.data; // lenient: ignores extras
 
     const { rows, total } = await storage.adminListUsers({
       offset: (q.page - 1) * q.pageSize,

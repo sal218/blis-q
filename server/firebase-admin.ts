@@ -26,7 +26,10 @@ function initializeFirebaseAdmin() {
         "Firebase Admin SDK initialized with project ID only (limited functionality)",
       );
     } catch (error) {
-      console.error("Failed to initialize Firebase Admin SDK:", error);
+      console.error(
+        "Failed to initialize Firebase Admin SDK:",
+        error instanceof Error ? `${error.name}: ${error.message}` : "unknown",
+      );
     }
     return admin;
   }

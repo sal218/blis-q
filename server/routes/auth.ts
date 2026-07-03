@@ -45,16 +45,12 @@ function accepted(res: Response): Response {
   return res.status(202).json({ ok: true });
 }
 
-// Extracts a stable, NON-sensitive code for logging. Raw error objects/messages
-// can carry emails, SQL details, or request internals — never log those.
-export function safeErrorCode(err: unknown): string {
-  if (err && typeof err === "object" && "code" in err) {
-    const code = (err as { code: unknown }).code;
-    if (typeof code === "string") return code;
-    if (typeof code === "number") return String(code);
-  }
-  return "unknown";
-}
+// Imported + re-exported from ../errorCode so existing importers of this module
+// are unaffected AND this file's own uses keep a local binding; the impl moved to
+// its own module to avoid a circular import with the middleware layer
+// (server/auth.ts), which also needs it (SEC-LOG-01).
+import { safeErrorCode } from "../errorCode";
+export { safeErrorCode };
 
 async function handleSignup(req: Request, res: Response): Promise<Response> {
   try {

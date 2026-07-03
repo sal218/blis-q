@@ -41,6 +41,7 @@ import {
   type NewUser,
 } from "@shared/schema";
 import { invalidateProfileCache } from "./auth";
+import { likeEscape } from "./likeEscape";
 
 // Input for the transactional signup write (server/routes/auth.ts). `id` is the
 // Supabase auth user id so users.id === the JWT `sub` the middleware resolves.
@@ -339,7 +340,7 @@ export class DatabaseStorage {
   }): Promise<{ rows: AdminUserRow[]; total: number }> {
     const conditions: (SQL | undefined)[] = [];
     if (input.search) {
-      const term = `%${input.search}%`;
+      const term = `%${likeEscape(input.search)}%`;
       conditions.push(
         or(ilike(users.email, term), ilike(users.displayName, term)),
       );
@@ -965,7 +966,9 @@ export class DatabaseStorage {
   }): Promise<{ rows: CommunityRow[]; total: number }> {
     const where = and(
       isNull(communities.deletedAt),
-      input.search ? ilike(communities.name, `%${input.search}%`) : undefined,
+      input.search
+        ? ilike(communities.name, `%${likeEscape(input.search)}%`)
+        : undefined,
     );
 
     const [{ total }] = await db
@@ -1072,7 +1075,9 @@ export class DatabaseStorage {
   }): Promise<{ rows: CommunityRow[]; total: number }> {
     const where = and(
       isNull(communities.deletedAt),
-      input.search ? ilike(communities.name, `%${input.search}%`) : undefined,
+      input.search
+        ? ilike(communities.name, `%${likeEscape(input.search)}%`)
+        : undefined,
     );
 
     const [{ total }] = await db
@@ -1226,21 +1231,25 @@ export class DatabaseStorage {
       .limit(1);
     if (!community) return "not_found";
 
-    const [row] = await db
-      .insert(communityMemberships)
-      .values({ communityId, userId, role: "member" })
-      .onConflictDoNothing()
-      .returning({ id: communityMemberships.id });
-    if (!row) return "already";
+    // Mutation + mandatory audit commit together (§7). The onConflict returning
+    // is inside the tx so the audit is written ONLY when a row was created.
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(communityMemberships)
+        .values({ communityId, userId, role: "member" })
+        .onConflictDoNothing()
+        .returning({ id: communityMemberships.id });
+      if (!row) return "already";
 
-    await db.insert(auditLog).values({
-      actorId: userId,
-      action: "community.member_joined",
-      resourceType: "community",
-      resourceId: communityId,
-      ipAddress: ipAddress ?? null,
+      await tx.insert(auditLog).values({
+        actorId: userId,
+        action: "community.member_joined",
+        resourceType: "community",
+        resourceId: communityId,
+        ipAddress: ipAddress ?? null,
+      });
+      return "joined";
     });
-    return "joined";
   }
 
   // Leave: removes the caller's membership. Idempotent ("not_member" when there
@@ -1288,23 +1297,29 @@ export class DatabaseStorage {
       if (Number(admins) <= 1) return "last_admin";
     }
 
-    await db
-      .delete(communityMemberships)
-      .where(
-        and(
-          eq(communityMemberships.communityId, communityId),
-          eq(communityMemberships.userId, userId),
-        ),
-      );
+    // Mutation + audit commit together (§7); returning() so a concurrent leave
+    // (row already gone) writes no phantom audit → "not_member".
+    return db.transaction(async (tx) => {
+      const removed = await tx
+        .delete(communityMemberships)
+        .where(
+          and(
+            eq(communityMemberships.communityId, communityId),
+            eq(communityMemberships.userId, userId),
+          ),
+        )
+        .returning({ id: communityMemberships.id });
+      if (removed.length === 0) return "not_member";
 
-    await db.insert(auditLog).values({
-      actorId: userId,
-      action: "community.member_left",
-      resourceType: "community",
-      resourceId: communityId,
-      ipAddress: ipAddress ?? null,
+      await tx.insert(auditLog).values({
+        actorId: userId,
+        action: "community.member_left",
+        resourceType: "community",
+        resourceId: communityId,
+        ipAddress: ipAddress ?? null,
+      });
+      return "left";
     });
-    return "left";
   }
 
   // ── Blocks & reports (user-facing safety primitives) ─────────────────────────
@@ -1328,21 +1343,23 @@ export class DatabaseStorage {
       .limit(1);
     if (!target) return "not_found";
 
-    const [row] = await db
-      .insert(blocks)
-      .values({ blockerId, blockedId })
-      .onConflictDoNothing()
-      .returning({ id: blocks.id });
-    if (!row) return "already";
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(blocks)
+        .values({ blockerId, blockedId })
+        .onConflictDoNothing()
+        .returning({ id: blocks.id });
+      if (!row) return "already";
 
-    await db.insert(auditLog).values({
-      actorId: blockerId,
-      action: "user.blocked",
-      resourceType: "user",
-      resourceId: blockedId,
-      ipAddress: ipAddress ?? null,
+      await tx.insert(auditLog).values({
+        actorId: blockerId,
+        action: "user.blocked",
+        resourceType: "user",
+        resourceId: blockedId,
+        ipAddress: ipAddress ?? null,
+      });
+      return "created";
     });
-    return "created";
   }
 
   // Unblock. Idempotent: "removed" when a block existed (audited), "not_blocked"
@@ -1352,22 +1369,24 @@ export class DatabaseStorage {
     blockedId: string,
     ipAddress?: string | null,
   ): Promise<"removed" | "not_blocked"> {
-    const removed = await db
-      .delete(blocks)
-      .where(
-        and(eq(blocks.blockerId, blockerId), eq(blocks.blockedId, blockedId)),
-      )
-      .returning({ id: blocks.id });
-    if (removed.length === 0) return "not_blocked";
+    return db.transaction(async (tx) => {
+      const removed = await tx
+        .delete(blocks)
+        .where(
+          and(eq(blocks.blockerId, blockerId), eq(blocks.blockedId, blockedId)),
+        )
+        .returning({ id: blocks.id });
+      if (removed.length === 0) return "not_blocked";
 
-    await db.insert(auditLog).values({
-      actorId: blockerId,
-      action: "user.unblocked",
-      resourceType: "user",
-      resourceId: blockedId,
-      ipAddress: ipAddress ?? null,
+      await tx.insert(auditLog).values({
+        actorId: blockerId,
+        action: "user.unblocked",
+        resourceType: "user",
+        resourceId: blockedId,
+        ipAddress: ipAddress ?? null,
+      });
+      return "removed";
     });
-    return "removed";
   }
 
   // The users the caller has blocked, as PublicUser (never emails), newest first.

@@ -169,6 +169,7 @@ export const pl = {
     // Create event (form on Community detail)
     createCta: "Utwórz wydarzenie", // "Create event" (the entry button)
     createTitle: "Nowe wydarzenie", // "New event" (screen header)
+    createSubtitle: "Stwórz wydarzenie dla społeczności", // "Create an event for the community"
     titleLabel: "Tytuł", // "Title"
     titlePlaceholder: "Nazwa wydarzenia", // "Event name"
     descriptionLabel: "Opis (opcjonalnie)", // "Description (optional)"

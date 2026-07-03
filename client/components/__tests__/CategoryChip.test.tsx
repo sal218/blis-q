@@ -12,6 +12,11 @@ describe("CategoryChip", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("renders with a category glyph without crashing", () => {
+    render(<CategoryChip label="Sport" category="sports" />);
+    expect(screen.getByText("Sport")).toBeTruthy();
+  });
+
   it("with onPress it is a selectable button that fires onPress", () => {
     const onPress = jest.fn();
     render(<CategoryChip label="Wsparcie" selected onPress={onPress} />);

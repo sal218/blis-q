@@ -256,7 +256,10 @@ export function EventDetailScreen({ route, navigation }: Props) {
 
           {event.category ? (
             <View style={styles.categoryRow}>
-              <CategoryChip label={strings.events.categories[event.category]} />
+              <CategoryChip
+                label={strings.events.categories[event.category]}
+                category={event.category}
+              />
             </View>
           ) : null}
 

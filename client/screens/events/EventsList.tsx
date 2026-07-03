@@ -102,10 +102,14 @@ export function EventsList({ onOpenEvent }: Props) {
       </View>
 
       {/* Server-side category filter: "All" clears; each chip refetches the feed
-          via ?category=. Horizontal scroll so all 8 + All fit on small screens. */}
+          via ?category=. Horizontal scroll so all 8 + All fit on small screens.
+          `flexGrow: 0` on the ScrollView is REQUIRED — without it a horizontal
+          ScrollView expands to fill the column and stretches the chips into tall
+          capsules (and squashes the list below). */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
       >
         <CategoryChip
@@ -117,6 +121,7 @@ export function EventsList({ onOpenEvent }: Props) {
           <CategoryChip
             key={c}
             label={strings.events.categories[c]}
+            category={c}
             selected={category === c}
             onPress={() => setCategory(c)}
           />
@@ -125,6 +130,7 @@ export function EventsList({ onOpenEvent }: Props) {
 
       <FlatList
         testID="events-list"
+        style={styles.list}
         showsVerticalScrollIndicator={false}
         data={filtered}
         keyExtractor={(e) => e.id}
@@ -190,11 +196,21 @@ function createStyles(colors: ThemeColors) {
       color: colors.text,
       fontSize: 16,
     },
+    // flexGrow:0 stops the horizontal ScrollView from filling the column (which
+    // stretches the chips vertically); alignItems keeps the pills their natural
+    // height. The list below takes the remaining space via `list`.
+    filterScroll: {
+      flexGrow: 0,
+    },
     filterRow: {
       flexDirection: "row",
+      alignItems: "center",
       gap: spacing.sm,
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.sm,
+    },
+    list: {
+      flex: 1,
     },
     listContent: {
       paddingHorizontal: spacing.lg,

@@ -48,7 +48,10 @@ export function EventCard({ event, onPress }: Props) {
             {format(strings.events.goingCount, { count: event.goingCount })}
           </Text>
           {event.category ? (
-            <CategoryChip label={strings.events.categories[event.category]} />
+            <CategoryChip
+              label={strings.events.categories[event.category]}
+              category={event.category}
+            />
           ) : null}
         </View>
       </View>

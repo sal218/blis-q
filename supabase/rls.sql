@@ -24,6 +24,7 @@ ALTER TABLE communities               ENABLE ROW LEVEL SECURITY;
 ALTER TABLE community_memberships     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE events                    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE event_rsvps               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_saves               ENABLE ROW LEVEL SECURITY;
 ALTER TABLE posts                     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages                  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE safe_places               ENABLE ROW LEVEL SECURITY;

@@ -54,6 +54,7 @@ import {
   communities,
   events,
   eventRsvps,
+  eventSaves,
   auditLog,
   reports,
 } from "@shared/schema";
@@ -1091,5 +1092,111 @@ describe("erasure / cascade (schema ON DELETE)", () => {
     const [ev] = await db.select().from(events).where(eq(events.id, eid));
     expect(ev).toBeTruthy();
     expect(ev.createdById).toBeNull();
+  });
+});
+
+describe("event save/unsave + GET /api/v1/events/saved (slice C1)", () => {
+  it("save is idempotent, sets the caller's saved flag, and unsave clears it", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    mockUser = { id: owner };
+
+    const saved = await request(app).post(`/api/v1/events/${eid}/save`);
+    expect(saved.status).toBe(200);
+    expect(saved.body).toEqual({ ok: true });
+
+    // Idempotent: a second save is still 200 and leaves exactly one row.
+    await request(app).post(`/api/v1/events/${eid}/save`);
+    const rows = await db
+      .select()
+      .from(eventSaves)
+      .where(eq(eventSaves.eventId, eid));
+    expect(rows.filter((r) => r.userId === owner)).toHaveLength(1);
+
+    // The DTO reflects the caller's own saved state.
+    const detail = await request(app).get(`/api/v1/events/${eid}`);
+    expect(detail.body.saved).toBe(true);
+
+    // Unsave → 200, flag clears, idempotent.
+    const unsaved = await request(app).delete(`/api/v1/events/${eid}/save`);
+    expect(unsaved.status).toBe(200);
+    expect(
+      (await request(app).delete(`/api/v1/events/${eid}/save`)).status,
+    ).toBe(200);
+    const after = await request(app).get(`/api/v1/events/${eid}`);
+    expect(after.body.saved).toBe(false);
+  });
+
+  it("saving an invisible (deleted) event → 404", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    await storage.softDeleteEvent(eid, owner);
+    mockUser = { id: owner };
+
+    expect((await request(app).post(`/api/v1/events/${eid}/save`)).status).toBe(
+      404,
+    );
+  });
+
+  it("GET /events/saved returns the caller's saved upcoming events, caller-scoped", async () => {
+    const owner = await seedUser();
+    const caller = await seedUser();
+    const cid = await seedCommunity(owner);
+    const savedEid = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() + HOUR),
+    });
+    const otherEid = await seedEvent(cid, owner); // not saved by caller
+    const pastEid = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() - HOUR),
+    });
+
+    mockUser = { id: caller };
+    await request(app).post(`/api/v1/events/${savedEid}/save`);
+    await request(app).post(`/api/v1/events/${pastEid}/save`); // saved but past
+
+    const res = await request(app).get(`/api/v1/events/saved`);
+    expect(res.status).toBe(200);
+    const ids = res.body.map((e: { id: string }) => e.id);
+    expect(ids).toContain(savedEid);
+    expect(ids).not.toContain(otherEid); // not saved
+    expect(ids).not.toContain(pastEid); // saved but past → excluded
+
+    // Caller-scoped: the owner (who saved nothing) sees an empty saved list.
+    mockUser = { id: owner };
+    const ownerSaved = await request(app).get(`/api/v1/events/saved`);
+    expect(ownerSaved.body.map((e: { id: string }) => e.id)).not.toContain(
+      savedEid,
+    );
+  });
+
+  it("save is rate-limited → 429", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    rsvpRl.mockResolvedValueOnce({ allowed: false, retryAfter: 12 });
+    mockUser = { id: owner };
+
+    const res = await request(app).post(`/api/v1/events/${eid}/save`);
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBe(12);
+  });
+
+  it("erasure cascades: deleting the user removes their saves", async () => {
+    const owner = await seedUser();
+    const saver = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    mockUser = { id: saver };
+    await request(app).post(`/api/v1/events/${eid}/save`);
+
+    await db.delete(auditLog).where(inArray(auditLog.actorId, [saver]));
+    await db.delete(users).where(eq(users.id, saver));
+    const rows = await db
+      .select()
+      .from(eventSaves)
+      .where(eq(eventSaves.eventId, eid));
+    expect(rows).toHaveLength(0);
   });
 });

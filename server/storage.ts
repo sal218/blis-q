@@ -29,6 +29,7 @@ import {
   messages,
   events,
   eventRsvps,
+  eventSaves,
   safePlaces,
   adCampaigns,
   blocks,
@@ -225,6 +226,7 @@ export type EventRow = {
   deletedAt: Date | null;
   status: string; // "active" | "cancelled" (DB text; route narrows to the union)
   cancelledAt: Date | null;
+  callerSaved: boolean; // whether the caller has saved this event (private)
 };
 
 // One row of the admin reports queue. `status`/`resourceType` are DB text
@@ -2150,6 +2152,12 @@ export class DatabaseStorage {
     >`(select status from ${eventRsvps} where ${eventRsvps.eventId} = ${events.id} and ${eventRsvps.userId} = ${callerId} limit 1)`;
   }
 
+  // Whether the caller has saved this event — a private per-caller boolean (never
+  // a "who saved"/count surface). Correlated EXISTS, parameterised (no N+1).
+  private callerSavedSql(callerId: string) {
+    return sql<boolean>`exists (select 1 from ${eventSaves} where ${eventSaves.eventId} = ${events.id} and ${eventSaves.userId} = ${callerId})`;
+  }
+
   // Column projection shared by the list/get reads (event fields + the two
   // correlated aggregates). createdById is selected for the block/auth checks.
   private eventSelection(callerId: string) {
@@ -2169,6 +2177,7 @@ export class DatabaseStorage {
       deletedAt: events.deletedAt,
       status: events.status,
       cancelledAt: events.cancelledAt,
+      callerSaved: this.callerSavedSql(callerId),
     };
   }
 
@@ -2237,7 +2246,12 @@ export class DatabaseStorage {
 
     return {
       status: "created",
-      event: { ...inserted, goingCount: 0, callerRsvpStatus: null },
+      event: {
+        ...inserted,
+        goingCount: 0,
+        callerRsvpStatus: null,
+        callerSaved: false,
+      },
     };
   }
 
@@ -2350,6 +2364,57 @@ export class DatabaseStorage {
             eq(eventRsvps.eventId, events.id),
             eq(eventRsvps.userId, input.callerId),
             eq(eventRsvps.status, "going"),
+          ),
+        )
+        .where(and(...conditions))
+        .orderBy(asc(events.startsAt), asc(events.id))
+        .limit(input.limit)
+    );
+  }
+
+  // The caller's SAVED upcoming events (the "Saved" list). Same shape as
+  // listMyUpcomingEvents but caller-scoped via an INNER JOIN on event_saves
+  // instead of a going RSVP. Same visibility (non-deleted event + community,
+  // startsAt >= now, active, creator-block-filtered). Soonest-first, capped.
+  async listSavedEvents(input: {
+    callerId: string;
+    limit: number;
+    now?: Date;
+  }): Promise<EventRow[]> {
+    const now = input.now ?? new Date();
+    const blockedIds = await this.getBlockedUserIds(input.callerId);
+
+    const conditions: (SQL | undefined)[] = [
+      isNull(events.deletedAt),
+      eq(events.status, "active"),
+      gte(events.startsAt, now),
+    ];
+    if (blockedIds.length) {
+      conditions.push(
+        or(
+          isNull(events.createdById),
+          notInArray(events.createdById, blockedIds),
+        ),
+      );
+    }
+
+    return (
+      db
+        .select(this.eventSelection(input.callerId))
+        .from(events)
+        .innerJoin(
+          communities,
+          and(
+            eq(communities.id, events.communityId),
+            isNull(communities.deletedAt),
+          ),
+        )
+        // caller-scoped: only events this user has saved
+        .innerJoin(
+          eventSaves,
+          and(
+            eq(eventSaves.eventId, events.id),
+            eq(eventSaves.userId, input.callerId),
           ),
         )
         .where(and(...conditions))
@@ -2653,6 +2718,35 @@ export class DatabaseStorage {
         });
       return "ok";
     });
+  }
+
+  // Save (bookmark) an event. Visible-event-only (getEvent hides deleted /
+  // community-deleted / block-hidden → not_found). Idempotent via
+  // onConflictDoNothing on the unique (event_id, user_id). Private + NOT audited
+  // (a benign per-user toggle, like setRsvp). Returns "ok" / "not_found".
+  async saveEvent(
+    eventId: string,
+    userId: string,
+  ): Promise<"ok" | "not_found"> {
+    const event = await this.getEvent(eventId, userId);
+    if (!event || event.deletedAt) return "not_found";
+    await db
+      .insert(eventSaves)
+      .values({ eventId, userId })
+      .onConflictDoNothing();
+    return "ok";
+  }
+
+  // Unsave (remove the bookmark). Idempotent — removing a non-existent save is a
+  // no-op; always "ok" (you can always drop your own bookmark, even for an event
+  // that has since been deleted). Not audited.
+  async unsaveEvent(eventId: string, userId: string): Promise<"ok"> {
+    await db
+      .delete(eventSaves)
+      .where(
+        and(eq(eventSaves.eventId, eventId), eq(eventSaves.userId, userId)),
+      );
+    return "ok";
   }
 
   // Admin content removal (moderation). Platform-admin authority — no community

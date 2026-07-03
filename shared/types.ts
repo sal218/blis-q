@@ -164,6 +164,7 @@ export type EventDTO = {
   // the creator on an active, non-past, non-deleted event. Never leaks WHO the
   // creator is — just whether the caller holds the cancel capability.
   canCancel: boolean;
+  saved: boolean; // whether the CALLER has saved/bookmarked this event (private)
 };
 
 export type SafePlaceDTO = {

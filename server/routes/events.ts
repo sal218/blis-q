@@ -31,17 +31,22 @@ import type { EventDTO, CursorPage, RsvpStatus } from "@shared/types";
 // best-effort. Event images are deferred (no imageKey accepted this slice).
 // The Home "upcoming events" rail is capped server-side (a short personal list).
 const HOME_EVENTS_LIMIT = 10;
+// The saved-events list is a full list (not a short home rail), so a higher cap.
+const SAVED_EVENTS_LIMIT = 50;
 
 export function registerEventRoutes(app: Express): void {
   app.get("/api/v1/events", isAuthenticated, handleList);
-  // "/mine" must be registered BEFORE "/:id" so it isn't swallowed by the param.
+  // "/mine" + "/saved" must be registered BEFORE "/:id" so they aren't swallowed.
   app.get("/api/v1/events/mine", isAuthenticated, handleListMine);
+  app.get("/api/v1/events/saved", isAuthenticated, handleListSaved);
   app.post("/api/v1/communities/:id/events", isAuthenticated, handleCreate);
   app.get("/api/v1/events/:id", isAuthenticated, handleGet);
   app.patch("/api/v1/events/:id", isAuthenticated, handleUpdate);
   app.delete("/api/v1/events/:id", isAuthenticated, handleDelete);
   app.post("/api/v1/events/:id/cancel", isAuthenticated, handleCancel);
   app.post("/api/v1/events/:id/rsvp", isAuthenticated, handleRsvp);
+  app.post("/api/v1/events/:id/save", isAuthenticated, handleSave);
+  app.delete("/api/v1/events/:id/save", isAuthenticated, handleUnsave);
   app.post("/api/v1/events/:id/report", isAuthenticated, handleReport);
 }
 
@@ -72,6 +77,7 @@ function toEventDTO(row: EventRow, callerId: string): EventDTO {
     cancelledAt: row.cancelledAt ? row.cancelledAt.toISOString() : null,
     past,
     canCancel: row.createdById === callerId && !cancelled && !past && !deleted,
+    saved: row.callerSaved,
   };
 }
 
@@ -127,6 +133,23 @@ async function handleListMine(req: Request, res: Response): Promise<Response> {
     return res.status(200).json(body);
   } catch (err) {
     console.error("[GET /api/v1/events/mine]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// GET /api/v1/events/saved — the caller's saved (bookmarked) upcoming events,
+// soonest-first, capped. Caller-scoped (a user only ever sees their own saves).
+async function handleListSaved(req: Request, res: Response): Promise<Response> {
+  try {
+    const callerId = req.user!.id;
+    const rows = await storage.listSavedEvents({
+      callerId,
+      limit: SAVED_EVENTS_LIMIT,
+    });
+    const body: EventDTO[] = rows.map((row) => toEventDTO(row, callerId));
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[GET /api/v1/events/saved]", { code: safeErrorCode(err) });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }
@@ -343,6 +366,57 @@ async function handleRsvp(req: Request, res: Response): Promise<Response> {
     return res.status(200).json({ status: parsed.data.status });
   } catch (err) {
     console.error("[POST /api/v1/events/:id/rsvp]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// POST /api/v1/events/:id/save — bookmark the event (idempotent). Visible-event
+// only (404 for deleted/block-hidden). Private; not audited. Reuses the benign
+// rsvp toggle limiter.
+async function handleSave(req: Request, res: Response): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+
+    const rate = await checkRsvpRateLimit(req.user!.id);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const result = await storage.saveEvent(id, req.user!.id);
+    if (result === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[POST /api/v1/events/:id/save]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// DELETE /api/v1/events/:id/save — remove the bookmark (idempotent → always 200).
+async function handleUnsave(req: Request, res: Response): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+
+    const rate = await checkRsvpRateLimit(req.user!.id);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    await storage.unsaveEvent(id, req.user!.id);
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/v1/events/:id/save]", {
       code: safeErrorCode(err),
     });
     return res.status(500).json({ error: "Internal Server Error" });

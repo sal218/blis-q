@@ -32,6 +32,7 @@ const event = (over: Partial<EventDTO> = {}): EventDTO => ({
   cancelledAt: null,
   past: false,
   canCancel: false,
+  saved: false,
   ...over,
 });
 

@@ -384,6 +384,18 @@ describe("DELETE /api/v1/posts/:id", () => {
       (await request(app).delete(`/api/v1/posts/${randomUUID()}`)).status,
     ).toBe(404);
   });
+
+  it("rate-limited → 429", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const pid = await seedPost(cid, owner);
+    contentRl.mockResolvedValueOnce({ allowed: false, retryAfter: 20 });
+    mockUser = { id: owner };
+
+    const res = await request(app).delete(`/api/v1/posts/${pid}`);
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBe(20);
+  });
 });
 
 describe("POST /api/v1/posts/:id/report", () => {

@@ -321,4 +321,17 @@ describe("DELETE /api/v1/communities/:id/leave", () => {
     expect(remaining).toHaveLength(1);
     expect(remaining[0].userId).toBe(second);
   });
+
+  it("rate-limited → 429 (shares the join/leave membership bucket)", async () => {
+    const owner = await seedUser();
+    const joiner = await seedUser();
+    const cid = await seedCommunity(owner, "Limit");
+    await storage.joinCommunity(cid, joiner);
+    joinRl.mockResolvedValueOnce({ allowed: false, retryAfter: 55 });
+    mockUser = { id: joiner };
+
+    const res = await request(app).delete(`/api/v1/communities/${cid}/leave`);
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBe(55);
+  });
 });

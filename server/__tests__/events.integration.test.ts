@@ -32,6 +32,7 @@ jest.mock("../rateLimit", () => ({
   checkContentCreateRateLimit: jest.fn(),
   checkReportRateLimit: jest.fn(),
   checkEventCancelRateLimit: jest.fn(),
+  checkRsvpRateLimit: jest.fn(),
 }));
 
 jest.mock("../notifications", () => ({
@@ -43,6 +44,7 @@ import {
   checkContentCreateRateLimit,
   checkReportRateLimit,
   checkEventCancelRateLimit,
+  checkRsvpRateLimit,
 } from "../rateLimit";
 import { notifyCommunityMembers } from "../notifications";
 import { storage } from "../storage";
@@ -66,6 +68,7 @@ jest.setTimeout(30000);
 const contentRl = checkContentCreateRateLimit as unknown as jest.Mock;
 const reportRl = checkReportRateLimit as unknown as jest.Mock;
 const cancelRl = checkEventCancelRateLimit as unknown as jest.Mock;
+const rsvpRl = checkRsvpRateLimit as unknown as jest.Mock;
 const notifyMock = notifyCommunityMembers as unknown as jest.Mock;
 
 const POLICY_VERSION = "2026-06-10";
@@ -121,6 +124,7 @@ beforeEach(() => {
   contentRl.mockResolvedValue({ allowed: true });
   reportRl.mockResolvedValue({ allowed: true });
   cancelRl.mockResolvedValue({ allowed: true });
+  rsvpRl.mockResolvedValue({ allowed: true });
   notifyMock.mockResolvedValue(undefined);
 });
 
@@ -598,6 +602,20 @@ describe("PATCH /api/v1/events/:id", () => {
       ).status,
     ).toBe(404);
   });
+
+  it("rate-limited → 429", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    contentRl.mockResolvedValueOnce({ allowed: false, retryAfter: 30 });
+    mockUser = { id: owner };
+
+    const res = await request(app)
+      .patch(`/api/v1/events/${eid}`)
+      .send({ title: "x" });
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBe(30);
+  });
 });
 
 describe("DELETE /api/v1/events/:id", () => {
@@ -658,6 +676,18 @@ describe("DELETE /api/v1/events/:id", () => {
       403,
     );
   });
+
+  it("rate-limited → 429", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    contentRl.mockResolvedValueOnce({ allowed: false, retryAfter: 15 });
+    mockUser = { id: owner };
+
+    const res = await request(app).delete(`/api/v1/events/${eid}`);
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBe(15);
+  });
 });
 
 describe("POST /api/v1/events/:id/rsvp", () => {
@@ -714,6 +744,20 @@ describe("POST /api/v1/events/:id/rsvp", () => {
       .post(`/api/v1/events/${randomUUID()}/rsvp`)
       .send({ status: "going" });
     expect(res.status).toBe(404);
+  });
+
+  it("rate-limited → 429", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner);
+    rsvpRl.mockResolvedValueOnce({ allowed: false, retryAfter: 42 });
+    mockUser = { id: owner };
+
+    const res = await request(app)
+      .post(`/api/v1/events/${eid}/rsvp`)
+      .send({ status: "going" });
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBe(42);
   });
 
   it("RSVP to a cancelled event → 409 (no row persisted)", async () => {

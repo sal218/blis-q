@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EVENT_CATEGORIES } from "@shared/types";
 
 // Zod schemas for the backend request boundary. Every mutation route validates
 // its body against one of these before doing anything else (CLAUDE.md §6,
@@ -253,6 +254,11 @@ export const messageReportSchema = z
 // are in the body — a one-sided PATCH is range-checked against the MERGED
 // existing/proposed value in the route (storage.updateEvent), the authoritative
 // guard.
+// Predefined event category (slice D). z.enum over the frozen EVENT_CATEGORIES
+// tuple (single source of truth in shared/types.ts) — any other value is a 400.
+// There is no PG enum type; the DB column is plain text, validated here.
+export const eventCategorySchema = z.enum(EVENT_CATEGORIES);
+
 export const createEventSchema = z
   .object({
     title: z.string().trim().min(1).max(MAX_EVENT_TITLE_LENGTH),
@@ -260,6 +266,7 @@ export const createEventSchema = z
     location: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
     startsAt: z.string().datetime(),
     endsAt: z.string().datetime().optional(),
+    category: eventCategorySchema.optional(),
   })
   .strict()
   .refine((d) => !d.endsAt || new Date(d.endsAt) > new Date(d.startsAt), {
@@ -274,6 +281,7 @@ export const updateEventSchema = z
     location: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
     startsAt: z.string().datetime().optional(),
     endsAt: z.string().datetime().optional(),
+    category: eventCategorySchema.optional(),
   })
   .strict()
   // PATCH must change something — an empty body is a 400, not a silent no-op
@@ -367,6 +375,23 @@ export const cursorPageQuerySchema = z.object({
   cursor: z.string().optional(),
 });
 
+// GET /events query: the cursor-page fields + an optional predefined category
+// filter (slice D). A dedicated schema (not an extension of the shared
+// cursorPageQuerySchema, which posts/chat also use) so the category filter stays
+// events-only. An explicit but invalid category value fails z.enum → 400; an
+// absent category means "no filter". Like the other query schemas, unknown extra
+// keys are ignored (not .strict()).
+export const eventsListQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_CURSOR_PAGE_SIZE)
+    .default(DEFAULT_CURSOR_PAGE_SIZE),
+  cursor: z.string().optional(),
+  category: eventCategorySchema.optional(),
+});
+
 export const offsetPageQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce
@@ -419,4 +444,5 @@ export type UpdateEventInput = z.infer<typeof updateEventSchema>;
 export type CreateReportInput = z.infer<typeof createReportSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type CursorPageQuery = z.infer<typeof cursorPageQuerySchema>;
+export type EventsListQuery = z.infer<typeof eventsListQuerySchema>;
 export type OffsetPageQuery = z.infer<typeof offsetPageQuerySchema>;

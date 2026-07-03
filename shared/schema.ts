@@ -133,6 +133,11 @@ export const events = pgTable(
     status: text("status").notNull().default("active"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
+    // Predefined, coarse event-TYPE tag (slice D). Nullable = unset. Values are
+    // validated against EVENT_CATEGORIES in Zod (no PG enum type, mirroring the
+    // text `status` column). Deliberately never an identity/orientation label —
+    // a category must not be able to infer Article 9 data.
+    category: text("category"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -145,6 +150,13 @@ export const events = pgTable(
     byCommunityStart: index("idx_events_community_start").on(
       t.communityId,
       t.startsAt,
+    ),
+    // The category-filtered upcoming feed keeps the same keyset shape as byStart
+    // so `WHERE category = ? ORDER BY starts_at, id` stays index-served.
+    byCategoryStart: index("idx_events_category_start").on(
+      t.category,
+      t.startsAt,
+      t.id,
     ),
   }),
 );

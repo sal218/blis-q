@@ -9,7 +9,7 @@ import {
   updateEventSchema,
   rsvpSchema,
   postReportSchema,
-  cursorPageQuerySchema,
+  eventsListQuerySchema,
 } from "../validation";
 import {
   checkContentCreateRateLimit,
@@ -19,7 +19,12 @@ import {
 } from "../rateLimit";
 import { notifyCommunityMembers } from "../notifications";
 import { encodeEventCursor, decodeEventCursor } from "../cursor";
-import type { EventDTO, CursorPage, RsvpStatus } from "@shared/types";
+import type {
+  EventDTO,
+  CursorPage,
+  RsvpStatus,
+  EventCategory,
+} from "@shared/types";
 
 // Events & RSVPs (docs/API.md §10). Every route is isAuthenticated. GET /events
 // is a global UPCOMING discovery feed open to any authenticated user; it and the
@@ -78,6 +83,9 @@ function toEventDTO(row: EventRow, callerId: string): EventDTO {
     past,
     canCancel: row.createdById === callerId && !cancelled && !past && !deleted,
     saved: row.callerSaved,
+    // DB text; only validated categories are ever written, so the narrow is safe.
+    // A deleted event's category is stripped alongside its other content.
+    category: deleted ? null : (row.category as EventCategory | null),
   };
 }
 
@@ -88,13 +96,13 @@ function parseId(req: Request): string | null {
 
 async function handleList(req: Request, res: Response): Promise<Response> {
   try {
-    const parsed = cursorPageQuerySchema.safeParse(req.query);
+    const parsed = eventsListQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       return res
         .status(400)
         .json({ error: "Invalid input", details: parsed.error.issues });
     }
-    const q = parsed.data; // lenient: ignores extras
+    const q = parsed.data; // lenient on extras; an invalid category value → 400
     let cursor: { startsAt: Date; id: string } | undefined;
     if (q.cursor) {
       const decoded = decodeEventCursor(q.cursor);
@@ -107,6 +115,7 @@ async function handleList(req: Request, res: Response): Promise<Response> {
       callerId,
       limit: q.limit,
       cursor,
+      category: q.category,
     });
 
     const body: CursorPage<EventDTO> = {

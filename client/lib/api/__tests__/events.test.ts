@@ -44,6 +44,7 @@ const EVENT = {
   past: false,
   canCancel: false,
   saved: false,
+  category: null,
 };
 const PAGE = { data: [EVENT], nextCursor: "cursor-2" };
 

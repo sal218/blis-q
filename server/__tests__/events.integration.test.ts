@@ -106,13 +106,14 @@ async function seedCommunity(creatorId: string): Promise<string> {
 async function seedEvent(
   communityId: string,
   creatorId: string,
-  opts?: { startsAt?: Date; endsAt?: Date },
+  opts?: { startsAt?: Date; endsAt?: Date; category?: string },
 ): Promise<string> {
   const startsAt = opts?.startsAt ?? new Date(Date.now() + HOUR);
   const result = await storage.createEvent(communityId, creatorId, {
     title: "Wydarzenie",
     startsAt: startsAt.toISOString(),
     endsAt: opts?.endsAt?.toISOString(),
+    category: opts?.category,
   });
   if (result.status !== "created")
     throw new Error(`seedEvent: ${result.status}`);
@@ -1198,5 +1199,190 @@ describe("event save/unsave + GET /api/v1/events/saved (slice C1)", () => {
       .from(eventSaves)
       .where(eq(eventSaves.eventId, eid));
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe("event categories (slice D1)", () => {
+  it("create with a valid predefined category → 201 + DTO.category", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    mockUser = { id: owner };
+    const res = await request(app)
+      .post(`/api/v1/communities/${cid}/events`)
+      .send({
+        title: "Warsztat",
+        startsAt: new Date(Date.now() + HOUR).toISOString(),
+        category: "education",
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.category).toBe("education");
+  });
+
+  it("create without a category → 201 + category null", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    mockUser = { id: owner };
+    const res = await request(app)
+      .post(`/api/v1/communities/${cid}/events`)
+      .send({
+        title: "Bez kategorii",
+        startsAt: new Date(Date.now() + HOUR).toISOString(),
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.category).toBeNull();
+  });
+
+  it("create with an out-of-set category → 400 (custom/identity rejected)", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    mockUser = { id: owner };
+    for (const bad of ["gay", "whatever"]) {
+      const res = await request(app)
+        .post(`/api/v1/communities/${cid}/events`)
+        .send({
+          title: "x",
+          startsAt: new Date(Date.now() + HOUR).toISOString(),
+          category: bad,
+        });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("GET /events?category= returns only that category (null-category excluded)", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const support = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() + HOUR),
+      category: "support",
+    });
+    const activism = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() + 2 * HOUR),
+      category: "activism",
+    });
+    const uncategorised = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() + 3 * HOUR),
+    });
+    mockUser = { id: owner };
+
+    const res = await request(app).get(`/api/v1/events?category=support`);
+    expect(res.status).toBe(200);
+    const ids = res.body.data.map((e: { id: string }) => e.id);
+    expect(ids).toContain(support);
+    expect(ids).not.toContain(activism);
+    expect(ids).not.toContain(uncategorised); // null category is not "support"
+  });
+
+  it("GET /events with no category param returns all categories + uncategorised", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const support = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() + HOUR),
+      category: "support",
+    });
+    const uncategorised = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() + 2 * HOUR),
+    });
+    mockUser = { id: owner };
+
+    const res = await request(app).get(`/api/v1/events`);
+    expect(res.status).toBe(200);
+    const ids = res.body.data.map((e: { id: string }) => e.id);
+    expect(ids).toContain(support);
+    expect(ids).toContain(uncategorised);
+  });
+
+  it("GET /events?category=<invalid> → 400", async () => {
+    const owner = await seedUser();
+    mockUser = { id: owner };
+    const res = await request(app).get(`/api/v1/events?category=nonsense`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid input");
+  });
+
+  it("category filter composes with cursor pagination", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    // three "culture" events + one other-category decoy at an interleaved time.
+    const startsAt = new Date(Date.now() + 4 * HOUR);
+    const cultureIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      cultureIds.push(
+        await seedEvent(cid, owner, { startsAt, category: "culture" }),
+      );
+    }
+    await seedEvent(cid, owner, { startsAt, category: "sports" });
+    mockUser = { id: owner };
+
+    const p1 = await request(app).get(
+      `/api/v1/events?category=culture&limit=2`,
+    );
+    expect(p1.status).toBe(200);
+    expect(p1.body.data).toHaveLength(2);
+    expect(p1.body.nextCursor).toBeTruthy();
+    // every returned row is the filtered category — the decoy never leaks in.
+    for (const e of p1.body.data) expect(e.category).toBe("culture");
+
+    const p2 = await request(app).get(
+      `/api/v1/events?category=culture&limit=2&cursor=${encodeURIComponent(
+        p1.body.nextCursor,
+      )}`,
+    );
+    expect(p2.status).toBe(200);
+    for (const e of p2.body.data) expect(e.category).toBe("culture");
+    const seen = [
+      ...p1.body.data.map((e: { id: string }) => e.id),
+      ...p2.body.data.map((e: { id: string }) => e.id),
+    ];
+    for (const id of cultureIds) expect(seen).toContain(id);
+  });
+
+  it("PATCH sets the category → 200 + updated DTO; invalid → 400", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner); // starts uncategorised
+    mockUser = { id: owner };
+
+    const ok = await request(app)
+      .patch(`/api/v1/events/${eid}`)
+      .send({ category: "health" });
+    expect(ok.status).toBe(200);
+    expect(ok.body.category).toBe("health");
+
+    const bad = await request(app)
+      .patch(`/api/v1/events/${eid}`)
+      .send({ category: "not-a-category" });
+    expect(bad.status).toBe(400);
+  });
+
+  it("category is present on the /:id, /mine and /saved read paths", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const eid = await seedEvent(cid, owner, {
+      startsAt: new Date(Date.now() + HOUR),
+      category: "social",
+    });
+    mockUser = { id: owner };
+
+    const detail = await request(app).get(`/api/v1/events/${eid}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.category).toBe("social");
+
+    // RSVP going → appears on /mine with its category.
+    await request(app)
+      .post(`/api/v1/events/${eid}/rsvp`)
+      .send({ status: "going" });
+    const mine = await request(app).get(`/api/v1/events/mine`);
+    expect(mine.status).toBe(200);
+    expect(mine.body.find((e: { id: string }) => e.id === eid)?.category).toBe(
+      "social",
+    );
+
+    // Save → appears on /saved with its category.
+    await request(app).post(`/api/v1/events/${eid}/save`);
+    const saved = await request(app).get(`/api/v1/events/saved`);
+    expect(saved.status).toBe(200);
+    expect(saved.body.find((e: { id: string }) => e.id === eid)?.category).toBe(
+      "social",
+    );
   });
 });

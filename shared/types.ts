@@ -144,6 +144,25 @@ export type ChatSummaryDTO = {
   lastMessage: MessageDTO | null;
 };
 
+// Predefined event categories (slice D). Coarse, creator-chosen event-TYPE tags
+// used for browsing/filtering — deliberately NOT identity/orientation labels, so
+// a category can never infer Article 9 special-category data. This tuple is the
+// single source of truth: the Zod validator (server/validation.ts) enums over it
+// and the mobile picker/chips (D2) label these keys in Polish. Keys are FROZEN
+// once events carry them; add new ones by appending, never renaming/removing.
+export const EVENT_CATEGORIES = [
+  "social",
+  "support",
+  "activism",
+  "education",
+  "culture",
+  "sports",
+  "health",
+  "other",
+] as const;
+
+export type EventCategory = (typeof EVENT_CATEGORIES)[number];
+
 export type EventDTO = {
   id: string;
   communityId: string;
@@ -165,6 +184,7 @@ export type EventDTO = {
   // creator is — just whether the caller holds the cancel capability.
   canCancel: boolean;
   saved: boolean; // whether the CALLER has saved/bookmarked this event (private)
+  category: EventCategory | null; // predefined event-type tag, or null (unset)
 };
 
 export type SafePlaceDTO = {

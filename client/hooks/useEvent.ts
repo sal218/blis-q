@@ -107,16 +107,31 @@ export function useEvent(eventId: string): UseEvent {
           : prev,
       );
 
-      const result = await apiSetRsvp(eventId, next);
-      rsvpRef.current = false;
-      setSubmitting(false);
-      if (!result.ok) {
+      const revert = () =>
         setEvent((prev) =>
           prev ? { ...prev, rsvp: prevRsvp, goingCount: prevGoingCount } : prev,
         );
-        return { ok: false, message: eventsApiErrorMessage(result.error) };
+      try {
+        // request() can reject on an unexpected onOk-body parse, not just resolve
+        // to { ok:false } — treat a throw like a network failure and revert.
+        const result = await apiSetRsvp(eventId, next);
+        if (!result.ok) {
+          revert();
+          return { ok: false, message: eventsApiErrorMessage(result.error) };
+        }
+        return { ok: true };
+      } catch {
+        revert();
+        return {
+          ok: false,
+          message: eventsApiErrorMessage({ kind: "network" }),
+        };
+      } finally {
+        // Always clear the guard + submitting, even if the await threw, so the
+        // button can never get stuck disabled.
+        rsvpRef.current = false;
+        setSubmitting(false);
       }
-      return { ok: true };
     },
     [eventId, event],
   );
@@ -172,16 +187,28 @@ export function useEvent(eventId: string): UseEvent {
     requestSeq.current++;
     setEvent((prev) => (prev ? { ...prev, saved: !prevSaved } : prev));
 
-    const result = prevSaved
-      ? await apiUnsaveEvent(eventId)
-      : await apiSaveEvent(eventId);
-    savingRef.current = false;
-    setSaving(false);
-    if (!result.ok) {
+    const revert = () =>
       setEvent((prev) => (prev ? { ...prev, saved: prevSaved } : prev));
-      return { ok: false, message: eventsApiErrorMessage(result.error) };
+    try {
+      // request() can reject on an unexpected onOk-body parse — treat a throw
+      // like a network failure and revert the optimistic flip.
+      const result = prevSaved
+        ? await apiUnsaveEvent(eventId)
+        : await apiSaveEvent(eventId);
+      if (!result.ok) {
+        revert();
+        return { ok: false, message: eventsApiErrorMessage(result.error) };
+      }
+      return { ok: true };
+    } catch {
+      revert();
+      return { ok: false, message: eventsApiErrorMessage({ kind: "network" }) };
+    } finally {
+      // Always clear the guard + saving flag, even on a throw, so the Save
+      // button can never get stuck disabled.
+      savingRef.current = false;
+      setSaving(false);
     }
-    return { ok: true };
   }, [eventId, event]);
 
   return {

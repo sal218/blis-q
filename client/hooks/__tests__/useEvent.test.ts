@@ -189,6 +189,35 @@ describe("useEvent", () => {
     expect(result.current.event?.goingCount).toBe(6);
   });
 
+  it("clears the guard + reverts if apiSetRsvp REJECTS (button not stuck)", async () => {
+    getMock.mockResolvedValue({
+      ok: true,
+      data: event({ goingCount: 5, rsvp: null }),
+    });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // request() can throw (e.g. an onOk-body parse) rather than resolve ok:false.
+    rsvpMock.mockRejectedValueOnce(new Error("boom"));
+    let outcome!: { ok: boolean };
+    await act(async () => {
+      outcome = await result.current.setRsvp("going");
+    });
+    expect(outcome.ok).toBe(false);
+    // optimistic flip reverted, submitting cleared
+    expect(result.current.event?.rsvp).toBeNull();
+    expect(result.current.event?.goingCount).toBe(5);
+    expect(result.current.submitting).toBe(false);
+
+    // the guard was released → a subsequent tap dispatches again (not stuck)
+    rsvpMock.mockResolvedValueOnce({ ok: true, data: { status: "going" } });
+    await act(async () => {
+      await result.current.setRsvp("going");
+    });
+    expect(rsvpMock).toHaveBeenCalledTimes(2);
+    expect(result.current.event?.rsvp).toEqual({ status: "going" });
+  });
+
   it("RSVP failure → message, state reverted (unchanged)", async () => {
     getMock.mockResolvedValue({
       ok: true,
@@ -405,6 +434,30 @@ describe("useEvent", () => {
       resolveSave({ ok: true, data: { ok: true } });
     });
     expect(result.current.saving).toBe(false);
+    expect(result.current.event?.saved).toBe(true);
+  });
+
+  it("clears the save guard + reverts if the save REJECTS (button not stuck)", async () => {
+    getMock.mockResolvedValue({ ok: true, data: event({ saved: false }) });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // request() can throw rather than resolve ok:false.
+    saveMock.mockRejectedValueOnce(new Error("boom"));
+    let outcome!: { ok: boolean };
+    await act(async () => {
+      outcome = await result.current.toggleSave();
+    });
+    expect(outcome.ok).toBe(false);
+    expect(result.current.event?.saved).toBe(false); // reverted
+    expect(result.current.saving).toBe(false);
+
+    // guard released → a subsequent tap dispatches again (not stuck)
+    saveMock.mockResolvedValueOnce({ ok: true, data: { ok: true } });
+    await act(async () => {
+      await result.current.toggleSave();
+    });
+    expect(saveMock).toHaveBeenCalledTimes(2);
     expect(result.current.event?.saved).toBe(true);
   });
 });

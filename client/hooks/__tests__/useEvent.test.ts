@@ -158,6 +158,37 @@ describe("useEvent", () => {
     expect(result.current.event?.goingCount).toBe(6);
   });
 
+  it("ignores a second setRsvp while the first is in flight (no double-increment)", async () => {
+    getMock.mockResolvedValue({
+      ok: true,
+      data: event({ goingCount: 5, rsvp: null }),
+    });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // Hold the first RSVP open.
+    let resolveRsvp!: (v: unknown) => void;
+    rsvpMock.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveRsvp = r;
+      }),
+    );
+    act(() => {
+      void result.current.setRsvp("going"); // first: optimistic +1 → 6, in flight
+    });
+    // A second immediate tap is IGNORED — no second dispatch, no double-increment.
+    await act(async () => {
+      await result.current.setRsvp("going");
+    });
+    expect(rsvpMock).toHaveBeenCalledTimes(1);
+    expect(result.current.event?.goingCount).toBe(6);
+
+    await act(async () => {
+      resolveRsvp({ ok: true, data: { status: "going" } });
+    });
+    expect(result.current.event?.goingCount).toBe(6);
+  });
+
   it("RSVP failure → message, state reverted (unchanged)", async () => {
     getMock.mockResolvedValue({
       ok: true,

@@ -51,9 +51,11 @@ export function useEvent(eventId: string): UseEvent {
   const [saving, setSaving] = useState(false);
 
   const requestSeq = useRef(0);
-  // Synchronous guard: serialize save toggles so a rapid save→unsave double-tap
-  // can't dispatch a POST and DELETE concurrently (which could land out of order
-  // and diverge from the optimistic UI). A tap while one is in flight is ignored.
+  // Synchronous guards: serialize the optimistic toggles so a rapid double-tap
+  // (fired before React re-renders the disabled state) can't dispatch two
+  // requests and double-apply the optimistic delta. A tap while one is in flight
+  // is ignored. `rsvpRef` for the going toggle; `savingRef` for the save toggle.
+  const rsvpRef = useRef(false);
   const savingRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -85,7 +87,10 @@ export function useEvent(eventId: string): UseEvent {
   // `submitting` serializes taps. prev values are captured from the event closure.
   const setRsvp = useCallback(
     async (next: RsvpStatus): Promise<RsvpOutcome> => {
-      if (!event || submitting) return { ok: true };
+      // Ignore a tap while an RSVP change is already in flight (synchronous ref,
+      // not the `submitting` state, so a rapid double-tap can't double-dispatch).
+      if (!event || rsvpRef.current) return { ok: true };
+      rsvpRef.current = true;
       const prevRsvp = event.rsvp;
       const prevGoingCount = event.goingCount;
       const delta = goingDelta(prevRsvp?.status ?? null, next);
@@ -103,6 +108,7 @@ export function useEvent(eventId: string): UseEvent {
       );
 
       const result = await apiSetRsvp(eventId, next);
+      rsvpRef.current = false;
       setSubmitting(false);
       if (!result.ok) {
         setEvent((prev) =>
@@ -112,7 +118,7 @@ export function useEvent(eventId: string): UseEvent {
       }
       return { ok: true };
     },
-    [eventId, event, submitting],
+    [eventId, event],
   );
 
   // Submit a moderation report for this event (no local state change). 404 =

@@ -34,6 +34,7 @@ export type UseEvent = {
   report: (reason: string) => Promise<RsvpOutcome>;
   cancel: () => Promise<RsvpOutcome>;
   toggleSave: () => Promise<RsvpOutcome>;
+  saving: boolean; // a save toggle is in flight (Save button disabled)
 };
 
 // goingCount delta from a status change: entering "going" +1, leaving "going" −1,
@@ -47,8 +48,13 @@ export function useEvent(eventId: string): UseEvent {
   const [status, setStatus] = useState<EventDetailStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const requestSeq = useRef(0);
+  // Synchronous guard: serialize save toggles so a rapid save→unsave double-tap
+  // can't dispatch a POST and DELETE concurrently (which could land out of order
+  // and diverge from the optimistic UI). A tap while one is in flight is ignored.
+  const savingRef = useRef(false);
 
   const load = useCallback(async () => {
     const seq = ++requestSeq.current;
@@ -140,7 +146,10 @@ export function useEvent(eventId: string): UseEvent {
   // revert exactly that flip. `prevSaved` is read from the current event closure
   // (event is a dep), so the decision (save vs unsave) matches what the user saw.
   const toggleSave = useCallback(async (): Promise<RsvpOutcome> => {
-    if (!event) return { ok: true };
+    // Ignore a tap while a save toggle is already in flight (serialized).
+    if (!event || savingRef.current) return { ok: true };
+    savingRef.current = true;
+    setSaving(true);
     const prevSaved = event.saved;
 
     requestSeq.current++;
@@ -149,6 +158,8 @@ export function useEvent(eventId: string): UseEvent {
     const result = prevSaved
       ? await apiUnsaveEvent(eventId)
       : await apiSaveEvent(eventId);
+    savingRef.current = false;
+    setSaving(false);
     if (!result.ok) {
       setEvent((prev) => (prev ? { ...prev, saved: prevSaved } : prev));
       return { ok: false, message: eventsApiErrorMessage(result.error) };
@@ -166,5 +177,6 @@ export function useEvent(eventId: string): UseEvent {
     report,
     cancel,
     toggleSave,
+    saving,
   };
 }

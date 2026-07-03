@@ -82,6 +82,7 @@ export function EventDetailScreen({ route, navigation }: Props) {
     report,
     cancel,
     toggleSave,
+    saving,
   } = useEvent(route.params.id);
   const [menuVisible, setMenuVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
@@ -326,7 +327,8 @@ export function EventDetailScreen({ route, navigation }: Props) {
               accessibilityLabel={
                 isSaved ? strings.events.savedAction : strings.events.saveAction
               }
-              accessibilityState={{ selected: isSaved }}
+              accessibilityState={{ selected: isSaved, disabled: saving }}
+              disabled={saving}
               onPress={onToggleSave}
               style={({ pressed }) => [
                 styles.saveBtn,

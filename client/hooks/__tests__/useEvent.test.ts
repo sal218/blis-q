@@ -313,4 +313,38 @@ describe("useEvent", () => {
     });
     expect(result.current.event?.saved).toBe(true);
   });
+
+  it("ignores a second toggleSave while the first is in flight (no concurrent save+unsave)", async () => {
+    getMock.mockResolvedValue({ ok: true, data: event({ saved: false }) });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // Hold the first save open so it's in flight.
+    let resolveSave!: (v: unknown) => void;
+    saveMock.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveSave = r;
+      }),
+    );
+    act(() => {
+      void result.current.toggleSave(); // optimistic → saved true, in flight
+    });
+    expect(result.current.event?.saved).toBe(true);
+    expect(result.current.saving).toBe(true);
+
+    // A second tap while in flight is IGNORED — no unsave dispatched, no flip.
+    await act(async () => {
+      await result.current.toggleSave();
+    });
+    expect(unsaveMock).not.toHaveBeenCalled();
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(result.current.event?.saved).toBe(true);
+
+    // First resolves → saving clears, saved stays true.
+    await act(async () => {
+      resolveSave({ ok: true, data: { ok: true } });
+    });
+    expect(result.current.saving).toBe(false);
+    expect(result.current.event?.saved).toBe(true);
+  });
 });

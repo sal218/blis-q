@@ -47,6 +47,7 @@ function state(over: Partial<ReturnType<typeof useEvent>> = {}) {
     report: jest.fn().mockResolvedValue({ ok: true }),
     cancel: jest.fn().mockResolvedValue({ ok: true }),
     toggleSave: jest.fn().mockResolvedValue({ ok: true }),
+    saving: false,
     ...over,
   };
 }

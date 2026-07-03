@@ -46,6 +46,7 @@ function state(over: Partial<ReturnType<typeof useEvent>> = {}) {
     setRsvp: jest.fn().mockResolvedValue({ ok: true }),
     report: jest.fn().mockResolvedValue({ ok: true }),
     cancel: jest.fn().mockResolvedValue({ ok: true }),
+    toggleSave: jest.fn().mockResolvedValue({ ok: true }),
     ...over,
   };
 }
@@ -210,5 +211,33 @@ describe("EventDetailScreen", () => {
     fireEvent.press(screen.getByLabelText(strings.events.moreActions));
     expect(screen.queryByText(strings.events.cancelAction)).toBeNull();
     expect(screen.getByText(strings.events.reportEvent)).toBeTruthy();
+  });
+
+  it("open event → two-button bar: the going toggle AND the Save button", () => {
+    eventMock.mockReturnValue(state({ event: event({ saved: false }) }));
+    renderDetail();
+    expect(screen.getByLabelText(strings.events.rsvpGoing)).toBeTruthy();
+    // not saved → the "Zapisz" label + a11y label
+    expect(screen.getByLabelText(strings.events.saveAction)).toBeTruthy();
+  });
+
+  it("shows the saved state and tapping Save calls toggleSave", () => {
+    const toggleSave = jest.fn().mockResolvedValue({ ok: true });
+    eventMock.mockReturnValue(
+      state({ event: event({ saved: true }), toggleSave }),
+    );
+    renderDetail();
+    // saved → the "Zapisano" a11y label
+    const saveBtn = screen.getByLabelText(strings.events.savedAction);
+    expect(saveBtn.props.accessibilityState).toMatchObject({ selected: true });
+    fireEvent.press(saveBtn);
+    expect(toggleSave).toHaveBeenCalled();
+  });
+
+  it("cancelled/past event → no Save button (RSVP bar is the closed pill)", () => {
+    eventMock.mockReturnValue(state({ event: event({ status: "cancelled" }) }));
+    renderDetail();
+    expect(screen.queryByLabelText(strings.events.saveAction)).toBeNull();
+    expect(screen.queryByLabelText(strings.events.savedAction)).toBeNull();
   });
 });

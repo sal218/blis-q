@@ -4,6 +4,8 @@ import {
   setRsvp as apiSetRsvp,
   reportEvent as apiReportEvent,
   cancelEvent as apiCancelEvent,
+  saveEvent as apiSaveEvent,
+  unsaveEvent as apiUnsaveEvent,
 } from "@/lib/api/events";
 import {
   eventsApiErrorMessage,
@@ -31,6 +33,7 @@ export type UseEvent = {
   setRsvp: (status: RsvpStatus) => Promise<RsvpOutcome>;
   report: (reason: string) => Promise<RsvpOutcome>;
   cancel: () => Promise<RsvpOutcome>;
+  toggleSave: () => Promise<RsvpOutcome>;
 };
 
 // goingCount delta from a status change: entering "going" +1, leaving "going" −1,
@@ -131,6 +134,28 @@ export function useEvent(eventId: string): UseEvent {
     return { ok: true };
   }, [eventId]);
 
+  // Toggle the caller's save/bookmark. OPTIMISTIC: bump requestSeq FIRST (so a
+  // slow in-flight load() — which drops its result when the seq no longer matches
+  // — can't clobber the optimistic UI), then flip `saved` immediately. On failure
+  // revert exactly that flip. `prevSaved` is read from the current event closure
+  // (event is a dep), so the decision (save vs unsave) matches what the user saw.
+  const toggleSave = useCallback(async (): Promise<RsvpOutcome> => {
+    if (!event) return { ok: true };
+    const prevSaved = event.saved;
+
+    requestSeq.current++;
+    setEvent((prev) => (prev ? { ...prev, saved: !prevSaved } : prev));
+
+    const result = prevSaved
+      ? await apiUnsaveEvent(eventId)
+      : await apiSaveEvent(eventId);
+    if (!result.ok) {
+      setEvent((prev) => (prev ? { ...prev, saved: prevSaved } : prev));
+      return { ok: false, message: eventsApiErrorMessage(result.error) };
+    }
+    return { ok: true };
+  }, [eventId, event]);
+
   return {
     event,
     status,
@@ -140,5 +165,6 @@ export function useEvent(eventId: string): UseEvent {
     setRsvp,
     report,
     cancel,
+    toggleSave,
   };
 }

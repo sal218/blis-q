@@ -56,6 +56,41 @@ export function listMyEvents(): Promise<EventsResult<EventDTO[]>> {
   );
 }
 
+// GET /api/v1/events/saved — the caller's saved (bookmarked) upcoming events,
+// soonest-first, capped. Caller-scoped; a bare array (no pagination).
+export function listSavedEvents(): Promise<EventsResult<EventDTO[]>> {
+  return request(
+    "GET",
+    `/api/v1/events/saved`,
+    undefined,
+    (res) => res.json() as Promise<EventDTO[]>,
+    toEventsError,
+  );
+}
+
+// POST /api/v1/events/:id/save — bookmark the event (idempotent). 404 = not
+// visible. Returns { ok: true }.
+export function saveEvent(id: string): Promise<EventsResult<{ ok: true }>> {
+  return request(
+    "POST",
+    `/api/v1/events/${id}/save`,
+    undefined,
+    async () => ({ ok: true }) as const,
+    toEventsError,
+  );
+}
+
+// DELETE /api/v1/events/:id/save — remove the bookmark (idempotent → 200).
+export function unsaveEvent(id: string): Promise<EventsResult<{ ok: true }>> {
+  return request(
+    "DELETE",
+    `/api/v1/events/${id}/save`,
+    undefined,
+    async () => ({ ok: true }) as const,
+    toEventsError,
+  );
+}
+
 // GET /api/v1/events/:id — one event (incl. the caller's own rsvp + goingCount).
 // 404 = missing / deleted / creator block-hidden.
 export function getEvent(id: string): Promise<EventsResult<EventDTO>> {

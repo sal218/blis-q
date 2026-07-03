@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
+import { Bookmark } from "@/components/icons/PhosphorIcons";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { ComingSoon } from "@/components/ComingSoon";
 import { EventsList } from "@/screens/events/EventsList";
@@ -36,7 +37,18 @@ export function EventsScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing.lg }]}>
-      <Text style={styles.title}>{strings.events.title}</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>{strings.events.title}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={strings.events.savedTitle}
+          hitSlop={8}
+          onPress={() => navigation.navigate("SavedEvents")}
+          style={({ pressed }) => [styles.savedBtn, pressed && styles.pressed]}
+        >
+          <Bookmark size={24} color={colors.primary} />
+        </Pressable>
+      </View>
       <SegmentedControl
         segments={SEGMENTS}
         selectedIndex={segment}
@@ -71,12 +83,23 @@ function createStyles(colors: ThemeColors) {
       // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
       backgroundColor: "transparent",
     },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: spacing.lg,
+      marginBottom: spacing.md,
+    },
     title: {
       color: colors.text,
       fontSize: 28,
       fontWeight: "800",
-      paddingHorizontal: spacing.lg,
-      marginBottom: spacing.md,
+    },
+    savedBtn: {
+      padding: spacing.xs,
+    },
+    pressed: {
+      opacity: 0.6,
     },
     body: {
       flex: 1,

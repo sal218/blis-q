@@ -142,6 +142,14 @@ export const pl = {
     cancelForbidden: "Nie możesz anulować tego wydarzenia.", // 403 — "You can't cancel this event."
     cancelError: "Nie udało się anulować wydarzenia. Spróbuj ponownie.", // generic cancel failure
 
+    // Save / bookmark (slice C2)
+    saveAction: "Zapisz", // "Save" (not-yet-saved)
+    savedAction: "Zapisano", // "Saved" (already saved)
+    savedTitle: "Zapisane", // saved-events screen title
+    savedEmpty: "Nie masz jeszcze zapisanych wydarzeń.", // "You have no saved events yet."
+    savedLoadError: "Nie udało się załadować zapisanych wydarzeń.", // saved-list load error
+    saveError: "Nie udało się zapisać wydarzenia. Spróbuj ponownie.", // toggle-save failure
+
     // Create event (form on Community detail)
     createCta: "Utwórz wydarzenie", // "Create event" (the entry button)
     createTitle: "Nowe wydarzenie", // "New event" (screen header)

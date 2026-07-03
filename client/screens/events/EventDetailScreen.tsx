@@ -20,6 +20,7 @@ import {
   MapPin,
   CalendarBlank,
   CaretLeft,
+  Bookmark,
 } from "@/components/icons/PhosphorIcons";
 import { useEvent } from "@/hooks/useEvent";
 import {
@@ -35,10 +36,10 @@ import type { EventsStackParamList } from "@/navigation/AppTabs";
 // edge-to-edge banner (the event image, or a brand gradient placeholder) with
 // rounded bottom corners and a stacked date badge at its bottom-left, then the
 // title + icon rows (time / location / full date) + About, and a pinned bottom
-// RSVP bar. The going count is AGGREGATE ONLY — attendee identities are never
-// shown (Article 9). Cancelled/past events show a notice + a closed RSVP bar,
-// and the creator can cancel from the ⋯ sheet (slice B2). Banner UPLOAD (R2),
-// Save, and tags are deferred to later events-detail slices.
+// RSVP bar (the "Pójdę + Zapisz" two-button row when open). The going count is
+// AGGREGATE ONLY — attendee identities are never shown (Article 9). Cancelled/
+// past events show a notice + a closed RSVP bar, and the creator can cancel from
+// the ⋯ sheet (slice B2). Banner UPLOAD (R2) and tags are deferred.
 
 type Props = NativeStackScreenProps<EventsStackParamList, "EventDetail">;
 
@@ -80,6 +81,7 @@ export function EventDetailScreen({ route, navigation }: Props) {
     setRsvp,
     report,
     cancel,
+    toggleSave,
   } = useEvent(route.params.id);
   const [menuVisible, setMenuVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
@@ -127,8 +129,8 @@ export function EventDetailScreen({ route, navigation }: Props) {
   const fullWhen = formatEventDateLong(event.startsAt);
 
   // Binary "going" toggle (the client mockup's "I'm going" model). Tap to mark
-  // going; tap again to clear it (→ not_going). Save joins this bar in the Save
-  // slice (C); Interested isn't in the client design.
+  // going; tap again to clear it (→ not_going). The Save button sits beside it
+  // (slice C2). Interested isn't in the client design.
   const isGoing = event.rsvp?.status === "going";
   // A cancelled or past event is closed to RSVP (the server rejects it too).
   const isCancelled = event.status === "cancelled";
@@ -139,6 +141,15 @@ export function EventDetailScreen({ route, navigation }: Props) {
     const result = await setRsvp(isGoing ? "not_going" : "going");
     if (!result.ok) {
       Alert.alert(strings.events.rsvpError, result.message);
+    }
+  };
+
+  // Optimistic save toggle; a failure has already reverted the flip in the hook.
+  const isSaved = event.saved;
+  const onToggleSave = async () => {
+    const result = await toggleSave();
+    if (!result.ok) {
+      Alert.alert(strings.events.saveError, result.message);
     }
   };
 
@@ -287,27 +298,60 @@ export function EventDetailScreen({ route, navigation }: Props) {
             </Text>
           </View>
         ) : (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={strings.events.rsvpGoing}
-            accessibilityState={{ selected: isGoing }}
-            disabled={submitting}
-            onPress={onToggleGoing}
-            style={({ pressed }) => [
-              styles.goBtn,
-              isGoing && styles.goBtnActive,
-              pressed && styles.goBtnPressed,
-            ]}
-          >
-            <Text
-              style={[styles.goBtnText, isGoing && styles.goBtnTextActive]}
-              numberOfLines={1}
+          <View style={styles.actionRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={strings.events.rsvpGoing}
+              accessibilityState={{ selected: isGoing }}
+              disabled={submitting}
+              onPress={onToggleGoing}
+              style={({ pressed }) => [
+                styles.goBtn,
+                styles.goBtnFlex,
+                isGoing && styles.goBtnActive,
+                pressed && styles.goBtnPressed,
+              ]}
             >
-              {isGoing
-                ? `✓ ${strings.events.rsvpGoing}`
-                : strings.events.rsvpGoing}
-            </Text>
-          </Pressable>
+              <Text
+                style={[styles.goBtnText, isGoing && styles.goBtnTextActive]}
+                numberOfLines={1}
+              >
+                {isGoing
+                  ? `✓ ${strings.events.rsvpGoing}`
+                  : strings.events.rsvpGoing}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                isSaved ? strings.events.savedAction : strings.events.saveAction
+              }
+              accessibilityState={{ selected: isSaved }}
+              onPress={onToggleSave}
+              style={({ pressed }) => [
+                styles.saveBtn,
+                isSaved && styles.saveBtnActive,
+                pressed && styles.goBtnPressed,
+              ]}
+            >
+              <Bookmark
+                size={18}
+                filled={isSaved}
+                color={isSaved ? "#fff" : colors.primary}
+              />
+              <Text
+                style={[
+                  styles.saveBtnText,
+                  isSaved && styles.saveBtnTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {isSaved
+                  ? strings.events.savedAction
+                  : strings.events.saveAction}
+              </Text>
+            </Pressable>
+          </View>
         )}
       </View>
 
@@ -576,6 +620,11 @@ function createStyles(colors: ThemeColors) {
       borderTopColor: colors.border,
       backgroundColor: colors.background,
     },
+    actionRow: {
+      flexDirection: "row",
+      alignItems: "stretch",
+      gap: spacing.sm,
+    },
     goBtn: {
       alignItems: "center",
       paddingVertical: spacing.md,
@@ -584,9 +633,36 @@ function createStyles(colors: ThemeColors) {
       borderColor: colors.primary,
       backgroundColor: colors.surface,
     },
+    goBtnFlex: {
+      flex: 1,
+    },
     goBtnActive: {
       backgroundColor: colors.primary,
       borderColor: colors.primary,
+    },
+    saveBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: spacing.xs,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+      borderRadius: radius.full,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      backgroundColor: colors.surface,
+    },
+    saveBtnActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    saveBtnText: {
+      color: colors.primary,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    saveBtnTextActive: {
+      color: "#fff",
     },
     goBtnPressed: {
       opacity: 0.85,

@@ -155,12 +155,17 @@ async function handleLeave(req: Request, res: Response): Promise<Response> {
   try {
     const id = parseId(req);
     if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
 
-    const result = await storage.leaveCommunity(
-      id,
-      req.user!.id,
-      req.ip ?? null,
-    );
+    // Membership churn shares the join bucket (join AND leave keyed the same).
+    const rate = await checkCommunityJoinRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const result = await storage.leaveCommunity(id, userId, req.ip ?? null);
     if (result === "not_found") {
       return res.status(404).json({ error: "Not found" });
     }

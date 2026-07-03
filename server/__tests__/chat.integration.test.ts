@@ -364,6 +364,18 @@ describe("DELETE /api/v1/messages/:id", () => {
       404,
     ); // already deleted
   });
+
+  it("rate-limited → 429", async () => {
+    const owner = await seedUser();
+    const cid = await seedCommunity(owner);
+    const mid = await seedMessage(cid, owner);
+    contentRl.mockResolvedValueOnce({ allowed: false, retryAfter: 25 });
+    mockUser = { id: owner };
+
+    const res = await request(app).delete(`/api/v1/messages/${mid}`);
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBe(25);
+  });
 });
 
 describe("POST /api/v1/messages/:id/report", () => {

@@ -15,6 +15,7 @@ import {
   checkContentCreateRateLimit,
   checkReportRateLimit,
   checkEventCancelRateLimit,
+  checkRsvpRateLimit,
 } from "../rateLimit";
 import { notifyCommunityMembers } from "../notifications";
 import { encodeEventCursor, decodeEventCursor } from "../cursor";
@@ -199,6 +200,13 @@ async function handleUpdate(req: Request, res: Response): Promise<Response> {
     if (!id) return res.status(400).json({ error: "Invalid input" });
     const userId = req.user!.id;
 
+    const rate = await checkContentCreateRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
     const parsed = updateEventSchema.safeParse(req.body);
     if (!parsed.success) {
       return res
@@ -235,12 +243,16 @@ async function handleDelete(req: Request, res: Response): Promise<Response> {
   try {
     const id = parseId(req);
     if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
 
-    const result = await storage.softDeleteEvent(
-      id,
-      req.user!.id,
-      req.ip ?? null,
-    );
+    const rate = await checkContentCreateRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const result = await storage.softDeleteEvent(id, userId, req.ip ?? null);
     if (result === "not_found") {
       return res.status(404).json({ error: "Not found" });
     }
@@ -296,6 +308,13 @@ async function handleRsvp(req: Request, res: Response): Promise<Response> {
   try {
     const id = parseId(req);
     if (!id) return res.status(400).json({ error: "Invalid input" });
+
+    const rate = await checkRsvpRateLimit(req.user!.id);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
 
     const parsed = rsvpSchema.safeParse(req.body);
     if (!parsed.success) {

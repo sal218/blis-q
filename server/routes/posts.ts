@@ -164,12 +164,16 @@ async function handleDelete(req: Request, res: Response): Promise<Response> {
   try {
     const id = parseId(req);
     if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
 
-    const result = await storage.softDeletePost(
-      id,
-      req.user!.id,
-      req.ip ?? null,
-    );
+    const rate = await checkContentCreateRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const result = await storage.softDeletePost(id, userId, req.ip ?? null);
     if (result === "not_found") {
       return res.status(404).json({ error: "Not found" });
     }

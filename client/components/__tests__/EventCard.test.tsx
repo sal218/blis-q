@@ -22,6 +22,7 @@ const event: EventDTO = {
   past: false,
   canCancel: false,
   saved: false,
+  category: null,
 };
 
 describe("EventCard", () => {

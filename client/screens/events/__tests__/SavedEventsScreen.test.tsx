@@ -26,6 +26,7 @@ const ev = (id: string, title: string): EventDTO => ({
   past: false,
   canCancel: false,
   saved: true,
+  category: null,
 });
 
 function renderScreen() {

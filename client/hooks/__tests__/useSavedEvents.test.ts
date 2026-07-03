@@ -38,6 +38,7 @@ const ev = (id: string): EventDTO => ({
   past: false,
   canCancel: false,
   saved: true,
+  category: null,
 });
 
 beforeEach(() => {

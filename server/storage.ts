@@ -227,6 +227,7 @@ export type EventRow = {
   status: string; // "active" | "cancelled" (DB text; route narrows to the union)
   cancelledAt: Date | null;
   callerSaved: boolean; // whether the caller has saved this event (private)
+  category: string | null; // predefined event-type tag (DB text; route narrows)
 };
 
 // One row of the admin reports queue. `status`/`resourceType` are DB text
@@ -2178,6 +2179,7 @@ export class DatabaseStorage {
       status: events.status,
       cancelledAt: events.cancelledAt,
       callerSaved: this.callerSavedSql(callerId),
+      category: events.category,
     };
   }
 
@@ -2193,6 +2195,7 @@ export class DatabaseStorage {
       location?: string;
       startsAt: string;
       endsAt?: string;
+      category?: string;
     },
     ipAddress?: string | null,
   ): Promise<
@@ -2217,6 +2220,7 @@ export class DatabaseStorage {
           location: input.location ?? null,
           startsAt: new Date(input.startsAt),
           endsAt: input.endsAt ? new Date(input.endsAt) : null,
+          category: input.category ?? null,
           createdById: creatorId,
         })
         .returning({
@@ -2233,6 +2237,7 @@ export class DatabaseStorage {
           deletedAt: events.deletedAt,
           status: events.status,
           cancelledAt: events.cancelledAt,
+          category: events.category,
         });
       await tx.insert(auditLog).values({
         actorId: creatorId,
@@ -2264,6 +2269,7 @@ export class DatabaseStorage {
     callerId: string;
     limit: number;
     cursor?: { startsAt: Date; id: string } | null;
+    category?: string;
     now?: Date;
   }): Promise<{
     rows: EventRow[];
@@ -2277,6 +2283,11 @@ export class DatabaseStorage {
       eq(events.status, "active"), // discovery feed hides cancelled events
       gte(events.startsAt, now),
     ];
+    // Optional predefined-category filter (slice D). Only rows with exactly this
+    // category match — events with category NULL are excluded from a filtered feed.
+    if (input.category) {
+      conditions.push(eq(events.category, input.category));
+    }
     if (blockedIds.length) {
       conditions.push(
         or(
@@ -2461,6 +2472,7 @@ export class DatabaseStorage {
       location?: string;
       startsAt?: string;
       endsAt?: string;
+      category?: string;
     },
     ipAddress?: string | null,
   ): Promise<"updated" | "not_found" | "forbidden" | "invalid_range"> {
@@ -2508,6 +2520,7 @@ export class DatabaseStorage {
     if (input.location !== undefined) patch.location = input.location;
     if (input.startsAt !== undefined) patch.startsAt = new Date(input.startsAt);
     if (input.endsAt !== undefined) patch.endsAt = new Date(input.endsAt);
+    if (input.category !== undefined) patch.category = input.category;
 
     // Guard the write itself (not only the precheck): if a concurrent
     // soft-delete/admin-remove tombstones the row between the precheck and here,

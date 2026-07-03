@@ -1,4 +1,5 @@
 import { storage } from "./storage";
+import { safeErrorCode } from "./errorCode";
 
 export type NotificationType =
   | "new_community_post"
@@ -196,11 +197,9 @@ export async function notifyUser(
       );
     }
   } catch (err) {
-    console.error(
-      "[Notifications] Unhandled error sending to user",
-      userId,
-      err,
-    );
+    console.error("[Notifications] Unhandled error sending to user", userId, {
+      code: safeErrorCode(err),
+    });
   }
 }
 
@@ -223,7 +222,7 @@ export async function notifyCommunityMembers(
     console.error(
       "[Notifications] Error notifying community members for community",
       communityId,
-      err,
+      { code: safeErrorCode(err) },
     );
   }
 }

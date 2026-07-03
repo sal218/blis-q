@@ -281,6 +281,16 @@ describe("GET /api/v1/events (global upcoming feed)", () => {
     expect(bad.status).toBe(400);
   });
 
+  it("malformed query param → 400, not 500 (IV-1)", async () => {
+    const owner = await seedUser();
+    mockUser = { id: owner };
+    // limit fails z.coerce.number().int() → the query safeParse returns 400
+    // (previously the throwing .parse was caught locally and surfaced as 500).
+    const bad = await request(app).get(`/api/v1/events?limit=abc`);
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toBe("Invalid input");
+  });
+
   it("excludes past events; orders soonest-first", async () => {
     const owner = await seedUser();
     const cid = await seedCommunity(owner);

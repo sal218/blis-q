@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { jwtVerify, createRemoteJWKSet } from "jose";
 import { storage } from "./storage";
 import { redis } from "./redis";
+import { safeErrorCode } from "./errorCode";
 
 // Password reset token utilities — still used for the invite flow.
 import * as crypto from "crypto";
@@ -227,7 +228,7 @@ export async function isAuthenticated(
     // Fail closed: an unexpected error during verification (DB/cache/JWKS
     // outage) must never grant access. Express 4 does not route rejected
     // promises from async middleware to the error handler, so catch here.
-    console.error("[auth] isAuthenticated error", err);
+    console.error("[auth] isAuthenticated error", { code: safeErrorCode(err) });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }
@@ -257,7 +258,9 @@ export async function isAuthenticatedAllowBanned(
     req.user = user;
     next();
   } catch (err) {
-    console.error("[auth] isAuthenticatedAllowBanned error", err);
+    console.error("[auth] isAuthenticatedAllowBanned error", {
+      code: safeErrorCode(err),
+    });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }
@@ -296,7 +299,7 @@ export async function optionalAuth(
       }
     } catch (err) {
       // Optional auth — on any error just proceed unauthenticated.
-      console.error("[auth] optionalAuth error", err);
+      console.error("[auth] optionalAuth error", { code: safeErrorCode(err) });
     }
   }
 

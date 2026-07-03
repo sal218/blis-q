@@ -195,6 +195,15 @@ describe("GET /api/v1/communities", () => {
     expect(sIds).toContain(idA);
     expect(sIds).not.toContain(idB);
   });
+
+  it("malformed query param → 400, not 500 (IV-1)", async () => {
+    const id = await seedUser();
+    mockUser = { id };
+    // page fails z.coerce.number().min(1) → the query safeParse returns 400.
+    const bad = await request(app).get("/api/v1/communities?page=0");
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toBe("Invalid input");
+  });
 });
 
 describe("GET /api/v1/communities/:id", () => {
@@ -256,6 +265,25 @@ describe("POST /api/v1/communities/:id/join", () => {
     const res = await request(app).post(`/api/v1/communities/${cid}/join`);
     expect(res.status).toBe(429);
   });
+
+  it("a duplicate join writes NO second audit row (TXN-1 atomicity)", async () => {
+    const owner = await seedUser();
+    const joiner = await seedUser();
+    const cid = await seedCommunity(owner, "Idempotent");
+    mockUser = { id: joiner };
+
+    await request(app).post(`/api/v1/communities/${cid}/join`); // 200
+    await request(app).post(`/api/v1/communities/${cid}/join`); // 409 (already)
+
+    const joins = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.actorId, joiner));
+    // Exactly one member_joined — the no-op second join wrote no phantom audit.
+    expect(
+      joins.filter((a) => a.action === "community.member_joined"),
+    ).toHaveLength(1);
+  });
 });
 
 describe("DELETE /api/v1/communities/:id/leave", () => {
@@ -281,6 +309,24 @@ describe("DELETE /api/v1/communities/:id/leave", () => {
       .from(auditLog)
       .where(eq(auditLog.actorId, joiner));
     expect(audits.some((a) => a.action === "community.member_left")).toBe(true);
+  });
+
+  it("leaving when not a member writes NO audit row (TXN-1 atomicity)", async () => {
+    const owner = await seedUser();
+    const stranger = await seedUser(); // never joined
+    const cid = await seedCommunity(owner, "Nie Członek");
+    mockUser = { id: stranger };
+
+    const res = await request(app).delete(`/api/v1/communities/${cid}/leave`);
+    expect(res.status).toBe(200); // idempotent (not_member)
+
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.actorId, stranger));
+    expect(audits.some((a) => a.action === "community.member_left")).toBe(
+      false,
+    );
   });
 
   it("sole admin cannot leave → 409 (community keeps ≥1 admin)", async () => {

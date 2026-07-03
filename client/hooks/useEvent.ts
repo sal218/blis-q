@@ -79,29 +79,40 @@ export function useEvent(eventId: string): UseEvent {
     load();
   }, [load]);
 
+  // OPTIMISTIC: flip the caller's rsvp + goingCount IMMEDIATELY (so the UI reacts
+  // instantly, not after the network round-trip), bumping requestSeq first so a
+  // slow in-flight load can't clobber it; revert exactly this change on failure.
+  // `submitting` serializes taps. prev values are captured from the event closure.
   const setRsvp = useCallback(
     async (next: RsvpStatus): Promise<RsvpOutcome> => {
+      if (!event || submitting) return { ok: true };
+      const prevRsvp = event.rsvp;
+      const prevGoingCount = event.goingCount;
+      const delta = goingDelta(prevRsvp?.status ?? null, next);
+
       setSubmitting(true);
+      requestSeq.current++;
+      setEvent((prev) =>
+        prev
+          ? {
+              ...prev,
+              rsvp: { status: next },
+              goingCount: Math.max(0, prev.goingCount + delta),
+            }
+          : prev,
+      );
+
       const result = await apiSetRsvp(eventId, next);
       setSubmitting(false);
       if (!result.ok) {
+        setEvent((prev) =>
+          prev ? { ...prev, rsvp: prevRsvp, goingCount: prevGoingCount } : prev,
+        );
         return { ok: false, message: eventsApiErrorMessage(result.error) };
       }
-      // Invalidate any in-flight load so a slow getEvent can't clobber this, then
-      // patch in place (functional updater guards against a stale snapshot).
-      requestSeq.current++;
-      setEvent((prev) => {
-        if (!prev) return prev;
-        const delta = goingDelta(prev.rsvp?.status ?? null, result.data.status);
-        return {
-          ...prev,
-          rsvp: { status: result.data.status },
-          goingCount: Math.max(0, prev.goingCount + delta),
-        };
-      });
       return { ok: true };
     },
-    [eventId],
+    [eventId, event, submitting],
   );
 
   // Submit a moderation report for this event (no local state change). 404 =

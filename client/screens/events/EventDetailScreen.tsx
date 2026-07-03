@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
+  Animated,
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,6 +22,7 @@ import {
   CalendarBlank,
   CaretLeft,
   Bookmark,
+  Check,
 } from "@/components/icons/PhosphorIcons";
 import { useEvent } from "@/hooks/useEvent";
 import {
@@ -86,6 +88,24 @@ export function EventDetailScreen({ route, navigation }: Props) {
   } = useEvent(route.params.id);
   const [menuVisible, setMenuVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
+  // ⋯ action sheet slide-up: 0 = hidden (translated below), 1 = shown.
+  const sheetAnim = useRef(new Animated.Value(0)).current;
+
+  const openMenu = () => {
+    setMenuVisible(true);
+    Animated.timing(sheetAnim, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+  };
+  const closeMenu = () => {
+    Animated.timing(sheetAnim, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setMenuVisible(false));
+  };
 
   // The native header is hidden (full-bleed banner), so the screen owns its back
   // button — a floating circle that reads over the banner or a plain screen.
@@ -157,7 +177,7 @@ export function EventDetailScreen({ route, navigation }: Props) {
   // Creator cancels the event — confirm first (mirrors the post-delete flow),
   // then call cancel(); a failure surfaces the mapped message.
   const onCancelEvent = () => {
-    setMenuVisible(false);
+    closeMenu();
     Alert.alert(
       strings.events.cancelConfirmTitle,
       strings.events.cancelConfirmBody,
@@ -191,7 +211,7 @@ export function EventDetailScreen({ route, navigation }: Props) {
       accessibilityRole="button"
       accessibilityLabel={strings.events.moreActions}
       hitSlop={8}
-      onPress={() => setMenuVisible(true)}
+      onPress={openMenu}
       style={[styles.moreBtn, { top: insets.top + spacing.sm }]}
     >
       <Text style={styles.moreGlyph}>⋯</Text>
@@ -313,13 +333,12 @@ export function EventDetailScreen({ route, navigation }: Props) {
                 pressed && styles.goBtnPressed,
               ]}
             >
+              {isGoing ? <Check size={18} color="#fff" /> : null}
               <Text
                 style={[styles.goBtnText, isGoing && styles.goBtnTextActive]}
                 numberOfLines={1}
               >
-                {isGoing
-                  ? `✓ ${strings.events.rsvpGoing}`
-                  : strings.events.rsvpGoing}
+                {strings.events.rsvpGoing}
               </Text>
             </Pressable>
             <Pressable
@@ -358,18 +377,32 @@ export function EventDetailScreen({ route, navigation }: Props) {
       </View>
 
       {/* ⋯ action sheet — an absolute overlay (NOT a Modal) so opening the
-          report Modal right after doesn't hit the iOS modal-over-modal bug. */}
+          report Modal right after doesn't hit the iOS modal-over-modal bug. It
+          slides up (translateY) with a fading backdrop instead of appearing. */}
       {menuVisible ? (
-        <Pressable
-          style={styles.sheetBackdrop}
-          onPress={() => setMenuVisible(false)}
-        >
-          <Pressable
+        <View style={styles.sheetOverlay}>
+          <Animated.View style={[styles.sheetBackdrop, { opacity: sheetAnim }]}>
+            <Pressable
+              accessibilityLabel={strings.common.cancel}
+              style={StyleSheet.absoluteFill}
+              onPress={closeMenu}
+            />
+          </Animated.View>
+          <Animated.View
             style={[
               styles.sheet,
-              { paddingBottom: insets.bottom + spacing.md },
+              {
+                paddingBottom: insets.bottom + spacing.md,
+                transform: [
+                  {
+                    translateY: sheetAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [400, 0],
+                    }),
+                  },
+                ],
+              },
             ]}
-            onPress={() => {}}
           >
             {event.canCancel ? (
               <Pressable
@@ -387,7 +420,7 @@ export function EventDetailScreen({ route, navigation }: Props) {
               accessibilityRole="button"
               accessibilityLabel={strings.events.reportEvent}
               onPress={() => {
-                setMenuVisible(false);
+                closeMenu();
                 setReportVisible(true);
               }}
               style={styles.sheetRow}
@@ -399,15 +432,15 @@ export function EventDetailScreen({ route, navigation }: Props) {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={strings.common.cancel}
-              onPress={() => setMenuVisible(false)}
+              onPress={closeMenu}
               style={styles.sheetRow}
             >
               <Text style={styles.sheetCancelText}>
                 {strings.common.cancel}
               </Text>
             </Pressable>
-          </Pressable>
-        </Pressable>
+          </Animated.View>
+        </View>
       ) : null}
 
       <ReportPostModal
@@ -460,11 +493,14 @@ function createStyles(colors: ThemeColors) {
       fontWeight: "800",
       lineHeight: 22,
     },
-    sheetBackdrop: {
+    sheetOverlay: {
       ...StyleSheet.absoluteFillObject,
       zIndex: 20,
-      backgroundColor: "rgba(0,0,0,0.45)",
       justifyContent: "flex-end",
+    },
+    sheetBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(0,0,0,0.45)",
     },
     sheet: {
       backgroundColor: colors.background,
@@ -628,9 +664,12 @@ function createStyles(colors: ThemeColors) {
       gap: spacing.sm,
     },
     goBtn: {
+      flexDirection: "row",
       alignItems: "center",
+      justifyContent: "center",
+      gap: spacing.xs,
       paddingVertical: spacing.md,
-      borderRadius: radius.full,
+      borderRadius: radius.lg, // squircle, not a pill (matches the mockup)
       borderWidth: 1.5,
       borderColor: colors.primary,
       backgroundColor: colors.surface,
@@ -643,13 +682,15 @@ function createStyles(colors: ThemeColors) {
       borderColor: colors.primary,
     },
     saveBtn: {
+      // Fixed width so the "Zapisz" → "Zapisano" label change never resizes this
+      // button (and therefore never reflows the flex "Pójdę" button beside it).
+      width: 132,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: spacing.xs,
       paddingVertical: spacing.md,
-      paddingHorizontal: spacing.lg,
-      borderRadius: radius.full,
+      borderRadius: radius.lg, // squircle, matches the going button
       borderWidth: 1.5,
       borderColor: colors.primary,
       backgroundColor: colors.surface,
@@ -680,7 +721,7 @@ function createStyles(colors: ThemeColors) {
     closedBtn: {
       alignItems: "center",
       paddingVertical: spacing.md,
-      borderRadius: radius.full,
+      borderRadius: radius.lg,
       borderWidth: 1.5,
       borderColor: colors.border,
       backgroundColor: colors.surface,

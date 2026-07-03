@@ -129,7 +129,36 @@ describe("useEvent", () => {
     expect(result.current.event?.goingCount).toBe(4);
   });
 
-  it("RSVP failure → message, state unchanged", async () => {
+  it("RSVP is optimistic — flips going + goingCount BEFORE the API resolves", async () => {
+    getMock.mockResolvedValue({
+      ok: true,
+      data: event({ goingCount: 5, rsvp: null }),
+    });
+    const { result } = renderHook(() => useEvent("e1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // Hold the RSVP request open; the UI must update instantly regardless.
+    let resolveRsvp!: (v: unknown) => void;
+    rsvpMock.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveRsvp = r;
+      }),
+    );
+    act(() => {
+      void result.current.setRsvp("going");
+    });
+    // Instant: rsvp + goingCount already reflect "going" before the network resolves.
+    expect(result.current.event?.rsvp).toEqual({ status: "going" });
+    expect(result.current.event?.goingCount).toBe(6);
+
+    await act(async () => {
+      resolveRsvp({ ok: true, data: { status: "going" } });
+    });
+    expect(result.current.event?.rsvp).toEqual({ status: "going" });
+    expect(result.current.event?.goingCount).toBe(6);
+  });
+
+  it("RSVP failure → message, state reverted (unchanged)", async () => {
     getMock.mockResolvedValue({
       ok: true,
       data: event({ goingCount: 5, rsvp: null }),

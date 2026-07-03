@@ -87,6 +87,15 @@ export function CaretLeft({ size = 24, color = "#000" }: IconProps) {
   );
 }
 
+// check (regular weight) — used on the "going" RSVP button.
+export function Check({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z" />
+    </Svg>
+  );
+}
+
 // bookmark-simple. `filled` uses the solid (fill-weight) glyph for the "saved"
 // state; otherwise the regular outline. Both tinted with `color`.
 export function Bookmark({

@@ -21,6 +21,7 @@ const event: EventDTO = {
   cancelledAt: null,
   past: false,
   canCancel: false,
+  saved: false,
 };
 
 describe("EventCard", () => {

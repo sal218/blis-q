@@ -37,6 +37,7 @@ const ev = (id: string): EventDTO => ({
   cancelledAt: null,
   past: false,
   canCancel: false,
+  saved: false,
 });
 
 const page = (events: EventDTO[], nextCursor: string | null) => ({

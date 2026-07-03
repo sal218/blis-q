@@ -171,6 +171,30 @@ export const eventRsvps = pgTable(
   }),
 );
 
+// ── event_saves ───────────────────────────────────────────────────────────────
+// A PRIVATE per-user bookmark list (the "Save" action). No status — a row simply
+// means "this user saved this event". Never aggregated or exposed to others (like
+// RSVPs, no "who saved" surface — Article 9). Both FKs cascade: erasure / event
+// deletion drops the row (§5.2).
+export const eventSaves = pgTable(
+  "event_saves",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uniqueSave: unique().on(t.eventId, t.userId),
+  }),
+);
+
 // ── posts ─────────────────────────────────────────────────────────────────────
 // authorId SET NULL: on erasure the post is retained for community/thread
 // integrity, content is replaced with "[deleted]", and the author is anonymised.
@@ -472,6 +496,7 @@ export type CommunityMembership = typeof communityMemberships.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
 export type EventRsvp = typeof eventRsvps.$inferSelect;
+export type EventSave = typeof eventSaves.$inferSelect;
 export type Post = typeof posts.$inferSelect;
 export type NewPost = typeof posts.$inferInsert;
 export type Message = typeof messages.$inferSelect;

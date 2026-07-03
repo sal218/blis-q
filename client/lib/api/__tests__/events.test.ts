@@ -40,6 +40,7 @@ const EVENT = {
   cancelledAt: null,
   past: false,
   canCancel: false,
+  saved: false,
 };
 const PAGE = { data: [EVENT], nextCursor: "cursor-2" };
 

@@ -58,6 +58,7 @@ function event(id: string, title: string): EventDTO {
     cancelledAt: null,
     past: false,
     canCancel: false,
+    saved: false,
   };
 }
 

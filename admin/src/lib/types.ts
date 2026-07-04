@@ -64,6 +64,17 @@ export type SafePlaceDTO = {
   longitude: number | null;
 };
 
+// One OSM search result from POST /api/admin/safe-places/osm-search (SP-2). The
+// admin curates these (tick + re-tag) before bulk-adding them as safe places.
+export type OsmCandidate = {
+  osmId: string;
+  name: string;
+  category: SafePlaceCategory;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+};
+
 export type ReportStatus = "pending" | "reviewing" | "resolved" | "dismissed";
 
 export type ReportDTO = {

@@ -3028,6 +3028,76 @@ export class DatabaseStorage {
     });
   }
 
+  // Bulk-create curated safe places (slice SP-2, the OSM import path). Two dedupe
+  // layers: (1) app-level — drop within-request duplicate osmIds (keep first) so
+  // one INSERT never carries the same osm_id twice; (2) DB-level — the partial
+  // unique index on osm_id + onConflictDoNothing skips venues already imported.
+  // Rows with a null osmId (manual/unmatched) always insert. Insert + per-inserted-
+  // row safe_place.created audit (IDs-only) commit together (§7). Returns the
+  // created count + skipped (requested − created; = within-request + existing dups).
+  async bulkCreateSafePlaces(
+    rows: {
+      name: string;
+      category: string;
+      description?: string;
+      address?: string;
+      city?: string;
+      latitude?: number;
+      longitude?: number;
+      osmId?: string;
+    }[],
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<{ created: number; skipped: number }> {
+    const requested = rows.length;
+    const seen = new Set<string>();
+    const deduped = rows.filter((r) => {
+      if (!r.osmId) return true;
+      if (seen.has(r.osmId)) return false;
+      seen.add(r.osmId);
+      return true;
+    });
+    if (deduped.length === 0) return { created: 0, skipped: requested };
+
+    const inserted = await db.transaction(async (tx) => {
+      const insertedRows = await tx
+        .insert(safePlaces)
+        .values(
+          deduped.map((r) => ({
+            name: r.name,
+            category: r.category,
+            description: r.description ?? null,
+            address: r.address ?? null,
+            city: r.city ?? null,
+            latitude: r.latitude ?? null,
+            longitude: r.longitude ?? null,
+            osmId: r.osmId ?? null,
+            createdById: actorId,
+          })),
+        )
+        // Match the PARTIAL unique index predicate; a null osmId never conflicts.
+        .onConflictDoNothing({
+          target: safePlaces.osmId,
+          where: sql`${safePlaces.osmId} is not null`,
+        })
+        .returning({ id: safePlaces.id });
+
+      if (insertedRows.length) {
+        await tx.insert(auditLog).values(
+          insertedRows.map((row) => ({
+            actorId,
+            action: "safe_place.created",
+            resourceType: "safe_place" as const,
+            resourceId: row.id,
+            ipAddress: ipAddress ?? null,
+          })),
+        );
+      }
+      return insertedRows;
+    });
+    return { created: inserted.length, skipped: requested - inserted.length };
+  }
+
   // ── Community membership ────────────────────────────────────────────────────
 
   async getCommunityMembers(

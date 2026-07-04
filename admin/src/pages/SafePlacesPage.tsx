@@ -9,6 +9,7 @@ import { adminFetch } from "../lib/api";
 import {
   type SafePlaceDTO,
   type SafePlaceCategory,
+  type OsmCandidate,
   type OffsetPage,
   SAFE_PLACE_CATEGORIES,
   SAFE_PLACE_CATEGORY_META,
@@ -59,6 +60,20 @@ export function SafePlacesPage() {
   const [longitude, setLongitude] = useState("");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Import-from-OSM panel state.
+  const [importCity, setImportCity] = useState("");
+  const [importCategory, setImportCategory] =
+    useState<SafePlaceCategory>("cafe");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  // Candidates carry a local `selected` + an editable `category` (defaults to
+  // the searched one) the admin can re-tag before importing.
+  const [candidates, setCandidates] = useState<
+    (OsmCandidate & { selected: boolean })[]
+  >([]);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   const load = useCallback(
     async (
@@ -189,6 +204,75 @@ export function SafePlacesPage() {
       await load(pageNum, filterCategory, filterCity);
     } catch {
       setError("Nie udało się usunąć miejsca.");
+    }
+  }
+
+  async function onSearchOsm(e: FormEvent) {
+    e.preventDefault();
+    if (!importCity.trim()) {
+      setSearchError("Podaj miasto.");
+      return;
+    }
+    setSearching(true);
+    setSearchError(null);
+    setImportMsg(null);
+    try {
+      const data = await adminFetch<{ candidates: OsmCandidate[] }>(
+        "POST",
+        "/api/admin/safe-places/osm-search",
+        { city: importCity.trim(), category: importCategory },
+      );
+      setCandidates(data.candidates.map((c) => ({ ...c, selected: true })));
+      if (data.candidates.length === 0) {
+        setSearchError("Brak wyników w OpenStreetMap dla tych kryteriów.");
+      }
+    } catch {
+      setSearchError(
+        "Nie udało się pobrać danych z OpenStreetMap. Spróbuj ponownie.",
+      );
+      setCandidates([]);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  const selectedCount = candidates.filter((c) => c.selected).length;
+  const allSelected =
+    candidates.length > 0 && selectedCount === candidates.length;
+
+  function toggleAll() {
+    const next = !allSelected;
+    setCandidates((cs) => cs.map((c) => ({ ...c, selected: next })));
+  }
+
+  async function onImportSelected() {
+    const chosen = candidates.filter((c) => c.selected);
+    if (chosen.length === 0) return;
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const result = await adminFetch<{ created: number; skipped: number }>(
+        "POST",
+        "/api/admin/safe-places/bulk",
+        chosen.map((c) => ({
+          name: c.name,
+          category: c.category,
+          city: importCity.trim() || undefined,
+          address: c.address ?? undefined,
+          latitude: c.latitude,
+          longitude: c.longitude,
+          osmId: c.osmId,
+        })),
+      );
+      setImportMsg(
+        `Dodano ${result.created}, pominięto ${result.skipped} (duplikaty).`,
+      );
+      setCandidates([]);
+      await load(1, filterCategory, filterCity);
+    } catch {
+      setImportMsg("Nie udało się zaimportować. Spróbuj ponownie.");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -334,6 +418,112 @@ export function SafePlacesPage() {
           )}
         </div>
       </form>
+
+      {/* Import from OpenStreetMap (SP-2) — search a city + category, tick the
+          venues, add them in bulk. Dedupe is server-side (osm_id). */}
+      <div style={styles.card}>
+        <h2 style={styles.h2}>Importuj z OpenStreetMap</h2>
+        <form style={styles.importRow} onSubmit={onSearchOsm}>
+          <input
+            style={styles.input}
+            placeholder="Miasto (np. Warszawa)"
+            value={importCity}
+            onChange={(e) => setImportCity(e.target.value)}
+          />
+          <select
+            style={styles.select}
+            value={importCategory}
+            onChange={(e) =>
+              setImportCategory(e.target.value as SafePlaceCategory)
+            }
+          >
+            {CATEGORY_KEYS.map((c) => (
+              <option key={c} value={c}>
+                {SAFE_PLACE_CATEGORY_META[c].label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            style={styles.primaryButton}
+            disabled={searching}
+          >
+            {searching ? "Szukam…" : "Szukaj w OSM"}
+          </button>
+        </form>
+        {searchError && <p style={styles.error}>{searchError}</p>}
+        {importMsg && <p style={styles.muted}>{importMsg}</p>}
+
+        {candidates.length > 0 && (
+          <>
+            <div style={styles.importHeader}>
+              <label style={styles.selectAll}>
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                />
+                Zaznacz wszystkie ({candidates.length})
+              </label>
+            </div>
+            <div style={styles.candidateList}>
+              {candidates.map((c, i) => (
+                <div key={c.osmId} style={styles.candidateRow}>
+                  <input
+                    type="checkbox"
+                    checked={c.selected}
+                    onChange={() =>
+                      setCandidates((cs) =>
+                        cs.map((x, j) =>
+                          j === i ? { ...x, selected: !x.selected } : x,
+                        ),
+                      )
+                    }
+                  />
+                  <div style={styles.candidateInfo}>
+                    <span style={styles.candidateName}>{c.name}</span>
+                    {c.address && <span style={styles.muted}>{c.address}</span>}
+                  </div>
+                  <select
+                    style={styles.candidateCategory}
+                    value={c.category}
+                    onChange={(e) =>
+                      setCandidates((cs) =>
+                        cs.map((x, j) =>
+                          j === i
+                            ? {
+                                ...x,
+                                category: e.target.value as SafePlaceCategory,
+                              }
+                            : x,
+                        ),
+                      )
+                    }
+                  >
+                    {CATEGORY_KEYS.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {SAFE_PLACE_CATEGORY_META[cat].label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div style={styles.formActions}>
+              <button
+                type="button"
+                style={styles.primaryButton}
+                disabled={importing || selectedCount === 0}
+                onClick={onImportSelected}
+              >
+                {importing
+                  ? "Dodawanie…"
+                  : `Dodaj zaznaczone (${selectedCount})`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       <div style={styles.filterRow}>
         <select
@@ -506,4 +696,51 @@ const styles: Record<string, CSSProperties> = {
   pager: { display: "flex", gap: 12, alignItems: "center", marginTop: 16 },
   muted: { color: "#6B7280", fontSize: 14 },
   error: { color: "#DC2626", fontSize: 14, margin: "6px 0 0" },
+  importRow: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
+  importHeader: { marginTop: 12, marginBottom: 4 },
+  selectAll: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#374151",
+    cursor: "pointer",
+  },
+  candidateList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    maxHeight: 320,
+    overflowY: "auto",
+    border: "1px solid #E5E7EB",
+    borderRadius: 8,
+    padding: 8,
+  },
+  candidateRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "6px 4px",
+  },
+  candidateInfo: {
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+    minWidth: 0,
+  },
+  candidateName: { fontSize: 14, fontWeight: 600, color: "#111827" },
+  candidateCategory: {
+    padding: "6px 8px",
+    borderRadius: 6,
+    border: "1px solid #D1D5DB",
+    fontSize: 13,
+    fontFamily: "inherit",
+    background: "#FFFFFF",
+  },
 };

@@ -2873,6 +2873,7 @@ export class DatabaseStorage {
     pageSize: number;
     category?: string;
     city?: string;
+    search?: string;
     near?: { lat: number; lng: number };
   }): Promise<{ rows: SafePlaceRow[]; total: number }> {
     const conditions: (SQL | undefined)[] = [isNull(safePlaces.deletedAt)];
@@ -2880,6 +2881,19 @@ export class DatabaseStorage {
       conditions.push(eq(safePlaces.category, input.category));
     if (input.city)
       conditions.push(ilike(safePlaces.city, likeEscape(input.city)));
+    // Free-text search: case-insensitive substring over name + city + address
+    // (metachars escaped). Lets the mobile box match a partial place name, not
+    // just an exact city.
+    if (input.search) {
+      const term = `%${likeEscape(input.search)}%`;
+      conditions.push(
+        or(
+          ilike(safePlaces.name, term),
+          ilike(safePlaces.city, term),
+          ilike(safePlaces.address, term),
+        ),
+      );
+    }
     const where = and(...conditions);
 
     const orderBy: SQL[] = [];

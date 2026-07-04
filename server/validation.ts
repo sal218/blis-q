@@ -506,6 +506,10 @@ export const safePlacesListQuerySchema = z.object({
     .default(DEFAULT_OFFSET_PAGE_SIZE),
   category: safePlaceCategorySchema.optional(),
   city: z.string().trim().min(1).max(MAX_SAFE_PLACE_CITY_LENGTH).optional(),
+  // Free-text search: case-insensitive substring over name + city + address
+  // (the mobile type-ahead box). LIKE metachars are escaped in storage. Blank
+  // is dropped to `undefined` (min 1 after trim → treated as "no filter").
+  search: z.string().trim().min(1).max(MAX_SAFE_PLACE_NAME_LENGTH).optional(),
   // "lat,lng" → a validated { lat, lng } tuple (or a 400).
   near: z
     .string()

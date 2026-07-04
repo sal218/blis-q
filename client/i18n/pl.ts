@@ -198,6 +198,37 @@ export const pl = {
     createCommunityGone: "Tej społeczności już nie ma.", // "This community no longer exists."
   },
 
+  // Safe Places — the mobile list (epic P-40 slice SP-3).
+  safePlaces: {
+    searchPlaceholder: "Szukaj miejsca lub miasta", // "Search a place or city"
+    clear: "Wyczyść wyszukiwanie", // "Clear search" (a11y label for the ✕)
+    filterAll: "Wszystkie", // "All" — the category filter chip that clears
+    empty: "Nie ma jeszcze żadnych bezpiecznych miejsc.", // "No safe places yet."
+    emptyCategory: "Brak miejsc w tej kategorii.", // "No places in this category."
+    emptySearch: "Brak wyników dla tego wyszukiwania.", // "No results for this search."
+    loadError: "Nie udało się załadować miejsc.", // "Couldn't load places."
+    retry: "Spróbuj ponownie", // "Try again"
+    // Curation framing (COMPLIANCE §5.8 / P-40): present as team-curated
+    // LGBT-friendly places, NOT an absolute safety guarantee.
+    disclaimer:
+      "Miejsca przyjazne osobom LGBT+ wybrane przez nasz zespół — to nie jest gwarancja bezpieczeństwa.", // "LGBT-friendly places curated by our team — not a guarantee of safety."
+    // ODbL licence requirement — must render the exact "© OpenStreetMap
+    // contributors" string wherever OSM-sourced data is shown.
+    attribution: "Dane miejsc częściowo z © OpenStreetMap contributors",
+    // Category labels — keys MUST match SAFE_PLACE_CATEGORIES (shared/types.ts).
+    categories: {
+      cafe: "Kawiarnia", // "Café"
+      club: "Klub", // "Club"
+      bar: "Bar", // "Bar"
+      ngo: "Organizacja", // "NGO / organisation"
+      health: "Zdrowie", // "Health"
+      community_center: "Centrum społeczności", // "Community centre"
+      education: "Edukacja", // "Education"
+      service: "Usługa", // "Service"
+      other: "Inne", // "Other"
+    },
+  },
+
   profile: {
     title: "Profil",
     appearance: "Wygląd",

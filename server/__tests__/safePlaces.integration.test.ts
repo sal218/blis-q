@@ -96,6 +96,7 @@ type SeedInput = {
   name?: string;
   category?: string;
   city?: string;
+  address?: string;
   latitude?: number;
   longitude?: number;
 };
@@ -109,6 +110,7 @@ async function seedPlace(
       name: over.name ?? "Tęczowa Kawiarnia",
       category: over.category ?? "cafe",
       city: over.city,
+      address: over.address,
       latitude: over.latitude,
       longitude: over.longitude,
     },
@@ -188,6 +190,62 @@ describe("GET /api/v1/safe-places", () => {
     const cityIds = byCity.body.data.map((p: { id: string }) => p.id);
     expect(cityIds).toContain(club);
     expect(cityIds).not.toContain(cafe);
+  });
+
+  it("search → case-insensitive substring over name, city and address", async () => {
+    const admin = await seedUser();
+    const byName = await seedPlace(admin, {
+      name: "Tęczowy Zakątek",
+      city: "Warszawa",
+    });
+    const byCity = await seedPlace(admin, {
+      name: "Kawiarnia Pod Różą",
+      city: "Wrocław",
+    });
+    const byAddr = await seedPlace(admin, {
+      name: "Klub Nocny",
+      city: "Kraków",
+      address: "ul. Tęczowa 5",
+    });
+    const noMatch = await seedPlace(admin, {
+      name: "Biblioteka",
+      city: "Łódź",
+    });
+    mockUser = { id: admin, isAdmin: false };
+
+    // Partial, lower-case term matches the NAME ("tęcz" ⊂ "Tęczowy") and the
+    // ADDRESS ("ul. Tęczowa 5") — but not the unrelated rows.
+    const res = await request(app).get(
+      "/api/v1/safe-places?search=t%C4%99cz&pageSize=50", // "tęcz"
+    );
+    expect(res.status).toBe(200);
+    const ids = res.body.data.map((p: { id: string }) => p.id);
+    expect(ids).toEqual(expect.arrayContaining([byName, byAddr]));
+    expect(ids).not.toContain(byCity);
+    expect(ids).not.toContain(noMatch);
+
+    // A term that only matches a CITY still hits.
+    const byCityRes = await request(app).get(
+      "/api/v1/safe-places?search=wroc&pageSize=50",
+    );
+    const cityIds = byCityRes.body.data.map((p: { id: string }) => p.id);
+    expect(cityIds).toContain(byCity);
+    expect(cityIds).not.toContain(byName);
+  });
+
+  it("search → LIKE metachars are treated literally (no wildcard injection)", async () => {
+    const admin = await seedUser();
+    const literal = await seedPlace(admin, { name: "50% Klub", city: "Sopot" });
+    const other = await seedPlace(admin, { name: "Setka Bar", city: "Sopot" });
+    mockUser = { id: admin, isAdmin: false };
+
+    // "%" must match the literal char, not act as a wildcard that returns all.
+    const res = await request(app).get(
+      "/api/v1/safe-places?search=%25&pageSize=50", // "%"
+    );
+    const ids = res.body.data.map((p: { id: string }) => p.id);
+    expect(ids).toContain(literal);
+    expect(ids).not.toContain(other);
   });
 
   it("near → orders nearest-first, null-coordinate rows last", async () => {

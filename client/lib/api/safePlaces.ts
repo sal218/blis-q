@@ -42,3 +42,43 @@ export function listSafePlaces(params: {
     commonApiError,
   );
 }
+
+// GET /api/v1/safe-places/saved — the caller's saved (bookmarked) places, capped.
+export function listSavedSafePlaces(): Promise<
+  SafePlacesResult<SafePlaceDTO[]>
+> {
+  return request(
+    "GET",
+    `/api/v1/safe-places/saved`,
+    undefined,
+    (res) => res.json() as Promise<SafePlaceDTO[]>,
+    commonApiError,
+  );
+}
+
+// POST /api/v1/safe-places/:id/save — bookmark a place (idempotent). 404 = not
+// visible. Returns { ok: true }.
+export function saveSafePlace(
+  id: string,
+): Promise<SafePlacesResult<{ ok: true }>> {
+  return request(
+    "POST",
+    `/api/v1/safe-places/${id}/save`,
+    undefined,
+    async () => ({ ok: true }) as const,
+    commonApiError,
+  );
+}
+
+// DELETE /api/v1/safe-places/:id/save — remove the bookmark (idempotent → 200).
+export function unsaveSafePlace(
+  id: string,
+): Promise<SafePlacesResult<{ ok: true }>> {
+  return request(
+    "DELETE",
+    `/api/v1/safe-places/${id}/save`,
+    undefined,
+    async () => ({ ok: true }) as const,
+    commonApiError,
+  );
+}

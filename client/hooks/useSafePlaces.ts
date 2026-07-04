@@ -1,6 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { listSafePlaces } from "@/lib/api/safePlaces";
+import {
+  listSafePlaces,
+  saveSafePlace,
+  unsaveSafePlace,
+} from "@/lib/api/safePlaces";
 import { strings } from "@/i18n";
 import type { SafePlaceDTO, SafePlaceCategory } from "@shared/types";
 
@@ -26,6 +30,7 @@ export type UseSafePlaces = {
   search: string; // active search term ("" = all)
   setCategory: (category: SafePlaceCategory | null) => void;
   setSearch: (search: string) => void;
+  toggleSave: (place: SafePlaceDTO) => void;
   refresh: () => void;
   loadMore: () => void;
   retry: () => void;
@@ -126,6 +131,28 @@ export function useSafePlaces(): UseSafePlaces {
     fetchPage(page + 1, "more");
   }, [fetchPage, loadingMore, refreshing, status, page, totalPages]);
 
+  // Optimistically flip the card's `saved` in-place, then persist. On any
+  // failure (incl. a thrown request()) revert exactly that flip — save/unsave
+  // are idempotent so rapid taps converge. Silent (the icon is the feedback).
+  const toggleSave = useCallback((place: SafePlaceDTO) => {
+    const flip = (saved: boolean) =>
+      setItems((prev) =>
+        prev.map((p) => (p.id === place.id ? { ...p, saved } : p)),
+      );
+    const nextSaved = !place.saved;
+    flip(nextSaved);
+    void (async () => {
+      try {
+        const result = place.saved
+          ? await unsaveSafePlace(place.id)
+          : await saveSafePlace(place.id);
+        if (!result.ok) flip(place.saved); // revert
+      } catch {
+        flip(place.saved); // revert
+      }
+    })();
+  }, []);
+
   return {
     items,
     status,
@@ -136,6 +163,7 @@ export function useSafePlaces(): UseSafePlaces {
     search,
     setCategory,
     setSearch,
+    toggleSave,
     refresh,
     loadMore,
     retry,

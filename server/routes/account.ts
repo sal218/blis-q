@@ -357,6 +357,16 @@ async function handleExportAccount(
         title: e.title,
         status: e.status as RsvpStatus,
       })),
+      savedEvents: data.savedEvents.map((e) => ({
+        id: e.id,
+        title: e.title,
+        savedAt: e.savedAt.toISOString(),
+      })),
+      savedSafePlaces: data.savedSafePlaces.map((p) => ({
+        id: p.id,
+        name: p.name,
+        savedAt: p.savedAt.toISOString(),
+      })),
       consents: data.consents.map((r) => ({
         consentType: r.consentType as ConsentRecordDTO["consentType"],
         policyVersion: r.policyVersion,

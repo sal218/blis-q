@@ -12,7 +12,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { EventsScreen } from "@/screens/events/EventsScreen";
 import { EventDetailScreen } from "@/screens/events/EventDetailScreen";
-import { SavedEventsScreen } from "@/screens/events/SavedEventsScreen";
+import { SavedScreen } from "@/screens/events/SavedScreen";
 import { CreateEventScreen } from "@/screens/events/CreateEventScreen";
 import { CommunityDetailScreen } from "@/screens/communities/CommunityDetailScreen";
 import { CreateCommunityScreen } from "@/screens/communities/CreateCommunityScreen";
@@ -51,7 +51,7 @@ export type AppTabsParamList = {
 export type EventsStackParamList = {
   EventsHome: undefined;
   EventDetail: { id: string };
-  SavedEvents: undefined;
+  Saved: undefined;
   CreateEvent: { communityId: string };
   CommunityDetail: { id: string };
   CreateCommunity: undefined;
@@ -101,9 +101,9 @@ function EventsStack() {
         options={{ headerShown: false }}
       />
       <EventsStackNav.Screen
-        name="SavedEvents"
-        component={SavedEventsScreen}
-        options={{ title: strings.events.savedTitle }}
+        name="Saved"
+        component={SavedScreen}
+        options={{ title: strings.saved.title }}
       />
       <EventsStackNav.Screen
         name="CreateEvent"

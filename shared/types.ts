@@ -216,6 +216,9 @@ export type SafePlaceDTO = {
   // Venue coordinates (admin-curated venue data, NOT user location — §5.8).
   latitude: number | null;
   longitude: number | null;
+  // The caller's OWN private bookmark flag. No count / who-saved surface
+  // (Article 9), mirroring EventDTO.saved. Admin responses set this false.
+  saved: boolean;
 };
 
 export type ResourceDTO = {
@@ -339,6 +342,8 @@ export type AccountExport = {
     deleted: boolean;
   }[];
   events: { id: string; title: string; status: RsvpStatus }[];
+  savedEvents: { id: string; title: string; savedAt: string }[];
+  savedSafePlaces: { id: string; name: string; savedAt: string }[];
   consents: ConsentRecordDTO[];
   notificationPreferences: NotificationPreferencesDTO;
   blocks: { blockedUserId: string; createdAt: string }[];

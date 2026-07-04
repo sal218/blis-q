@@ -39,6 +39,7 @@ export function SafePlacesList() {
     search,
     setCategory,
     setSearch,
+    toggleSave,
     refresh,
     loadMore,
     retry,
@@ -146,7 +147,9 @@ export function SafePlacesList() {
         data={items}
         keyExtractor={(p) => p.id}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => <SafePlaceCard place={item} />}
+        renderItem={({ item }) => (
+          <SafePlaceCard place={item} onToggleSave={toggleSave} />
+        )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         refreshControl={
           <RefreshControl

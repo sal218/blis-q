@@ -21,6 +21,7 @@ const place = (
   city,
   latitude: null,
   longitude: null,
+  saved: false,
 });
 
 function state(over: Partial<ReturnType<typeof useSafePlaces>> = {}) {

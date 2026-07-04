@@ -1,4 +1,8 @@
-jest.mock("@/lib/api/safePlaces", () => ({ listSafePlaces: jest.fn() }));
+jest.mock("@/lib/api/safePlaces", () => ({
+  listSafePlaces: jest.fn(),
+  saveSafePlace: jest.fn(),
+  unsaveSafePlace: jest.fn(),
+}));
 
 // Capture the focus callback so a test can simulate returning to the screen.
 let mockFocusCb: (() => void) | undefined;
@@ -15,10 +19,16 @@ jest.mock("@react-navigation/native", () => {
 
 import { renderHook, act, waitFor } from "@testing-library/react-native";
 import { useSafePlaces } from "@/hooks/useSafePlaces";
-import { listSafePlaces } from "@/lib/api/safePlaces";
+import {
+  listSafePlaces,
+  saveSafePlace,
+  unsaveSafePlace,
+} from "@/lib/api/safePlaces";
 import type { SafePlaceDTO } from "@shared/types";
 
 const listMock = listSafePlaces as unknown as jest.Mock;
+const saveMock = saveSafePlace as unknown as jest.Mock;
+const unsaveMock = unsaveSafePlace as unknown as jest.Mock;
 
 const place = (id: string): SafePlaceDTO => ({
   id,
@@ -29,6 +39,7 @@ const place = (id: string): SafePlaceDTO => ({
   city: "Warszawa",
   latitude: null,
   longitude: null,
+  saved: false,
 });
 
 const pageOf = (ids: string[], page: number, totalPages: number) => ({
@@ -44,6 +55,8 @@ const pageOf = (ids: string[], page: number, totalPages: number) => ({
 
 beforeEach(() => {
   listMock.mockReset();
+  saveMock.mockReset();
+  unsaveMock.mockReset();
   mockFocusCb = undefined;
 });
 
@@ -192,5 +205,54 @@ describe("useSafePlaces", () => {
     });
     expect(result.current.refreshing).toBe(false);
     await waitFor(() => expect(result.current.items).toEqual([place("s2")]));
+  });
+
+  it("toggleSave optimistically flips the card's saved, then persists", async () => {
+    listMock.mockResolvedValue(pageOf(["s1"], 1, 1)); // saved:false fixture
+    saveMock.mockResolvedValue({ ok: true, data: { ok: true } });
+    const { result } = renderHook(() => useSafePlaces());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      result.current.toggleSave(result.current.items[0]);
+    });
+    expect(result.current.items[0].saved).toBe(true); // optimistic
+    expect(saveMock).toHaveBeenCalledWith("s1");
+    expect(unsaveMock).not.toHaveBeenCalled();
+  });
+
+  it("toggleSave reverts the flip when the save call fails", async () => {
+    listMock.mockResolvedValue(pageOf(["s1"], 1, 1));
+    saveMock.mockResolvedValue({ ok: false, error: { kind: "server" } });
+    const { result } = renderHook(() => useSafePlaces());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      result.current.toggleSave(result.current.items[0]);
+    });
+    await waitFor(() => expect(result.current.items[0].saved).toBe(false)); // reverted
+  });
+
+  it("toggleSave on an already-saved card calls unsave", async () => {
+    listMock.mockResolvedValue({
+      ok: true as const,
+      data: {
+        data: [{ ...place("s1"), saved: true }],
+        page: 1,
+        pageSize: 25,
+        total: 25,
+        totalPages: 1,
+      },
+    });
+    unsaveMock.mockResolvedValue({ ok: true, data: { ok: true } });
+    const { result } = renderHook(() => useSafePlaces());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      result.current.toggleSave(result.current.items[0]);
+    });
+    expect(result.current.items[0].saved).toBe(false); // optimistic unsave
+    expect(unsaveMock).toHaveBeenCalledWith("s1");
+    expect(saveMock).not.toHaveBeenCalled();
   });
 });

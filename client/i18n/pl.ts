@@ -208,6 +208,10 @@ export const pl = {
     emptySearch: "Brak wyników dla tego wyszukiwania.", // "No results for this search."
     loadError: "Nie udało się załadować miejsc.", // "Couldn't load places."
     retry: "Spróbuj ponownie", // "Try again"
+    saveAction: "Zapisz", // "Save" (bookmark, not-yet-saved) — a11y label
+    savedAction: "Zapisano", // "Saved" (already bookmarked) — a11y label
+    savedEmpty: "Nie masz jeszcze zapisanych miejsc.", // "No saved places yet."
+    savedLoadError: "Nie udało się załadować zapisanych miejsc.", // saved-list load error
     // Curation framing (COMPLIANCE §5.8 / P-40): present as team-curated
     // LGBT-friendly places, NOT an absolute safety guarantee.
     disclaimer:
@@ -227,6 +231,13 @@ export const pl = {
       service: "Usługa", // "Service"
       other: "Inne", // "Other"
     },
+  },
+
+  // The "Zapisane" (Saved) screen — a 2-tab view over saved events + places.
+  saved: {
+    title: "Zapisane", // "Saved" (screen/header title)
+    tabEvents: "Wydarzenia", // "Events"
+    tabSafePlaces: "Bezpieczne miejsca", // "Safe places"
   },
 
   profile: {

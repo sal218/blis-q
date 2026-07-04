@@ -42,6 +42,7 @@ jest.mock("../supabase", () => ({
 jest.mock("../rateLimit", () => ({
   checkAdminLoginRateLimit: jest.fn(),
   checkAdminMutationRateLimit: jest.fn(),
+  checkRsvpRateLimit: jest.fn(),
 }));
 
 // Mock the Overpass client so osm-search route tests never hit the network. The
@@ -53,12 +54,12 @@ jest.mock("../overpass", () => ({
 
 import { registerSafePlaceRoutes } from "../routes/safePlaces";
 import { registerAdminRoutes } from "../routes/admin";
-import { checkAdminMutationRateLimit } from "../rateLimit";
+import { checkAdminMutationRateLimit, checkRsvpRateLimit } from "../rateLimit";
 import { searchOverpass, OverpassError } from "../overpass";
 import { storage } from "../storage";
 import { db, pool } from "../db";
-import { users, safePlaces, auditLog } from "@shared/schema";
-import { eq, inArray } from "drizzle-orm";
+import { users, safePlaces, safePlaceSaves, auditLog } from "@shared/schema";
+import { eq, inArray, and } from "drizzle-orm";
 
 const overpassMock = searchOverpass as unknown as jest.Mock;
 
@@ -70,6 +71,7 @@ registerAdminRoutes(app);
 jest.setTimeout(30000);
 
 const mutationRl = checkAdminMutationRateLimit as unknown as jest.Mock;
+const rsvpRl = checkRsvpRateLimit as unknown as jest.Mock;
 
 const POLICY_VERSION = "2026-06-10";
 const createdUserIds: string[] = [];
@@ -125,6 +127,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockUser = null;
   mutationRl.mockResolvedValue({ allowed: true });
+  rsvpRl.mockResolvedValue({ allowed: true });
 });
 
 afterEach(async () => {
@@ -352,6 +355,169 @@ describe("GET /api/v1/safe-places/:id", () => {
 
     const bad = await request(app).get("/api/v1/safe-places/not-a-uuid");
     expect(bad.status).toBe(400);
+  });
+});
+
+describe("safe-place save / unsave + GET /api/v1/safe-places/saved", () => {
+  it("save is idempotent, sets the caller's saved flag, and unsave clears it", async () => {
+    const admin = await seedUser();
+    const p = await seedPlace(admin, { city: "Warszawa" });
+    mockUser = { id: admin, isAdmin: false };
+
+    // Save twice → 200 each, exactly one row (idempotent).
+    const s1 = await request(app).post(`/api/v1/safe-places/${p}/save`);
+    const s2 = await request(app).post(`/api/v1/safe-places/${p}/save`);
+    expect(s1.status).toBe(200);
+    expect(s2.status).toBe(200);
+    const rows = await db
+      .select()
+      .from(safePlaceSaves)
+      .where(
+        and(
+          eq(safePlaceSaves.safePlaceId, p),
+          eq(safePlaceSaves.userId, admin),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+
+    // The DTO's private `saved` flag reflects it on the read path.
+    const got = await request(app).get(`/api/v1/safe-places/${p}`);
+    expect(got.body.saved).toBe(true);
+    const listed = await request(app).get("/api/v1/safe-places?pageSize=50");
+    expect(listed.body.data.find((x: { id: string }) => x.id === p).saved).toBe(
+      true,
+    );
+
+    // Unsave → 200, row gone, flag false; unsave again → still 200 (idempotent).
+    const u1 = await request(app).delete(`/api/v1/safe-places/${p}/save`);
+    expect(u1.status).toBe(200);
+    const after = await db
+      .select()
+      .from(safePlaceSaves)
+      .where(eq(safePlaceSaves.safePlaceId, p));
+    expect(after).toHaveLength(0);
+    const u2 = await request(app).delete(`/api/v1/safe-places/${p}/save`);
+    expect(u2.status).toBe(200);
+    const got2 = await request(app).get(`/api/v1/safe-places/${p}`);
+    expect(got2.body.saved).toBe(false);
+  });
+
+  it("save on a missing / soft-deleted place → 404; bad uuid → 400", async () => {
+    const admin = await seedUser();
+    const p = await seedPlace(admin);
+    await storage.softDeleteSafePlace(p, admin, null);
+    mockUser = { id: admin, isAdmin: false };
+
+    const gone = await request(app).post(`/api/v1/safe-places/${p}/save`);
+    expect(gone.status).toBe(404);
+    const missing = await request(app).post(
+      `/api/v1/safe-places/${randomUUID()}/save`,
+    );
+    expect(missing.status).toBe(404);
+    const bad = await request(app).post("/api/v1/safe-places/not-a-uuid/save");
+    expect(bad.status).toBe(400);
+  });
+
+  it("GET /saved returns the caller's saved places, caller-scoped, excluding deleted", async () => {
+    const owner = await seedUser();
+    const other = await seedUser();
+    const a = await seedPlace(owner, { name: "Alpha", city: "Warszawa" });
+    const b = await seedPlace(owner, { name: "Beta", city: "Kraków" });
+    const gone = await seedPlace(owner, { name: "Gone", city: "Gdańsk" });
+
+    // owner saves a + gone; other saves b.
+    mockUser = { id: owner, isAdmin: false };
+    await request(app).post(`/api/v1/safe-places/${a}/save`);
+    await request(app).post(`/api/v1/safe-places/${gone}/save`);
+    mockUser = { id: other, isAdmin: false };
+    await request(app).post(`/api/v1/safe-places/${b}/save`);
+    // gone is soft-deleted after saving → excluded from the saved list.
+    await storage.softDeleteSafePlace(gone, owner, null);
+
+    mockUser = { id: owner, isAdmin: false };
+    const res = await request(app).get("/api/v1/safe-places/saved");
+    expect(res.status).toBe(200);
+    const ids = res.body.map((x: { id: string }) => x.id);
+    expect(ids).toContain(a);
+    expect(ids).not.toContain(gone); // soft-deleted
+    expect(ids).not.toContain(b); // other user's save (caller-scoped)
+    expect(res.body.every((x: { saved: boolean }) => x.saved === true)).toBe(
+      true,
+    );
+  });
+
+  it("save + unsave are rate-limited → 429 (each verb)", async () => {
+    const admin = await seedUser();
+    const p = await seedPlace(admin);
+    mockUser = { id: admin, isAdmin: false };
+
+    rsvpRl.mockResolvedValueOnce({ allowed: false, retryAfter: 9 });
+    const saveRes = await request(app).post(`/api/v1/safe-places/${p}/save`);
+    expect(saveRes.status).toBe(429);
+    expect(saveRes.body.retryAfter).toBe(9);
+
+    rsvpRl.mockResolvedValueOnce({ allowed: false, retryAfter: 11 });
+    const unsaveRes = await request(app).delete(
+      `/api/v1/safe-places/${p}/save`,
+    );
+    expect(unsaveRes.status).toBe(429);
+    expect(unsaveRes.body.retryAfter).toBe(11);
+  });
+
+  it("save / unsave write NO audit_log rows (benign private toggle)", async () => {
+    const admin = await seedUser();
+    const p = await seedPlace(admin);
+    mockUser = { id: admin, isAdmin: false };
+
+    await request(app).post(`/api/v1/safe-places/${p}/save`);
+    await request(app).delete(`/api/v1/safe-places/${p}/save`);
+
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.actorId, admin));
+    // Only the seed's safe_place.created audit exists — no save/unsave action.
+    expect(audits.some((a) => a.action.startsWith("safe_place.save"))).toBe(
+      false,
+    );
+  });
+});
+
+describe("GDPR: erasure + export cover saved bookmarks", () => {
+  it("eraseUser deletes the user's event_saves AND safe_place_saves (real erasure path)", async () => {
+    const owner = await seedUser();
+    const user = await seedUser();
+    const p = await seedPlace(owner);
+    // Save a place as `user`, then run the REAL erasure (anonymise-in-place).
+    mockUser = { id: user, isAdmin: false };
+    await request(app).post(`/api/v1/safe-places/${p}/save`);
+    let rows = await db
+      .select()
+      .from(safePlaceSaves)
+      .where(eq(safePlaceSaves.userId, user));
+    expect(rows).toHaveLength(1);
+
+    await storage.eraseUser(user);
+
+    rows = await db
+      .select()
+      .from(safePlaceSaves)
+      .where(eq(safePlaceSaves.userId, user));
+    expect(rows).toHaveLength(0); // erased even though the user row survives
+  });
+
+  it("getAccountExport includes the caller's saved safe places", async () => {
+    const owner = await seedUser();
+    const p = await seedPlace(owner, { name: "Zapisane Miejsce" });
+    mockUser = { id: owner, isAdmin: false };
+    await request(app).post(`/api/v1/safe-places/${p}/save`);
+
+    const data = await storage.getAccountExport(owner);
+    const savedIds = data.savedSafePlaces.map((x) => x.id);
+    expect(savedIds).toContain(p);
+    const row = data.savedSafePlaces.find((x) => x.id === p);
+    expect(row?.name).toBe("Zapisane Miejsce");
+    expect(row?.savedAt).toBeInstanceOf(Date);
   });
 });
 

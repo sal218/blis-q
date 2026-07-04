@@ -1,20 +1,25 @@
 import { useMemo } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 import { CategoryChip } from "@/components/CategoryChip";
-import { MapPin } from "@/components/icons/PhosphorIcons";
+import { MapPin, Bookmark } from "@/components/icons/PhosphorIcons";
 import { strings } from "@/i18n";
 import { spacing, shadow, type ThemeColors } from "@/constants/theme";
 import type { SafePlaceDTO } from "@shared/types";
 
-// One venue in the Safe Places list (epic P-40 slice SP-3). A raised card:
-// title + a category chip, then an address/city row with a pin icon. Display-
-// only (a detail screen + directions are deferred). Coordinates are NEVER shown
-// to the user — they exist only to place the venue on the map later (SP-4).
+// One venue in the Safe Places list (epic P-40). A raised card: title + a
+// category chip (+ an optional bookmark toggle), then an address/city row with a
+// pin icon. Display-only otherwise (a detail screen + directions are deferred).
+// Coordinates are NEVER shown to the user — they exist only to place the venue
+// on the map later (SP-4). `onToggleSave` is optional: passed where the bookmark
+// is interactive, omitted for a purely display-only card.
 
-type Props = { place: SafePlaceDTO };
+type Props = {
+  place: SafePlaceDTO;
+  onToggleSave?: (place: SafePlaceDTO) => void;
+};
 
-export function SafePlaceCard({ place }: Props) {
+export function SafePlaceCard({ place, onToggleSave }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -27,6 +32,26 @@ export function SafePlaceCard({ place }: Props) {
           {place.name}
         </Text>
         <CategoryChip label={strings.safePlaces.categories[place.category]} />
+        {onToggleSave ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              place.saved
+                ? strings.safePlaces.savedAction
+                : strings.safePlaces.saveAction
+            }
+            accessibilityState={{ selected: place.saved }}
+            hitSlop={10}
+            onPress={() => onToggleSave(place)}
+            style={({ pressed }) => [styles.saveBtn, pressed && styles.pressed]}
+          >
+            <Bookmark
+              size={22}
+              filled={place.saved}
+              color={place.saved ? colors.primary : colors.textMuted}
+            />
+          </Pressable>
+        ) : null}
       </View>
       {where ? (
         <View style={styles.row}>
@@ -72,6 +97,13 @@ function createStyles(colors: ThemeColors) {
       flex: 1,
       color: colors.textMuted,
       fontSize: 14,
+    },
+    saveBtn: {
+      marginLeft: spacing.xs,
+      marginTop: -2,
+    },
+    pressed: {
+      opacity: 0.6,
     },
   });
 }

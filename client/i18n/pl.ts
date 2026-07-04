@@ -103,7 +103,11 @@ export const pl = {
     emptyCategory: "Brak wydarzeń w tej kategorii.", // "No events in this category."
     loadError: "Nie udało się załadować wydarzeń.", // "Couldn't load events."
     retry: "Spróbuj ponownie", // "Try again"
-    goingCount: "{count} idzie", // "{count} going"
+    goingCount: "{count} idzie", // "{count} going" (legacy; prefer goingLabel())
+    // Attendee count with Polish plural of "osoba" (person) — see goingLabel().
+    goingOne: "1 osoba idzie", // exactly one
+    goingFew: "{count} osoby idą", // 2–4 (not 12–14)
+    goingMany: "{count} osób idzie", // 0, 5+, and the teens
 
     // Categories (slice D2). Keys MUST match EVENT_CATEGORIES in shared/types.ts.
     // Coarse event-TYPE labels — never identity/orientation (Article 9).

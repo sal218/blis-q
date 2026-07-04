@@ -15,7 +15,8 @@ export type ThemeColors = {
   primaryDark: string; // pressed/darker primary
   accent: string; // secondary violet accent
   background: string; // screen background
-  surface: string; // cards, inputs, raised surfaces
+  surface: string; // inputs, chips, subtly-raised fills
+  card: string; // elevated content card (white in light; raised in dark)
   text: string; // primary text
   textMuted: string; // secondary/labels
   border: string; // hairlines, input borders
@@ -29,6 +30,7 @@ export const lightColors: ThemeColors = {
   accent: "#7C3AED",
   background: "#FFFFFF",
   surface: "#F3F2F9",
+  card: "#FFFFFF",
   text: "#15131F",
   textMuted: "#6B7280",
   border: "#E5E7EB",
@@ -42,6 +44,7 @@ export const darkColors: ThemeColors = {
   accent: "#A78BFA",
   background: "#16122E", // brand-purple-dark
   surface: "#221B42",
+  card: "#1E1A3E", // raised soft-glass card, a touch above the page
   text: "#F5F5F7",
   textMuted: "#A9A4C0",
   border: "#332A55",

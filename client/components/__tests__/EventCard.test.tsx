@@ -34,8 +34,8 @@ describe("EventCard", () => {
     expect(screen.getByText("Pride Planning Meetup")).toBeTruthy();
     expect(screen.getByText(/16:00 – 18:00/)).toBeTruthy();
     expect(screen.getByText(/Warszawa/)).toBeTruthy();
-    // Going COUNT only — never attendee identities.
-    expect(screen.getByText("46 idzie")).toBeTruthy();
+    // Going COUNT only (Polish plural) — never attendee identities.
+    expect(screen.getByText("46 osób idzie")).toBeTruthy();
   });
 
   it("calls onPress with the event id", () => {

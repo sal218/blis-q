@@ -2,20 +2,28 @@ import { useMemo } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 import { CategoryChip } from "@/components/CategoryChip";
-import { Clock, MapPin, Bookmark } from "@/components/icons/PhosphorIcons";
+import {
+  Clock,
+  MapPin,
+  UsersThree,
+  Bookmark,
+} from "@/components/icons/PhosphorIcons";
 import { formatEventDateBadge, formatEventTimeRange } from "@/lib/relativeTime";
-import { strings, format } from "@/i18n";
-import { spacing, radius, type ThemeColors } from "@/constants/theme";
+import { strings, goingLabel } from "@/i18n";
+import { spacing, shadow, type ThemeColors } from "@/constants/theme";
 import type { EventDTO } from "@shared/types";
 
-// One event in the feed (design ref: events-screen.png): a date badge (weekday +
-// day) on the left, then a stacked body — title, time row, location row, the
-// going COUNT, and the category tag — with a save/bookmark button in the top
-// corner. Attendee identities are deliberately never shown (the backend exposes
-// the aggregate only; showing who attends an Article 9 community's event could
-// out someone). Tap the card → open detail; tap the bookmark → toggle saved.
-// `onToggleSave` is optional: the feed passes it (interactive bookmark); the Home
-// rail / saved list omit it (no bookmark shown).
+// One event in the feed (design ref: assets/events-screen.png — premium light +
+// dark). A raised white/soft-glass card: a vertically-centred date column
+// (weekday · day · month-year) + a hairline divider + a content column (title,
+// then time / location / attendee-count metadata rows, then a divider + the
+// category tag), with a save/bookmark in the top-right. Attendee identities are
+// deliberately never shown — the backend exposes the aggregate COUNT only;
+// showing who attends an Article 9 community's event could out someone. Tap the
+// card → open detail; tap the bookmark → toggle saved. `onToggleSave` is
+// optional: the feed passes it (interactive bookmark); the Home rail / saved list
+// omit it (no bookmark). Every card renders the same rows (location always shown,
+// a fixed-height tag slot) so all feed cards are a uniform height.
 
 type Props = {
   event: EventDTO;
@@ -28,6 +36,7 @@ export function EventCard({ event, onPress, onToggleSave }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const badge = formatEventDateBadge(event.startsAt);
+  const year = new Date(event.startsAt).getFullYear();
   const time = formatEventTimeRange(event.startsAt, event.endsAt);
 
   return (
@@ -37,43 +46,54 @@ export function EventCard({ event, onPress, onToggleSave }: Props) {
       onPress={() => onPress(event.id)}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
-      <View style={styles.badge}>
-        <Text style={styles.badgeWeekday}>{badge.weekday}</Text>
-        <Text style={styles.badgeDay}>{badge.day}</Text>
+      <View style={styles.dateCol}>
+        <Text style={styles.weekday}>{badge.weekday}</Text>
+        <Text style={styles.day}>{badge.day}</Text>
+        <Text style={styles.monthYear}>
+          {badge.month} {year}
+        </Text>
       </View>
 
-      <View style={styles.body}>
-        {/* Single line + the same rows on EVERY card (location always shown, a
-            fixed-height tag slot) so all feed cards are a uniform height, and
-            each element shares the same left edge as the title. */}
+      <View style={styles.vDivider} />
+
+      <View style={styles.content}>
         <Text style={styles.title} numberOfLines={1}>
           {event.title}
         </Text>
 
         <View style={styles.row}>
-          <Clock size={14} color={colors.textMuted} />
+          <Clock size={15} color={colors.textMuted} />
           <Text style={styles.rowText} numberOfLines={1}>
             {time}
           </Text>
         </View>
 
         <View style={styles.row}>
-          <MapPin size={14} color={colors.textMuted} />
+          <MapPin size={15} color={colors.textMuted} />
           <Text style={styles.rowText} numberOfLines={1}>
             {event.location ?? strings.events.noLocation}
           </Text>
         </View>
 
-        <Text style={styles.going}>
-          {format(strings.events.goingCount, { count: event.goingCount })}
-        </Text>
+        <View style={styles.row}>
+          <UsersThree size={15} color={colors.textMuted} />
+          <Text style={styles.rowText} numberOfLines={1}>
+            {goingLabel(event.goingCount)}
+          </Text>
+        </View>
 
-        <View style={styles.tagRow}>
+        {/* Fixed-height tag slot keeps every card the same height whether or not
+            it has a category. When present: a hairline divider + the tag pill,
+            flush with the title's left edge. */}
+        <View style={styles.tagSlot}>
           {event.category ? (
-            <CategoryChip
-              label={strings.events.categories[event.category]}
-              category={event.category}
-            />
+            <>
+              <View style={styles.hDivider} />
+              <CategoryChip
+                label={strings.events.categories[event.category]}
+                category={event.category}
+              />
+            </>
           ) : null}
         </View>
       </View>
@@ -104,71 +124,82 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     card: {
       flexDirection: "row",
-      backgroundColor: colors.surface,
-      borderRadius: radius.md,
-      padding: spacing.md,
+      backgroundColor: colors.card,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.md + 2,
+      ...shadow,
     },
     cardPressed: {
-      opacity: 0.7,
+      opacity: 0.85,
     },
-    badge: {
-      width: 52,
+    // Centred vertically so the date sits balanced against the content column.
+    dateCol: {
+      width: 60,
       alignItems: "center",
-      marginRight: spacing.md,
+      justifyContent: "center",
     },
-    badgeWeekday: {
+    weekday: {
       color: colors.primary,
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: "800",
       letterSpacing: 0.5,
     },
-    badgeDay: {
+    day: {
       color: colors.text,
-      fontSize: 26,
+      fontSize: 34,
       fontWeight: "800",
-      lineHeight: 30,
+      lineHeight: 38,
     },
-    body: {
+    monthYear: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: "600",
+      marginTop: 2,
+    },
+    vDivider: {
+      width: 1,
+      alignSelf: "stretch",
+      backgroundColor: colors.border,
+      marginHorizontal: spacing.md,
+    },
+    content: {
       flex: 1,
       // Keep text clear of the top-right bookmark.
       paddingRight: spacing.lg,
     },
     title: {
       color: colors.text,
-      fontSize: 16,
+      fontSize: 18,
       fontWeight: "700",
-      marginBottom: spacing.xs,
+      marginBottom: spacing.sm,
     },
     row: {
       flexDirection: "row",
       alignItems: "center",
       gap: spacing.xs,
-      marginTop: 2,
+      marginTop: 3,
     },
     rowText: {
       flex: 1,
       color: colors.textMuted,
-      fontSize: 13,
+      fontSize: 14,
     },
-    going: {
-      color: colors.textMuted,
-      fontSize: 13,
-      marginTop: spacing.xs,
+    tagSlot: {
+      minHeight: 44,
+      justifyContent: "center",
     },
-    // A fixed-height slot (chip height) so a card WITHOUT a category is the same
-    // height as one with it. flex-start keeps the pill flush with the title's
-    // left edge (not indented/right of the rows above).
-    tagRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      alignSelf: "flex-start",
-      minHeight: 30,
+    hDivider: {
+      height: 1,
+      backgroundColor: colors.border,
       marginTop: spacing.sm,
+      marginBottom: spacing.sm + 2,
     },
     saveBtn: {
       position: "absolute",
-      top: spacing.sm,
-      right: spacing.sm,
+      top: spacing.md,
+      right: spacing.md,
       padding: spacing.xs,
     },
     pressed: {

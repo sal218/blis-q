@@ -29,15 +29,16 @@ export function CategoryChip({
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
+  // A read-only display chip (no onPress) always reads as "active" soft lavender;
+  // an interactive chip only does so when `selected`.
+  const soft = selected || !onPress;
+
   const body = (
     <>
       {category ? (
         <CategoryIcon category={category} size={16} color={colors.primary} />
       ) : null}
-      <Text
-        style={[styles.label, selected && styles.labelSelected]}
-        numberOfLines={1}
-      >
+      <Text style={[styles.label, soft && styles.labelSoft]} numberOfLines={1}>
         {label}
       </Text>
     </>
@@ -45,7 +46,11 @@ export function CategoryChip({
 
   // Read-only display chip: a static pill, not a button.
   if (!onPress) {
-    return <View style={[styles.chip, styles.chipStatic]}>{body}</View>;
+    return (
+      <View style={[styles.chip, styles.chipSoft, styles.chipStatic]}>
+        {body}
+      </View>
+    );
   }
 
   return (
@@ -55,7 +60,7 @@ export function CategoryChip({
       onPress={onPress}
       style={({ pressed }) => [
         styles.chip,
-        selected && styles.chipSelected,
+        selected && styles.chipSoft,
         pressed && styles.pressed,
       ]}
     >
@@ -82,12 +87,12 @@ function createStyles(colors: ThemeColors) {
       alignSelf: "flex-start",
       paddingVertical: spacing.xs,
     },
-    // Soft brand-tint selected state (matches the create-form mockup): a
-    // translucent primary fill + primary border/label, not a heavy solid block.
-    // `+ "22"` = ~13% alpha on the 6-digit hex primary (valid in light + dark).
-    chipSelected: {
+    // Soft brand-tint fill (matches the mockup): a translucent primary fill +
+    // primary border/label, not a heavy solid block. `+ "22"` / `+ "1A"` are
+    // hex alpha suffixes on the 6-digit primary (valid in light + dark).
+    chipSoft: {
       backgroundColor: colors.primary + "22",
-      borderColor: colors.primary,
+      borderColor: colors.primary + "55",
     },
     pressed: {
       opacity: 0.6,
@@ -97,7 +102,7 @@ function createStyles(colors: ThemeColors) {
       fontSize: 14,
       fontWeight: "600",
     },
-    labelSelected: {
+    labelSoft: {
       color: colors.primary,
     },
   });

@@ -58,7 +58,15 @@ import { checkAdminMutationRateLimit, checkRsvpRateLimit } from "../rateLimit";
 import { searchOverpass, OverpassError } from "../overpass";
 import { storage } from "../storage";
 import { db, pool } from "../db";
-import { users, safePlaces, safePlaceSaves, auditLog } from "@shared/schema";
+import {
+  users,
+  safePlaces,
+  safePlaceSaves,
+  communities,
+  events,
+  eventSaves,
+  auditLog,
+} from "@shared/schema";
 import { eq, inArray, and } from "drizzle-orm";
 
 const overpassMock = searchOverpass as unknown as jest.Mock;
@@ -488,22 +496,54 @@ describe("GDPR: erasure + export cover saved bookmarks", () => {
     const owner = await seedUser();
     const user = await seedUser();
     const p = await seedPlace(owner);
+    // Seed an event_saves row too (needs a community + event). Insert directly —
+    // event routes aren't mounted in this app.
+    const [community] = await db
+      .insert(communities)
+      .values({ name: "C", createdById: owner })
+      .returning({ id: communities.id });
+    const [event] = await db
+      .insert(events)
+      .values({
+        communityId: community.id,
+        createdById: owner,
+        title: "E",
+        startsAt: new Date(),
+      })
+      .returning({ id: events.id });
+    await db.insert(eventSaves).values({ eventId: event.id, userId: user });
+
     // Save a place as `user`, then run the REAL erasure (anonymise-in-place).
     mockUser = { id: user, isAdmin: false };
     await request(app).post(`/api/v1/safe-places/${p}/save`);
-    let rows = await db
-      .select()
-      .from(safePlaceSaves)
-      .where(eq(safePlaceSaves.userId, user));
-    expect(rows).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(safePlaceSaves)
+        .where(eq(safePlaceSaves.userId, user)),
+    ).toHaveLength(1);
+    expect(
+      await db.select().from(eventSaves).where(eq(eventSaves.userId, user)),
+    ).toHaveLength(1);
 
     await storage.eraseUser(user);
 
-    rows = await db
-      .select()
-      .from(safePlaceSaves)
-      .where(eq(safePlaceSaves.userId, user));
-    expect(rows).toHaveLength(0); // erased even though the user row survives
+    // Both saves tables are cleared even though the user row survives (anonymised
+    // in place → the FK ON DELETE CASCADE never fires).
+    expect(
+      await db
+        .select()
+        .from(safePlaceSaves)
+        .where(eq(safePlaceSaves.userId, user)),
+    ).toHaveLength(0);
+    expect(
+      await db.select().from(eventSaves).where(eq(eventSaves.userId, user)),
+    ).toHaveLength(0);
+
+    // Clean up the directly-seeded event + community (not tracked by afterEach).
+    await db.delete(eventSaves).where(eq(eventSaves.eventId, event.id));
+    await db.delete(events).where(eq(events.id, event.id));
+    await db.delete(communities).where(eq(communities.id, community.id));
   });
 
   it("getAccountExport includes the caller's saved safe places", async () => {

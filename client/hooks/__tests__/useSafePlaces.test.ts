@@ -233,6 +233,35 @@ describe("useSafePlaces", () => {
     await waitFor(() => expect(result.current.items[0].saved).toBe(false)); // reverted
   });
 
+  it("ignores a second toggle while the first is in flight (no POST/DELETE race)", async () => {
+    listMock.mockResolvedValue(pageOf(["s1"], 1, 1)); // saved:false
+    let resolveSave!: (v: unknown) => void;
+    saveMock.mockReturnValue(
+      new Promise((r) => {
+        resolveSave = r;
+      }),
+    );
+    const { result } = renderHook(() => useSafePlaces());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // First tap: optimistic save, request in flight.
+    act(() => {
+      result.current.toggleSave(result.current.items[0]);
+    });
+    expect(result.current.items[0].saved).toBe(true);
+    // Second tap while in flight → ignored (would otherwise fire DELETE).
+    act(() => {
+      result.current.toggleSave(result.current.items[0]);
+    });
+    expect(unsaveMock).not.toHaveBeenCalled();
+    expect(saveMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveSave({ ok: true, data: { ok: true } });
+    });
+    expect(result.current.items[0].saved).toBe(true); // consistent with server
+  });
+
   it("toggleSave on an already-saved card calls unsave", async () => {
     listMock.mockResolvedValue({
       ok: true as const,

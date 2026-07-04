@@ -480,10 +480,17 @@ export const safePlacesListQuerySchema = z.object({
     .transform((v, ctx) => {
       if (v === undefined) return undefined;
       const parts = v.split(",");
-      const lat = Number(parts[0]);
-      const lng = Number(parts[1]);
+      // Trim + require BOTH components non-empty first: Number("") and
+      // Number("  ") are 0, so without this `near=,` / `52.2,` / `,21` would
+      // silently become valid coordinates instead of a 400.
+      const latStr = parts[0]?.trim();
+      const lngStr = parts[1]?.trim();
+      const lat = Number(latStr);
+      const lng = Number(lngStr);
       const ok =
         parts.length === 2 &&
+        !!latStr &&
+        !!lngStr &&
         Number.isFinite(lat) &&
         lat >= -90 &&
         lat <= 90 &&

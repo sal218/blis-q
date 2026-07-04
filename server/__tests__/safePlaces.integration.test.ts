@@ -204,7 +204,17 @@ describe("GET /api/v1/safe-places", () => {
   it("invalid near → 400 (malformed and out-of-range)", async () => {
     const admin = await seedUser();
     mockUser = { id: admin, isAdmin: false };
-    for (const bad of ["abc", "52.2", "999,21", "52.2,500"]) {
+    // incl. empty components — Number("") is 0, so these must NOT slip through
+    for (const bad of [
+      "abc",
+      "52.2",
+      "999,21",
+      "52.2,500",
+      ",",
+      "52.2,",
+      ",21",
+      " , ",
+    ]) {
       const res = await request(app).get(
         `/api/v1/safe-places?near=${encodeURIComponent(bad)}`,
       );

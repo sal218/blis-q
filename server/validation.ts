@@ -257,6 +257,39 @@ export const updateSafePlaceSchema = z
   // Same one-sided-coordinate guard as create (a PATCH can still touch no coords).
   .refine(bothOrNeitherCoords, COORDS_REFINE);
 
+// OSM import (slice SP-2). osm-search takes a city + category; the bulk endpoint
+// takes an array of curated candidates. osmId format-locked to an OSM element ref.
+const osmIdSchema = z
+  .string()
+  .trim()
+  .regex(/^(node|way|relation)\/\d+$/);
+
+export const osmSearchSchema = z
+  .object({
+    city: z.string().trim().min(1).max(MAX_SAFE_PLACE_CITY_LENGTH),
+    category: safePlaceCategorySchema,
+  })
+  .strict();
+
+const bulkSafePlaceItemSchema = z
+  .object({
+    name: z.string().trim().min(1).max(MAX_SAFE_PLACE_NAME_LENGTH),
+    category: safePlaceCategorySchema,
+    description: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
+    address: z.string().trim().max(MAX_SAFE_PLACE_ADDRESS_LENGTH).optional(),
+    city: z.string().trim().max(MAX_SAFE_PLACE_CITY_LENGTH).optional(),
+    latitude: latitudeSchema.optional(),
+    longitude: longitudeSchema.optional(),
+    osmId: osmIdSchema.optional(),
+  })
+  .strict()
+  .refine(bothOrNeitherCoords, COORDS_REFINE);
+
+export const bulkCreateSafePlacesSchema = z
+  .array(bulkSafePlaceItemSchema)
+  .min(1)
+  .max(100);
+
 // (safePlacesListQuerySchema is defined below, after the offset-page constants.)
 
 // ── Posts (communityId comes from /communities/:id/posts, not the body) ───────
@@ -548,6 +581,10 @@ export type UpdateEventInput = z.infer<typeof updateEventSchema>;
 export type CreateSafePlaceInput = z.infer<typeof createSafePlaceSchema>;
 export type UpdateSafePlaceInput = z.infer<typeof updateSafePlaceSchema>;
 export type SafePlacesListQuery = z.infer<typeof safePlacesListQuerySchema>;
+export type OsmSearchInput = z.infer<typeof osmSearchSchema>;
+export type BulkCreateSafePlacesInput = z.infer<
+  typeof bulkCreateSafePlacesSchema
+>;
 export type CreateReportInput = z.infer<typeof createReportSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type CursorPageQuery = z.infer<typeof cursorPageQuerySchema>;

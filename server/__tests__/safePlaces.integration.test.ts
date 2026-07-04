@@ -44,13 +44,23 @@ jest.mock("../rateLimit", () => ({
   checkAdminMutationRateLimit: jest.fn(),
 }));
 
+// Mock the Overpass client so osm-search route tests never hit the network. The
+// client's own parsing is covered by overpass.integration.test.ts.
+jest.mock("../overpass", () => ({
+  searchOverpass: jest.fn(),
+  OverpassError: class OverpassError extends Error {},
+}));
+
 import { registerSafePlaceRoutes } from "../routes/safePlaces";
 import { registerAdminRoutes } from "../routes/admin";
 import { checkAdminMutationRateLimit } from "../rateLimit";
+import { searchOverpass, OverpassError } from "../overpass";
 import { storage } from "../storage";
 import { db, pool } from "../db";
 import { users, safePlaces, auditLog } from "@shared/schema";
 import { eq, inArray } from "drizzle-orm";
+
+const overpassMock = searchOverpass as unknown as jest.Mock;
 
 const app = express();
 app.use(express.json());
@@ -116,12 +126,18 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  jest.clearAllMocks();
   if (createdSafePlaceIds.length) {
     await db
       .delete(safePlaces)
       .where(inArray(safePlaces.id, createdSafePlaceIds));
   }
   if (createdUserIds.length) {
+    // Also drop any bulk-imported rows created by these test users (their ids
+    // aren't individually tracked). createdById SET NULL wouldn't remove them.
+    await db
+      .delete(safePlaces)
+      .where(inArray(safePlaces.createdById, createdUserIds));
     await db.delete(auditLog).where(inArray(auditLog.actorId, createdUserIds));
     await db.delete(users).where(inArray(users.id, createdUserIds));
   }
@@ -422,5 +438,175 @@ describe("DELETE /api/admin/safe-places/:id", () => {
     mockUser = { id: user, isAdmin: false };
     const res = await request(app).delete(`/api/admin/safe-places/${p}`);
     expect(res.status).toBe(403);
+  });
+});
+
+describe("POST /api/admin/safe-places/osm-search (SP-2)", () => {
+  const body = { city: "Warszawa", category: "cafe" };
+
+  it("admin → 200 with the Overpass candidates", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+    overpassMock.mockResolvedValueOnce([
+      {
+        osmId: "node/1",
+        name: "Kawiarnia",
+        category: "cafe",
+        address: "Marszałkowska 10",
+        latitude: 52.23,
+        longitude: 21.01,
+      },
+    ]);
+    const res = await request(app)
+      .post("/api/admin/safe-places/osm-search")
+      .send(body);
+    expect(res.status).toBe(200);
+    expect(res.body.candidates).toHaveLength(1);
+    expect(res.body.candidates[0].osmId).toBe("node/1");
+    expect(overpassMock).toHaveBeenCalledWith("Warszawa", "cafe");
+  });
+
+  it("Overpass failure → 502 (never a 500 stack leak)", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+    overpassMock.mockRejectedValueOnce(
+      new OverpassError("overpass_status_429"),
+    );
+    const res = await request(app)
+      .post("/api/admin/safe-places/osm-search")
+      .send(body);
+    expect(res.status).toBe(502);
+  });
+
+  it("non-admin → 403; missing city / bad category → 400; rate-limited → 429", async () => {
+    const user = await seedUser();
+    mockUser = { id: user, isAdmin: false };
+    expect(
+      (await request(app).post("/api/admin/safe-places/osm-search").send(body))
+        .status,
+    ).toBe(403);
+
+    mockUser = { id: user, isAdmin: true };
+    expect(
+      (
+        await request(app)
+          .post("/api/admin/safe-places/osm-search")
+          .send({ category: "cafe" })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(app)
+          .post("/api/admin/safe-places/osm-search")
+          .send({ city: "X", category: "gay" })
+      ).status,
+    ).toBe(400);
+
+    mutationRl.mockResolvedValueOnce({ allowed: false, retryAfter: 60 });
+    expect(
+      (await request(app).post("/api/admin/safe-places/osm-search").send(body))
+        .status,
+    ).toBe(429);
+  });
+});
+
+describe("POST /api/admin/safe-places/bulk (SP-2)", () => {
+  const item = (osmId: string, over = {}) => ({
+    name: "Miejsce",
+    category: "cafe",
+    city: "Warszawa",
+    latitude: 52.2,
+    longitude: 21.0,
+    osmId,
+    ...over,
+  });
+
+  it("admin → creates all + audits IDs-only", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+    const res = await request(app)
+      .post("/api/admin/safe-places/bulk")
+      .send([item("node/10"), item("node/11")]);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ created: 2, skipped: 0 });
+
+    const rows = await db
+      .select()
+      .from(safePlaces)
+      .where(eq(safePlaces.createdById, admin));
+    expect(rows).toHaveLength(2);
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(inArray(auditLog.actorId, [admin]));
+    const created = audits.filter((a) => a.action === "safe_place.created");
+    expect(created).toHaveLength(2);
+    expect(created.every((a) => a.metadata === null)).toBe(true);
+  });
+
+  it("dedupes an already-imported osmId (skipped, one DB row)", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+    await request(app)
+      .post("/api/admin/safe-places/bulk")
+      .send([item("node/20")]);
+    const res = await request(app)
+      .post("/api/admin/safe-places/bulk")
+      .send([item("node/20", { name: "Inna nazwa" })]);
+    expect(res.body).toEqual({ created: 0, skipped: 1 });
+
+    const rows = await db
+      .select()
+      .from(safePlaces)
+      .where(eq(safePlaces.osmId, "node/20"));
+    expect(rows).toHaveLength(1);
+  });
+
+  it("drops within-request duplicate osmIds", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+    const res = await request(app)
+      .post("/api/admin/safe-places/bulk")
+      .send([item("node/30"), item("node/30")]);
+    expect(res.body).toEqual({ created: 1, skipped: 1 });
+  });
+
+  it("rejects bad items: bad category / one-sided coord / bad osmId / empty → 400", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+    const bad: object[] = [
+      [{ name: "X", category: "gay" }],
+      [{ name: "X", category: "cafe", latitude: 52.2 }], // one-sided coord
+      [{ name: "X", category: "cafe", osmId: "not-an-osm-id" }],
+      [], // empty array
+    ];
+    for (const b of bad) {
+      const res = await request(app)
+        .post("/api/admin/safe-places/bulk")
+        .send(b);
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("non-admin → 403; rate-limited → 429", async () => {
+    const user = await seedUser();
+    mockUser = { id: user, isAdmin: false };
+    expect(
+      (
+        await request(app)
+          .post("/api/admin/safe-places/bulk")
+          .send([item("node/40")])
+      ).status,
+    ).toBe(403);
+
+    mockUser = { id: user, isAdmin: true };
+    mutationRl.mockResolvedValueOnce({ allowed: false, retryAfter: 60 });
+    expect(
+      (
+        await request(app)
+          .post("/api/admin/safe-places/bulk")
+          .send([item("node/41")])
+      ).status,
+    ).toBe(429);
   });
 });

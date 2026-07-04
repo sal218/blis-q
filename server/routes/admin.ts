@@ -23,7 +23,10 @@ import {
   safePlacesListQuerySchema,
   createSafePlaceSchema,
   updateSafePlaceSchema,
+  osmSearchSchema,
+  bulkCreateSafePlacesSchema,
 } from "../validation";
+import { searchOverpass, OverpassError } from "../overpass";
 import {
   checkAdminLoginRateLimit,
   checkAdminMutationRateLimit,
@@ -104,6 +107,10 @@ export function registerAdminRoutes(app: Express): void {
   // this slice — admin-web CRUD page is deferred.
   app.get("/api/admin/safe-places", ...admin, handleListSafePlaces);
   app.post("/api/admin/safe-places", ...admin, handleCreateSafePlace);
+  // OSM import (SP-2) — search + bulk. Registered before "/:id" isn't required
+  // (these are POSTs to distinct sub-paths), but keep them grouped.
+  app.post("/api/admin/safe-places/osm-search", ...admin, handleOsmSearch);
+  app.post("/api/admin/safe-places/bulk", ...admin, handleBulkCreateSafePlaces);
   app.patch("/api/admin/safe-places/:id", ...admin, handleUpdateSafePlace);
   app.delete("/api/admin/safe-places/:id", ...admin, handleDeleteSafePlace);
 }
@@ -828,6 +835,84 @@ async function handleDeleteSafePlace(
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("[DELETE /api/admin/safe-places/:id]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// OSM search (SP-2). Queries Overpass server-side for venues in a city matching
+// a category → normalized candidates the admin curates before any write. Only a
+// city + category leaves us (no user PII); the Overpass raw body is never logged.
+async function handleOsmSearch(req: Request, res: Response): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = osmSearchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    try {
+      const candidates = await searchOverpass(
+        parsed.data.city,
+        parsed.data.category,
+      );
+      return res.status(200).json({ candidates });
+    } catch (err) {
+      if (err instanceof OverpassError) {
+        // Log only the (non-sensitive) code; never the query or the raw body.
+        console.error("[POST /api/admin/safe-places/osm-search]", {
+          overpass: err.message,
+        });
+        return res
+          .status(502)
+          .json({ error: "OpenStreetMap search is unavailable" });
+      }
+      throw err;
+    }
+  } catch (err) {
+    console.error("[POST /api/admin/safe-places/osm-search]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// Bulk-create curated safe places (SP-2). Transactional + audited (IDs-only);
+// dedupes on osm_id. Returns { created, skipped }.
+async function handleBulkCreateSafePlaces(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = bulkCreateSafePlacesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const result = await storage.bulkCreateSafePlaces(
+      parsed.data,
+      userId,
+      req.ip ?? null,
+    );
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error("[POST /api/admin/safe-places/bulk]", {
       code: safeErrorCode(err),
     });
     return res.status(500).json({ error: "Internal Server Error" });

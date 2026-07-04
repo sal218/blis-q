@@ -441,14 +441,15 @@ Use this before launch and before any beta testing begins.
 
 ## 8. Key Contacts and Authorities
 
-| Entity                                | Role                             | Notes                                                                    |
-| ------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ |
-| UODO (Urząd Ochrony Danych Osobowych) | Polish supervisory authority     | Must be notified of breaches within 72 hours. May need registration.     |
-| EDPB (European Data Protection Board) | EU-level guidance body           | Publishes guidance on Article 9, DPIAs, special category data processing |
-| Supabase DPA                          | Available from Supabase support  | Required — document receipt                                              |
-| Cloudflare DPA                        | Available at cloudflare.com/gdpr | Required for R2 usage                                                    |
-| Upstash DPA                           | Available from Upstash support   | Required for Redis usage                                                 |
-| Fly.io DPA                            | Available at fly.io/legal        | Required for API server hosting                                          |
+| Entity                                | Role                             | Notes                                                                                                                                                                                           |
+| ------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UODO (Urząd Ochrony Danych Osobowych) | Polish supervisory authority     | Must be notified of breaches within 72 hours. May need registration.                                                                                                                            |
+| EDPB (European Data Protection Board) | EU-level guidance body           | Publishes guidance on Article 9, DPIAs, special category data processing                                                                                                                        |
+| Supabase DPA                          | Available from Supabase support  | Required — document receipt                                                                                                                                                                     |
+| Cloudflare DPA                        | Available at cloudflare.com/gdpr | Required for R2 usage                                                                                                                                                                           |
+| Upstash DPA                           | Available from Upstash support   | Required for Redis usage                                                                                                                                                                        |
+| Fly.io DPA                            | Available at fly.io/legal        | Required for API server hosting                                                                                                                                                                 |
+| OpenStreetMap / Overpass              | Admin-only venue lookup (SP-2)   | Sub-processor for admin "Import from OSM": only a **city + category** leaves us (venue data, **no user PII**); server-side, raw response never logged. Confirm terms/attribution before launch. |
 
 ---
 

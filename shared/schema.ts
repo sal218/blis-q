@@ -28,8 +28,10 @@ import {
   doublePrecision,
   customType,
   index,
+  uniqueIndex,
   unique,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // Postgres `inet` type for IP addresses (consent_records, audit_log). Drizzle
 // has no built-in inet helper; this maps the column type faithfully.
@@ -275,23 +277,38 @@ export const messages = pgTable(
 // Coordinates here describe a public venue, NOT a user's location — this is the
 // one place coordinates are persisted (COMPLIANCE §5.8). createdById is the
 // curating admin.
-export const safePlaces = pgTable("safe_places", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  category: text("category").notNull(),
-  description: text("description"),
-  address: text("address"),
-  city: text("city"),
-  latitude: doublePrecision("latitude"),
-  longitude: doublePrecision("longitude"),
-  createdById: uuid("created_by_id").references(() => users.id, {
-    onDelete: "set null",
+export const safePlaces = pgTable(
+  "safe_places",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    description: text("description"),
+    address: text("address"),
+    city: text("city"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    // OpenStreetMap element id ("node/123" | "way/…" | "relation/…") when this
+    // venue was imported from OSM (slice SP-2). Server-internal dedupe key — NOT
+    // on the public SafePlaceDTO. Null for manual entries.
+    osmId: text("osm_id"),
+    createdById: uuid("created_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => ({
+    // A given OSM venue is imported at most once. PARTIAL unique (only where
+    // osm_id is set) so the many manual/null rows don't collide. The bulk insert
+    // targets this predicate with onConflictDoNothing.
+    osmIdUnique: uniqueIndex("idx_safe_places_osm_id")
+      .on(t.osmId)
+      .where(sql`${t.osmId} is not null`),
   }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+);
 
 // ── reports ───────────────────────────────────────────────────────────────────
 // Moderation queue. Reports are RETAINED for moderation audit; on erasure the

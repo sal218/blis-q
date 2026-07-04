@@ -51,6 +51,16 @@ describe("SafePlacesList", () => {
     render(<SafePlacesList />);
     expect(screen.getByText("Miejsce Alpha")).toBeTruthy();
     expect(screen.getByText(strings.safePlaces.attribution)).toBeTruthy();
+    // ODbL: the exact "© OpenStreetMap contributors" string must render.
+    expect(strings.safePlaces.attribution).toContain(
+      "© OpenStreetMap contributors",
+    );
+  });
+
+  it("shows the curation/safety-framing disclaimer up front", () => {
+    spMock.mockReturnValue(state({ items: [] }));
+    render(<SafePlacesList />);
+    expect(screen.getByText(strings.safePlaces.disclaimer)).toBeTruthy();
   });
 
   it("renders the filter chip row: 'Wszystkie' + category labels", () => {

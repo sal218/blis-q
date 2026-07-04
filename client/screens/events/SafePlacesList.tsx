@@ -112,6 +112,8 @@ export function SafePlacesList() {
         ))}
       </ScrollView>
 
+      <Text style={styles.disclaimer}>{strings.safePlaces.disclaimer}</Text>
+
       <FlatList
         testID="safe-places-list"
         style={styles.list}
@@ -181,6 +183,13 @@ function createStyles(colors: ThemeColors) {
       fontSize: 16,
     },
     filterScroll: { flexGrow: 0 },
+    disclaimer: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 16,
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.xs,
+    },
     filterRow: {
       flexDirection: "row",
       alignItems: "center",

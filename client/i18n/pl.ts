@@ -207,8 +207,13 @@ export const pl = {
     emptySearch: "Brak wyników dla tego wyszukiwania.", // "No results for this search."
     loadError: "Nie udało się załadować miejsc.", // "Couldn't load places."
     retry: "Spróbuj ponownie", // "Try again"
-    // ODbL licence requirement — shown wherever OSM-sourced data renders.
-    attribution: "Dane miejsc częściowo z © OpenStreetMap",
+    // Curation framing (COMPLIANCE §5.8 / P-40): present as team-curated
+    // LGBT-friendly places, NOT an absolute safety guarantee.
+    disclaimer:
+      "Miejsca przyjazne osobom LGBT+ wybrane przez nasz zespół — to nie jest gwarancja bezpieczeństwa.", // "LGBT-friendly places curated by our team — not a guarantee of safety."
+    // ODbL licence requirement — must render the exact "© OpenStreetMap
+    // contributors" string wherever OSM-sourced data is shown.
+    attribution: "Dane miejsc częściowo z © OpenStreetMap contributors",
     // Category labels — keys MUST match SAFE_PLACE_CATEGORIES (shared/types.ts).
     categories: {
       cafe: "Kawiarnia", // "Café"

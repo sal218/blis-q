@@ -56,7 +56,7 @@ describe("useSafePlaces", () => {
     expect(listMock).toHaveBeenCalledWith({
       page: 1,
       category: undefined,
-      city: undefined,
+      search: undefined,
     });
   });
 
@@ -140,7 +140,7 @@ describe("useSafePlaces", () => {
     expect(listMock).toHaveBeenLastCalledWith({
       page: 2,
       category: undefined,
-      city: undefined,
+      search: undefined,
     });
   });
 

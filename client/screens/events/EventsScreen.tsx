@@ -5,8 +5,8 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Bookmark } from "@/components/icons/PhosphorIcons";
 import { SegmentedControl } from "@/components/SegmentedControl";
-import { ComingSoon } from "@/components/ComingSoon";
 import { EventsList } from "@/screens/events/EventsList";
+import { SafePlacesList } from "@/screens/events/SafePlacesList";
 import { CommunitiesSection } from "@/screens/communities/CommunitiesSection";
 import { strings } from "@/i18n";
 import { spacing, type ThemeColors } from "@/constants/theme";
@@ -60,9 +60,7 @@ export function EventsScreen({ navigation }: Props) {
             onOpenEvent={(id) => navigation.navigate("EventDetail", { id })}
           />
         )}
-        {segment === SEGMENT_SAFE_PLACES && (
-          <ComingSoon message={strings.events.safePlacesComingSoon} />
-        )}
+        {segment === SEGMENT_SAFE_PLACES && <SafePlacesList />}
         {segment === SEGMENT_COMMUNITIES && (
           <CommunitiesSection
             onOpenCommunity={(id) =>

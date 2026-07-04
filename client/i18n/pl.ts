@@ -198,6 +198,31 @@ export const pl = {
     createCommunityGone: "Tej społeczności już nie ma.", // "This community no longer exists."
   },
 
+  // Safe Places — the mobile list (epic P-40 slice SP-3).
+  safePlaces: {
+    searchPlaceholder: "Szukaj po mieście", // "Search by city"
+    filterAll: "Wszystkie", // "All" — the category filter chip that clears
+    empty: "Nie ma jeszcze żadnych bezpiecznych miejsc.", // "No safe places yet."
+    emptyCategory: "Brak miejsc w tej kategorii.", // "No places in this category."
+    emptySearch: "Brak wyników dla tego wyszukiwania.", // "No results for this search."
+    loadError: "Nie udało się załadować miejsc.", // "Couldn't load places."
+    retry: "Spróbuj ponownie", // "Try again"
+    // ODbL licence requirement — shown wherever OSM-sourced data renders.
+    attribution: "Dane miejsc częściowo z © OpenStreetMap",
+    // Category labels — keys MUST match SAFE_PLACE_CATEGORIES (shared/types.ts).
+    categories: {
+      cafe: "Kawiarnia", // "Café"
+      club: "Klub", // "Club"
+      bar: "Bar", // "Bar"
+      ngo: "Organizacja", // "NGO / organisation"
+      health: "Zdrowie", // "Health"
+      community_center: "Centrum społeczności", // "Community centre"
+      education: "Edukacja", // "Education"
+      service: "Usługa", // "Service"
+      other: "Inne", // "Other"
+    },
+  },
+
   profile: {
     title: "Profil",
     appearance: "Wygląd",

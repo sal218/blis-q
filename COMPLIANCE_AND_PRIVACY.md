@@ -363,6 +363,9 @@ The safe place discovery feature (find LGBT-friendly cafés, clubs, NGOs, suppor
 
 - The `safe_places` table stores curated venue data (name, address, category, coordinates). This is not user-generated per-row — it is admin/editor-curated.
 - User interaction with safe places (views, saves, check-ins) may be collected only with explicit consent and must be deletable as part of the account erasure procedure.
+- **OSM import is a candidate pool, not a safe list (SP-2, non-negotiable):** the admin "Import from OpenStreetMap" tool returns **generic venue types** (cafe/bar/etc.) — OSM does **not** verify a place is LGBT-safe. A human curator (client + team) **must vet every imported venue** and delete unfit ones; nothing user-facing may be auto-published. For a vulnerable audience, a wrongly-"safe" place is a safety risk — the human vetting is the safeguard, not the import. Only a **city + category** is sent to Overpass (no user PII); the raw response is never logged.
+- **In-app framing:** present these as "LGBT-friendly places our team curates" (with appropriate care), **not an absolute safety guarantee**. The client (controller) owns the vetting standard and the framing/liability decision.
+- **OpenStreetMap attribution (ODbL):** OSM data is free but its licence **requires attribution** — display "© OpenStreetMap contributors" wherever OSM-sourced venue/map data is shown (the mobile list + map). Free, but mandatory.
 
 **Map library:**
 

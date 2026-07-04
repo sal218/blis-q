@@ -471,6 +471,16 @@ The client (Pretty Good Company) must complete a Data Protection Impact Assessme
 
 The R2 bucket must be created with EU jurisdiction selected at creation time. This cannot be changed after the fact. See `TRANSFER_CONTEXT_EVENTAB_TO_BLISKO.md` Section 3.1.
 
+### R2 Browser Uploads — CORS Policy + Disable SDK Checksums (SP-6a)
+
+Direct browser→R2 uploads via a presigned PUT (the admin image upload) need **two** things set correctly, or the upload fails with an opaque error:
+
+1. **A CORS policy on the bucket.** R2 buckets have none by default, so the preflight `OPTIONS` fails ("No 'Access-Control-Allow-Origin' header"). Add a policy in the R2 dashboard (Settings → CORS) allowing the admin origin, `PUT`, and the `content-type` header — for each bucket that receives browser uploads:
+   ```json
+   [{ "AllowedOrigins": ["http://localhost:5173", "<prod-admin-origin>"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
+   ```
+2. **Disable the AWS SDK's auto checksum.** SDK v3 (≥3.729) defaults to `requestChecksumCalculation: "WHEN_SUPPORTED"`, which bakes a CRC32 of an *empty* body into the presigned URL — the browser then uploads the real bytes and R2 rejects the mismatch. `server/objectStorage.ts` sets the S3 client to `"WHEN_REQUIRED"`. Do not remove it.
+
 ### Profile Cache Must Be Invalidated After User Mutations
 
 The two-tier auth cache (Redis profile cache, 60s TTL) means stale identity data persists for up to 60 seconds if not explicitly invalidated. Call `invalidateProfileCache(userId)` in every storage method that writes to the `users` table. The account deletion endpoint must also call this before returning — a deleted account that stays cached for 60 seconds is a security issue.

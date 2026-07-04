@@ -74,6 +74,11 @@ function getClient(): S3Client {
     region: "auto", // R2 ignores region; "auto" is the documented value
     endpoint,
     credentials: { accessKeyId, secretAccessKey },
+    // AWS SDK v3 (≥3.729) defaults to WHEN_SUPPORTED, which bakes an auto CRC32
+    // checksum (of an EMPTY body) into presigned PUT URLs — the browser then
+    // uploads the real bytes and R2 rejects the mismatch. R2 doesn't need the
+    // SDK's flexible checksums, so require them only WHEN_REQUIRED.
+    requestChecksumCalculation: "WHEN_REQUIRED",
   });
   return client;
 }

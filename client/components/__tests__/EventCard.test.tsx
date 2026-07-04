@@ -67,4 +67,34 @@ describe("EventCard", () => {
     render(<EventCard event={event} onPress={jest.fn()} />); // category null
     expect(screen.queryByText(strings.events.categories.support)).toBeNull();
   });
+
+  it("renders a save bookmark when onToggleSave is provided; tap calls it", () => {
+    const onToggleSave = jest.fn();
+    render(
+      <EventCard
+        event={event}
+        onPress={jest.fn()}
+        onToggleSave={onToggleSave}
+      />,
+    ); // event.saved is false → the "Zapisz" a11y label
+    fireEvent.press(screen.getByLabelText(strings.events.saveAction));
+    expect(onToggleSave).toHaveBeenCalledWith(event);
+  });
+
+  it("shows the saved (Zapisano) bookmark when event.saved", () => {
+    render(
+      <EventCard
+        event={{ ...event, saved: true }}
+        onPress={jest.fn()}
+        onToggleSave={jest.fn()}
+      />,
+    );
+    expect(screen.getByLabelText(strings.events.savedAction)).toBeTruthy();
+  });
+
+  it("renders no bookmark without onToggleSave (Home rail / saved list)", () => {
+    render(<EventCard event={event} onPress={jest.fn()} />);
+    expect(screen.queryByLabelText(strings.events.saveAction)).toBeNull();
+    expect(screen.queryByLabelText(strings.events.savedAction)).toBeNull();
+  });
 });

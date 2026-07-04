@@ -1,4 +1,8 @@
-jest.mock("@/lib/api/events", () => ({ listEvents: jest.fn() }));
+jest.mock("@/lib/api/events", () => ({
+  listEvents: jest.fn(),
+  saveEvent: jest.fn(),
+  unsaveEvent: jest.fn(),
+}));
 
 // Capture the focus callback so a test can simulate returning to the feed.
 let mockFocusCb: (() => void) | undefined;
@@ -15,10 +19,12 @@ jest.mock("@react-navigation/native", () => {
 
 import { renderHook, act, waitFor } from "@testing-library/react-native";
 import { useEvents } from "@/hooks/useEvents";
-import { listEvents } from "@/lib/api/events";
+import { listEvents, saveEvent, unsaveEvent } from "@/lib/api/events";
 import type { EventDTO } from "@shared/types";
 
 const listMock = listEvents as unknown as jest.Mock;
+const saveMock = saveEvent as unknown as jest.Mock;
+const unsaveMock = unsaveEvent as unknown as jest.Mock;
 
 const ev = (id: string): EventDTO => ({
   id,
@@ -48,6 +54,8 @@ const page = (events: EventDTO[], nextCursor: string | null) => ({
 
 beforeEach(() => {
   listMock.mockReset();
+  saveMock.mockReset();
+  unsaveMock.mockReset();
   mockFocusCb = undefined;
 });
 
@@ -234,5 +242,59 @@ describe("useEvents", () => {
       result.current.setCategory(null); // already null
     });
     expect(listMock.mock.calls.length).toBe(before);
+  });
+
+  // ── card save toggle (feed bookmark) ────────────────────────────────────────
+
+  it("toggleSave optimistically flips saved and calls saveEvent", async () => {
+    listMock.mockResolvedValue(page([ev("e1")], null)); // saved:false
+    saveMock.mockResolvedValue({ ok: true, data: { ok: true } });
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.toggleSave("e1");
+    });
+    expect(saveMock).toHaveBeenCalledWith("e1");
+    expect(unsaveMock).not.toHaveBeenCalled();
+    expect(result.current.events[0].saved).toBe(true);
+  });
+
+  it("toggleSave on an already-saved event calls unsaveEvent", async () => {
+    listMock.mockResolvedValue(page([{ ...ev("e1"), saved: true }], null));
+    unsaveMock.mockResolvedValue({ ok: true, data: { ok: true } });
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.toggleSave("e1");
+    });
+    expect(unsaveMock).toHaveBeenCalledWith("e1");
+    expect(result.current.events[0].saved).toBe(false);
+  });
+
+  it("toggleSave reverts the flip when the request fails", async () => {
+    listMock.mockResolvedValue(page([ev("e1")], null)); // saved:false
+    saveMock.mockResolvedValue({ ok: false, error: { kind: "server" } });
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.toggleSave("e1");
+    });
+    expect(result.current.events[0].saved).toBe(false); // reverted
+  });
+
+  it("toggleSave only touches the targeted card, not its siblings", async () => {
+    listMock.mockResolvedValue(page([ev("e1"), ev("e2")], null));
+    saveMock.mockResolvedValue({ ok: true, data: { ok: true } });
+    const { result } = renderHook(() => useEvents());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.toggleSave("e2");
+    });
+    expect(result.current.events[0].saved).toBe(false); // e1 untouched
+    expect(result.current.events[1].saved).toBe(true); // e2 flipped
   });
 });

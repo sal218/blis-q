@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { listEvents } from "@/lib/api/events";
+import { listEvents, saveEvent, unsaveEvent } from "@/lib/api/events";
 import { eventsApiErrorMessage } from "@/lib/messages";
 import type { EventDTO, EventCategory } from "@shared/types";
 
@@ -27,6 +27,7 @@ export type UseEvents = {
   loadingMore: boolean;
   category: EventCategory | null; // active feed filter (null = all)
   setCategory: (category: EventCategory | null) => void;
+  toggleSave: (id: string) => void; // save/unsave a feed card (optimistic)
   refresh: () => void;
   loadMore: () => void;
   retry: () => void;
@@ -43,6 +44,9 @@ export function useEvents(): UseEvents {
 
   const requestSeq = useRef(0);
   const loadedOnce = useRef(false);
+  // Per-id in-flight guard for the card save toggle, so a rapid double-tap on one
+  // card's bookmark can't dispatch two save/unsave calls (other cards unaffected).
+  const savingIds = useRef<Set<string>>(new Set());
   // The active category is read from a ref inside fetchPage so focus-refetch and
   // load-more always use the CURRENT filter (setCategory updates it synchronously
   // before it triggers the reload — a re-render alone would lag the closure).
@@ -112,6 +116,38 @@ export function useEvents(): UseEvents {
     [fetchPage],
   );
 
+  // Toggle a card's saved/bookmark state from the feed. OPTIMISTIC: flip `saved`
+  // on that one item immediately, call save/unsave, and revert just that item on
+  // failure. Per-id guard serialises rapid taps on the same card. The event stays
+  // in the feed either way (the feed isn't saved-filtered); it (dis)appears on the
+  // Saved-events screen, which reads GET /events/saved on focus.
+  const toggleSave = useCallback(
+    async (id: string) => {
+      if (savingIds.current.has(id)) return;
+      const target = events.find((e) => e.id === id);
+      if (!target) return;
+      const prevSaved = target.saved;
+      savingIds.current.add(id);
+      setEvents((prev) =>
+        prev.map((e) => (e.id === id ? { ...e, saved: !prevSaved } : e)),
+      );
+      let ok = false;
+      try {
+        const result = prevSaved ? await unsaveEvent(id) : await saveEvent(id);
+        ok = result.ok;
+      } catch {
+        ok = false;
+      }
+      savingIds.current.delete(id);
+      if (!ok) {
+        setEvents((prev) =>
+          prev.map((e) => (e.id === id ? { ...e, saved: prevSaved } : e)),
+        );
+      }
+    },
+    [events],
+  );
+
   const loadMore = useCallback(() => {
     // Block while a refresh/replace is active or there is no next page.
     if (
@@ -133,6 +169,7 @@ export function useEvents(): UseEvents {
     loadingMore,
     category,
     setCategory,
+    toggleSave,
     refresh,
     loadMore,
     retry,

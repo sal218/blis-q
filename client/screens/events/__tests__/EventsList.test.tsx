@@ -38,6 +38,7 @@ function state(over: Partial<ReturnType<typeof useEvents>> = {}) {
     loadingMore: false,
     category: null,
     setCategory: jest.fn(),
+    toggleSave: jest.fn(),
     refresh: jest.fn(),
     loadMore: jest.fn(),
     retry: jest.fn(),
@@ -58,6 +59,16 @@ describe("EventsList", () => {
     expect(screen.getByText("Pride Meetup")).toBeTruthy();
     fireEvent.press(screen.getByLabelText("Pride Meetup"));
     expect(onOpenEvent).toHaveBeenCalledWith("e1");
+  });
+
+  it("tapping a card's bookmark toggles save via the hook", () => {
+    const toggleSave = jest.fn();
+    eventsMock.mockReturnValue(
+      state({ events: [ev("e1", "Pride Meetup", "Warszawa")], toggleSave }),
+    );
+    render(<EventsList onOpenEvent={jest.fn()} />);
+    fireEvent.press(screen.getByLabelText(strings.events.saveAction));
+    expect(toggleSave).toHaveBeenCalledWith("e1");
   });
 
   it("shows the empty state when there are no events", () => {

@@ -39,6 +39,7 @@ export function EventsList({ onOpenEvent }: Props) {
     loadingMore,
     category,
     setCategory,
+    toggleSave,
     refresh,
     loadMore,
     retry,
@@ -136,7 +137,11 @@ export function EventsList({ onOpenEvent }: Props) {
         keyExtractor={(e) => e.id}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
-          <EventCard event={item} onPress={onOpenEvent} />
+          <EventCard
+            event={item}
+            onPress={onOpenEvent}
+            onToggleSave={(e) => toggleSave(e.id)}
+          />
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         refreshControl={

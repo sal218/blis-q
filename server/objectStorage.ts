@@ -142,6 +142,10 @@ export async function createUploadUrl(
   });
   const uploadUrl = await getSignedUrl(getClient(), command, {
     expiresIn: UPLOAD_URL_TTL_SECONDS,
+    // BIND the content type into the signature — otherwise the presigned PUT
+    // only signs `host` and the client could upload any type (SW-1). With this,
+    // R2 rejects a PUT whose Content-Type header doesn't match what we signed.
+    signableHeaders: new Set(["content-type"]),
   });
   await writeClaim(assetType, key, userId);
   return { uploadUrl, key };
@@ -149,10 +153,18 @@ export async function createUploadUrl(
 
 /**
  * Confirm an upload belongs to the claiming user AND that the STORED object is a
- * valid image (allowlisted content type, ≤ 5 MB) — SW-1. On any failure the
- * object is deleted and the claim cleared; returns false. On success the claim
- * is cleared and the object is kept. Re-checking the stored object (not just the
- * claim) defends against a client that PUT something other than what it declared.
+ * valid image (allowlisted content type, ≤ 5 MB) — SW-1. Re-checking the stored
+ * object (not just the claim) defends against a client that PUT something other
+ * than what it declared.
+ *
+ * Cleanup semantics:
+ * - A VERIFIED-owner upload that fails the HEAD check (wrong type/size) is
+ *   deleted and its claim cleared → false.
+ * - A wrong / absent claim returns false WITHOUT touching the object — we must
+ *   never let a non-owner delete or clear someone else's pending upload.
+ * - Objects left by abandoned/expired claims (and this no-op path) are swept by
+ *   a deferred R2 lifecycle job (tracked, P-40), not here.
+ * On success the claim is cleared and the object kept.
  */
 export async function confirmUpload(
   assetType: AssetType,

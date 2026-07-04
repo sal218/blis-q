@@ -654,13 +654,11 @@ describe("Safe-place images (SP-6a)", () => {
     confirmUploadMock.mockResolvedValueOnce(false);
     mockUser = { id: admin, isAdmin: true };
 
-    const res = await request(app)
-      .post("/api/admin/safe-places")
-      .send({
-        name: "Bad Image Place",
-        category: "cafe",
-        imageKey: randomUUID(),
-      });
+    const res = await request(app).post("/api/admin/safe-places").send({
+      name: "Bad Image Place",
+      category: "cafe",
+      imageKey: randomUUID(),
+    });
     expect(res.status).toBe(400);
 
     const rows = await db

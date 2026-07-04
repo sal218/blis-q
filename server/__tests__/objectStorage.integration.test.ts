@@ -27,16 +27,19 @@ import {
   HeadObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const putCtor = PutObjectCommand as unknown as jest.Mock;
 const headCtor = HeadObjectCommand as unknown as jest.Mock;
 const deleteCtor = DeleteObjectCommand as unknown as jest.Mock;
+const getSignedUrlMock = getSignedUrl as unknown as jest.Mock;
 
 beforeEach(() => {
   sendMock.mockReset();
   putCtor.mockClear();
   headCtor.mockClear();
   deleteCtor.mockClear();
+  getSignedUrlMock.mockClear();
 });
 
 describe("createUploadUrl (SW-1: content-type allowlist + signed PUT)", () => {
@@ -62,15 +65,22 @@ describe("createUploadUrl (SW-1: content-type allowlist + signed PUT)", () => {
         ContentType: "image/png",
       }),
     );
+    // SW-1: the content type must be BOUND into the signature (not just set on
+    // the command), so R2 rejects a PUT with a mismatched Content-Type.
+    const opts = getSignedUrlMock.mock.calls[0][2];
+    expect([...opts.signableHeaders]).toContain("content-type");
   });
 });
 
 describe("confirmUpload (SW-1: claim + HEAD validation)", () => {
-  it("returns false for a wrong / missing claimant and never HEADs", async () => {
+  it("returns false for a wrong / missing claimant and never HEADs or deletes", async () => {
     const { key } = await createUploadUrl("safeplace", "owner", "image/jpeg");
     const ok = await confirmUpload("safeplace", key, "someone-else");
     expect(ok).toBe(false);
-    expect(sendMock).not.toHaveBeenCalled(); // no HEAD/Delete for a bad claim
+    // Intentionally does NOT delete or clear: a non-owner must never be able to
+    // remove someone else's pending upload. Orphans from abandoned/expired
+    // claims are swept by a deferred R2 lifecycle job (P-40).
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   it("accepts a valid claim + a valid image object", async () => {

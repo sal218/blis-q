@@ -6,28 +6,24 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from "react-native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
-import { EventCard } from "@/components/EventCard";
-import { useSavedEvents } from "@/hooks/useSavedEvents";
+import { SafePlaceCard } from "@/components/SafePlaceCard";
+import { useSavedSafePlaces } from "@/hooks/useSavedSafePlaces";
 import { strings } from "@/i18n";
 import { spacing, type ThemeColors } from "@/constants/theme";
-import type { EventsStackParamList } from "@/navigation/AppTabs";
 
-// The Saved-events list (reached from the Bookmark button on the Events tab).
-// Shows the caller's saved upcoming events (GET /events/saved), reusing EventCard.
-// Refetch-on-focus via useSavedEvents, so un-saving on the detail screen and
-// returning here drops the row without a spinner. Tap a card → the detail screen.
+// The "Bezpieczne miejsca" tab of the Saved screen: the caller's saved places
+// (GET /safe-places/saved), reusing SafePlaceCard. Refetch-on-focus via
+// useSavedSafePlaces. Every row is saved, so the card's bookmark unsaves and
+// optimistically removes the row. No detail nav (no safe-place detail screen).
 
-type Props = NativeStackScreenProps<EventsStackParamList, "SavedEvents">;
-
-export function SavedEventsScreen({ navigation }: Props) {
+export function SavedSafePlacesList() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { events, status, retry } = useSavedEvents();
+  const { places, status, toggleSave, retry } = useSavedSafePlaces();
 
-  if (status === "loading" && events.length === 0) {
+  if (status === "loading" && places.length === 0) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator color={colors.primary} />
@@ -35,12 +31,14 @@ export function SavedEventsScreen({ navigation }: Props) {
     );
   }
 
-  if (status === "error" && events.length === 0) {
+  if (status === "error" && places.length === 0) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{strings.events.savedLoadError}</Text>
+        <Text style={styles.errorText}>
+          {strings.safePlaces.savedLoadError}
+        </Text>
         <View style={styles.fullWidth}>
-          <PrimaryButton label={strings.events.retry} onPress={retry} />
+          <PrimaryButton label={strings.safePlaces.retry} onPress={retry} />
         </View>
       </View>
     );
@@ -48,21 +46,18 @@ export function SavedEventsScreen({ navigation }: Props) {
 
   return (
     <FlatList
-      testID="saved-events-list"
+      testID="saved-safe-places-list"
       style={styles.root}
       showsVerticalScrollIndicator={false}
-      data={events}
-      keyExtractor={(e) => e.id}
+      data={places}
+      keyExtractor={(p) => p.id}
       contentContainerStyle={styles.listContent}
       renderItem={({ item }) => (
-        <EventCard
-          event={item}
-          onPress={(id) => navigation.navigate("EventDetail", { id })}
-        />
+        <SafePlaceCard place={item} onToggleSave={toggleSave} />
       )}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       ListEmptyComponent={
-        <Text style={styles.emptyText}>{strings.events.savedEmpty}</Text>
+        <Text style={styles.emptyText}>{strings.safePlaces.savedEmpty}</Text>
       }
     />
   );
@@ -70,19 +65,14 @@ export function SavedEventsScreen({ navigation }: Props) {
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    root: {
-      flex: 1,
-      backgroundColor: "transparent",
-    },
+    root: { flex: 1, backgroundColor: "transparent" },
     centered: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
       padding: spacing.xl,
     },
-    fullWidth: {
-      alignSelf: "stretch",
-    },
+    fullWidth: { alignSelf: "stretch" },
     errorText: {
       color: colors.textMuted,
       fontSize: 15,
@@ -94,9 +84,7 @@ function createStyles(colors: ThemeColors) {
       paddingTop: spacing.md,
       paddingBottom: spacing.xl,
     },
-    separator: {
-      height: spacing.sm,
-    },
+    separator: { height: spacing.sm },
     emptyText: {
       color: colors.textMuted,
       fontSize: 15,

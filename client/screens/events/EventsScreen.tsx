@@ -41,9 +41,9 @@ export function EventsScreen({ navigation }: Props) {
         <Text style={styles.title}>{strings.events.title}</Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={strings.events.savedTitle}
+          accessibilityLabel={strings.saved.title}
           hitSlop={8}
-          onPress={() => navigation.navigate("SavedEvents")}
+          onPress={() => navigation.navigate("Saved")}
           style={({ pressed }) => [styles.savedBtn, pressed && styles.pressed]}
         >
           <Bookmark size={24} color={colors.primary} />

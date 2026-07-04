@@ -2,7 +2,12 @@
 jest.mock("@/lib/auth", () => ({ fetchWithAuth: jest.fn() }));
 
 import { fetchWithAuth } from "@/lib/auth";
-import { listSafePlaces } from "@/lib/api/safePlaces";
+import {
+  listSafePlaces,
+  listSavedSafePlaces,
+  saveSafePlace,
+  unsaveSafePlace,
+} from "@/lib/api/safePlaces";
 
 const fetchMock = fetchWithAuth as unknown as jest.Mock;
 
@@ -82,6 +87,49 @@ describe("listSafePlaces", () => {
     expect(await listSafePlaces({})).toEqual({
       ok: false,
       error: { kind: "network" },
+    });
+  });
+
+  it("listSavedSafePlaces → GET /safe-places/saved", async () => {
+    fetchMock.mockResolvedValue(res(200, [PLACE]));
+    expect(await listSavedSafePlaces()).toEqual({ ok: true, data: [PLACE] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "GET",
+      "/api/v1/safe-places/saved",
+      undefined,
+    );
+  });
+
+  it("saveSafePlace → POST /:id/save → { ok: true }", async () => {
+    fetchMock.mockResolvedValue(res(200, { ok: true }));
+    expect(await saveSafePlace("p1")).toEqual({ ok: true, data: { ok: true } });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/v1/safe-places/p1/save",
+      undefined,
+    );
+  });
+
+  it("unsaveSafePlace → DELETE /:id/save → { ok: true }", async () => {
+    fetchMock.mockResolvedValue(res(200, { ok: true }));
+    expect(await unsaveSafePlace("p1")).toEqual({
+      ok: true,
+      data: { ok: true },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "DELETE",
+      "/api/v1/safe-places/p1/save",
+      undefined,
+    );
+  });
+
+  it("saveSafePlace on a 404 (place vanished) → server error (reverts the toggle)", async () => {
+    // commonApiError has no notFound kind; a 404 falls through to `server`,
+    // which the optimistic toggle treats as failure → reverts the flip.
+    fetchMock.mockResolvedValue(res(404, {}));
+    expect(await saveSafePlace("p1")).toEqual({
+      ok: false,
+      error: { kind: "server" },
     });
   });
 });

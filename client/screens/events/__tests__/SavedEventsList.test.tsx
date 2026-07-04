@@ -1,7 +1,7 @@
 jest.mock("@/hooks/useSavedEvents", () => ({ useSavedEvents: jest.fn() }));
 
 import { render, screen, fireEvent } from "@testing-library/react-native";
-import { SavedEventsScreen } from "@/screens/events/SavedEventsScreen";
+import { SavedEventsList } from "@/screens/events/SavedEventsList";
 import { useSavedEvents } from "@/hooks/useSavedEvents";
 import { strings } from "@/i18n";
 import type { EventDTO } from "@shared/types";
@@ -29,32 +29,20 @@ const ev = (id: string, title: string): EventDTO => ({
   category: null,
 });
 
-function renderScreen() {
-  const navigation = { navigate: jest.fn() };
-  render(
-    <SavedEventsScreen
-      navigation={navigation as never}
-      route={{ key: "s", name: "SavedEvents", params: undefined } as never}
-    />,
-  );
-  return { navigation };
-}
-
 beforeEach(() => savedMock.mockReset());
 
-describe("SavedEventsScreen", () => {
+describe("SavedEventsList", () => {
   it("renders saved event cards and opens one on tap", () => {
     savedMock.mockReturnValue({
       events: [ev("e1", "Pride Meetup")],
       status: "ready",
       retry: jest.fn(),
     });
-    const { navigation } = renderScreen();
+    const onOpenEvent = jest.fn();
+    render(<SavedEventsList onOpenEvent={onOpenEvent} />);
 
     fireEvent.press(screen.getByRole("button", { name: "Pride Meetup" }));
-    expect(navigation.navigate).toHaveBeenCalledWith("EventDetail", {
-      id: "e1",
-    });
+    expect(onOpenEvent).toHaveBeenCalledWith("e1");
   });
 
   it("shows the empty message when there are no saved events", () => {
@@ -63,14 +51,14 @@ describe("SavedEventsScreen", () => {
       status: "ready",
       retry: jest.fn(),
     });
-    renderScreen();
+    render(<SavedEventsList onOpenEvent={jest.fn()} />);
     expect(screen.getByText(strings.events.savedEmpty)).toBeTruthy();
   });
 
   it("shows an error + retry when the load fails", () => {
     const retry = jest.fn();
     savedMock.mockReturnValue({ events: [], status: "error", retry });
-    renderScreen();
+    render(<SavedEventsList onOpenEvent={jest.fn()} />);
     fireEvent.press(screen.getByText(strings.events.retry));
     expect(retry).toHaveBeenCalled();
   });

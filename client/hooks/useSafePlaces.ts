@@ -1,6 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { listSafePlaces } from "@/lib/api/safePlaces";
+import {
+  listSafePlaces,
+  saveSafePlace,
+  unsaveSafePlace,
+} from "@/lib/api/safePlaces";
 import { strings } from "@/i18n";
 import type { SafePlaceDTO, SafePlaceCategory } from "@shared/types";
 
@@ -26,6 +30,7 @@ export type UseSafePlaces = {
   search: string; // active search term ("" = all)
   setCategory: (category: SafePlaceCategory | null) => void;
   setSearch: (search: string) => void;
+  toggleSave: (place: SafePlaceDTO) => void;
   refresh: () => void;
   loadMore: () => void;
   retry: () => void;
@@ -44,6 +49,8 @@ export function useSafePlaces(): UseSafePlaces {
 
   const requestSeq = useRef(0);
   const loadedOnce = useRef(false);
+  // Per-place ids with a save/unsave request in flight (serialises toggles).
+  const savingIds = useRef<Set<string>>(new Set());
   // Filters are read from refs inside fetchPage so focus-refetch + load-more use
   // the CURRENT filter (setCategory/setSearch update them synchronously before
   // the reload they trigger).
@@ -126,6 +133,35 @@ export function useSafePlaces(): UseSafePlaces {
     fetchPage(page + 1, "more");
   }, [fetchPage, loadingMore, refreshing, status, page, totalPages]);
 
+  // Optimistically flip the card's `saved` in-place, then persist. On any
+  // failure (incl. a thrown request()) revert exactly that flip. A per-id
+  // in-flight guard (mirrors useEvents) SERIALISES toggles for one place: a
+  // rapid save→unsave double-tap is ignored until the first request settles, so
+  // POST and DELETE can't race and leave the server diverging from the UI.
+  const toggleSave = useCallback((place: SafePlaceDTO) => {
+    if (savingIds.current.has(place.id)) return;
+    savingIds.current.add(place.id);
+    const prevSaved = place.saved;
+    const flip = (saved: boolean) =>
+      setItems((prev) =>
+        prev.map((p) => (p.id === place.id ? { ...p, saved } : p)),
+      );
+    flip(!prevSaved);
+    void (async () => {
+      let ok = false;
+      try {
+        const result = prevSaved
+          ? await unsaveSafePlace(place.id)
+          : await saveSafePlace(place.id);
+        ok = result.ok;
+      } catch {
+        ok = false;
+      }
+      savingIds.current.delete(place.id);
+      if (!ok) flip(prevSaved); // revert
+    })();
+  }, []);
+
   return {
     items,
     status,
@@ -136,6 +172,7 @@ export function useSafePlaces(): UseSafePlaces {
     search,
     setCategory,
     setSearch,
+    toggleSave,
     refresh,
     loadMore,
     retry,

@@ -125,6 +125,8 @@ function toSafePlaceDTO(row: SafePlaceRow): SafePlaceDTO {
     city: row.city,
     latitude: row.latitude,
     longitude: row.longitude,
+    // Admin responses have no caller-save context; the field is user-only.
+    saved: false,
   };
 }
 
@@ -722,6 +724,7 @@ async function handleListSafePlaces(
     }
     const q = parsed.data;
     const { rows, total } = await storage.listSafePlaces({
+      callerId: req.user!.id, // caller-save flag unused here (admin DTO → saved:false)
       page: q.page,
       pageSize: q.pageSize,
       category: q.category,

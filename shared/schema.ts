@@ -310,6 +310,31 @@ export const safePlaces = pgTable(
   }),
 );
 
+// ── safe_place_saves ──────────────────────────────────────────────────────────
+// A PRIVATE per-user bookmark list for safe places (mirrors event_saves). A row
+// simply means "this user saved this place". Never aggregated or exposed to
+// others (no "who saved" surface — Article 9). Both FKs cascade at the DB level;
+// erasure ALSO deletes these rows explicitly in eraseUser (the user row is
+// anonymised in place, so the FK cascade never fires — see storage.eraseUser).
+export const safePlaceSaves = pgTable(
+  "safe_place_saves",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    safePlaceId: uuid("safe_place_id")
+      .notNull()
+      .references(() => safePlaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uniqueSave: unique().on(t.safePlaceId, t.userId),
+  }),
+);
+
 // ── reports ───────────────────────────────────────────────────────────────────
 // Moderation queue. Reports are RETAINED for moderation audit; on erasure the
 // reporter is anonymised (reporterId SET NULL — §5.2). resourceType + resourceId
@@ -532,6 +557,7 @@ export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type SafePlace = typeof safePlaces.$inferSelect;
 export type NewSafePlace = typeof safePlaces.$inferInsert;
+export type SafePlaceSave = typeof safePlaceSaves.$inferSelect;
 export type Report = typeof reports.$inferSelect;
 export type Block = typeof blocks.$inferSelect;
 export type AdCampaign = typeof adCampaigns.$inferSelect;

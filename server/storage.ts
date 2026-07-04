@@ -31,6 +31,7 @@ import {
   eventRsvps,
   eventSaves,
   safePlaces,
+  safePlaceSaves,
   adCampaigns,
   blocks,
   reports,
@@ -139,6 +140,12 @@ export type AccountExportData = {
     deleted: boolean;
   }[];
   events: { id: string; title: string; status: string }[];
+  // Saved (bookmarked) events + safe places — private per-user preference data,
+  // portable under Art. 20 (the label mirrors the export style: communities carry
+  // `name`, events carry `title`). Erasure deletes these rows; the export lists
+  // still-present resources the user has bookmarked.
+  savedEvents: { id: string; title: string; savedAt: Date }[];
+  savedSafePlaces: { id: string; name: string; savedAt: Date }[];
   blocks: { blockedUserId: string; createdAt: Date }[];
   reports: {
     id: string;
@@ -243,6 +250,11 @@ export type SafePlaceRow = {
   latitude: number | null;
   longitude: number | null;
 };
+
+// A safe-place row on a USER read path, carrying the caller's private `saved`
+// flag (an EXISTS subquery). Admin create/update paths keep the raw SafePlaceRow
+// (no caller context), so this stays separate from safePlaceColumns().
+export type SafePlaceReadRow = SafePlaceRow & { callerSaved: boolean };
 
 // One row of the admin reports queue. `status`/`resourceType` are DB text
 // columns; the route narrows them to the DTO unions.
@@ -627,6 +639,31 @@ export class DatabaseStorage {
       .innerJoin(events, eq(events.id, eventRsvps.eventId))
       .where(eq(eventRsvps.userId, userId));
 
+    const savedEventRows = await db
+      .select({
+        id: events.id,
+        title: events.title,
+        savedAt: eventSaves.createdAt,
+      })
+      .from(eventSaves)
+      .innerJoin(events, eq(events.id, eventSaves.eventId))
+      .where(eq(eventSaves.userId, userId))
+      .orderBy(sql`${eventSaves.createdAt} desc`, sql`${events.id} asc`);
+
+    const savedSafePlaceRows = await db
+      .select({
+        id: safePlaces.id,
+        name: safePlaces.name,
+        savedAt: safePlaceSaves.createdAt,
+      })
+      .from(safePlaceSaves)
+      .innerJoin(safePlaces, eq(safePlaces.id, safePlaceSaves.safePlaceId))
+      .where(eq(safePlaceSaves.userId, userId))
+      .orderBy(
+        sql`${safePlaceSaves.createdAt} desc`,
+        sql`${safePlaces.id} asc`,
+      );
+
     const blockRows = await db
       .select({
         blockedUserId: blocks.blockedId,
@@ -677,6 +714,8 @@ export class DatabaseStorage {
         deleted: m.deletedAt !== null,
       })),
       events: eventRows,
+      savedEvents: savedEventRows,
+      savedSafePlaces: savedSafePlaceRows,
       blocks: blockRows,
       reports: reportRows,
       subscription: subscription ?? null,
@@ -825,6 +864,11 @@ export class DatabaseStorage {
         .delete(communityMemberships)
         .where(eq(communityMemberships.userId, userId));
       await tx.delete(eventRsvps).where(eq(eventRsvps.userId, userId));
+      // Saved bookmarks (events + safe places) → delete. The users row is
+      // anonymised IN PLACE below (not hard-deleted), so the FK ON DELETE
+      // CASCADE never fires — these must be removed explicitly (§5.2).
+      await tx.delete(eventSaves).where(eq(eventSaves.userId, userId));
+      await tx.delete(safePlaceSaves).where(eq(safePlaceSaves.userId, userId));
       await tx.delete(blocks).where(eq(blocks.blockerId, userId));
       await tx.delete(blocks).where(eq(blocks.blockedId, userId));
       await tx.delete(consentRecords).where(eq(consentRecords.userId, userId));
@@ -2168,7 +2212,10 @@ export class DatabaseStorage {
   }
 
   // Whether the caller has saved this event — a private per-caller boolean (never
-  // a "who saved"/count surface). Correlated EXISTS, parameterised (no N+1).
+  // a "who saved"/count surface). Correlated EXISTS, parameterised (no N+1). The
+  // events read queries always JOIN (community/block filter), so Drizzle renders
+  // ${events.id} table-qualified and this correlation is unambiguous. (The
+  // join-less safe-places reads can't rely on that — see callerSavedSafePlaceSql.)
   private callerSavedSql(callerId: string) {
     return sql<boolean>`exists (select 1 from ${eventSaves} where ${eventSaves.eventId} = ${events.id} and ${eventSaves.userId} = ${callerId})`;
   }
@@ -2863,19 +2910,30 @@ export class DatabaseStorage {
     };
   }
 
+  // Private "has the caller saved this place" flag as an EXISTS subquery. The
+  // outer place id is qualified as "safe_places"."id" ON PURPOSE: the safe-places
+  // reads have NO join, so interpolating ${safePlaces.id} renders UNqualified
+  // ("id"), and safe_place_saves ALSO has an `id` column — the correlation would
+  // then silently bind to the save row's own PK instead of the outer place
+  // (making `saved` always false). Never a count / who-saved surface — Article 9.
+  private callerSavedSafePlaceSql(callerId: string) {
+    return sql<boolean>`exists (select 1 from ${safePlaceSaves} where ${safePlaceSaves.safePlaceId} = "safe_places"."id" and ${safePlaceSaves.userId} = ${callerId})`;
+  }
+
   // One page of visible (non-deleted) safe places + the total. Optional filters:
   // category (exact), city (case-insensitive exact). `near` does NOT filter — it
   // orders nearest-first via the great-circle central-angle cosine (higher cos =
   // closer; no acos → float-safe), with null-coordinate rows LAST. Every list has
   // a deterministic total order ending in `id`, so offset pagination can't drift.
   async listSafePlaces(input: {
+    callerId: string;
     page: number;
     pageSize: number;
     category?: string;
     city?: string;
     search?: string;
     near?: { lat: number; lng: number };
-  }): Promise<{ rows: SafePlaceRow[]; total: number }> {
+  }): Promise<{ rows: SafePlaceReadRow[]; total: number }> {
     const conditions: (SQL | undefined)[] = [isNull(safePlaces.deletedAt)];
     if (input.category)
       conditions.push(eq(safePlaces.category, input.category));
@@ -2910,7 +2968,10 @@ export class DatabaseStorage {
     );
 
     const rows = await db
-      .select(this.safePlaceColumns())
+      .select({
+        ...this.safePlaceColumns(),
+        callerSaved: this.callerSavedSafePlaceSql(input.callerId),
+      })
       .from(safePlaces)
       .where(where)
       .orderBy(...orderBy)
@@ -2925,9 +2986,15 @@ export class DatabaseStorage {
     return { rows, total: Number(n) };
   }
 
-  async getSafePlace(id: string): Promise<SafePlaceRow | null> {
+  async getSafePlace(
+    id: string,
+    callerId: string,
+  ): Promise<SafePlaceReadRow | null> {
     const [row] = await db
-      .select(this.safePlaceColumns())
+      .select({
+        ...this.safePlaceColumns(),
+        callerSaved: this.callerSavedSafePlaceSql(callerId),
+      })
       .from(safePlaces)
       .where(and(eq(safePlaces.id, id), isNull(safePlaces.deletedAt)))
       .limit(1);
@@ -3040,6 +3107,66 @@ export class DatabaseStorage {
       });
       return "deleted";
     });
+  }
+
+  // Save (bookmark) a safe place. Visible-gated via getSafePlace → "not_found"
+  // for a missing / soft-deleted place. Idempotent (onConflictDoNothing on the
+  // (safe_place_id, user_id) unique). NOT audited — a benign private toggle,
+  // exactly like saveEvent.
+  async saveSafePlace(
+    safePlaceId: string,
+    userId: string,
+  ): Promise<"ok" | "not_found"> {
+    const place = await this.getSafePlace(safePlaceId, userId);
+    if (!place) return "not_found";
+    await db
+      .insert(safePlaceSaves)
+      .values({ safePlaceId, userId })
+      .onConflictDoNothing();
+    return "ok";
+  }
+
+  // Unsave. Idempotent — removing a non-existent bookmark is a no-op; always
+  // "ok" (you can always drop your own bookmark, even for a since-deleted place).
+  // Not audited.
+  async unsaveSafePlace(safePlaceId: string, userId: string): Promise<"ok"> {
+    await db
+      .delete(safePlaceSaves)
+      .where(
+        and(
+          eq(safePlaceSaves.safePlaceId, safePlaceId),
+          eq(safePlaceSaves.userId, userId),
+        ),
+      );
+    return "ok";
+  }
+
+  // The caller's saved (bookmarked) places, excluding soft-deleted ones, capped.
+  // Caller-scoped (a user only ever sees their own saves). Same deterministic
+  // order as the list (city, name, id). callerSaved is trivially true here.
+  async listSavedSafePlaces(input: {
+    callerId: string;
+    limit: number;
+  }): Promise<SafePlaceReadRow[]> {
+    return db
+      .select({
+        ...this.safePlaceColumns(),
+        callerSaved: sql<boolean>`true`,
+      })
+      .from(safePlaceSaves)
+      .innerJoin(safePlaces, eq(safePlaces.id, safePlaceSaves.safePlaceId))
+      .where(
+        and(
+          eq(safePlaceSaves.userId, input.callerId),
+          isNull(safePlaces.deletedAt),
+        ),
+      )
+      .orderBy(
+        sql`${safePlaces.city} asc nulls last`,
+        sql`${safePlaces.name} asc`,
+        sql`${safePlaces.id} asc`,
+      )
+      .limit(input.limit);
   }
 
   // Bulk-create curated safe places (slice SP-2, the OSM import path). Two dedupe

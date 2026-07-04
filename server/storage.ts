@@ -230,6 +230,20 @@ export type EventRow = {
   category: string | null; // predefined event-type tag (DB text; route narrows)
 };
 
+// A safe-place venue row (admin-curated). `category` is DB text; the route
+// narrows it to the SafePlaceCategory union for the DTO. latitude/longitude are
+// venue coordinates (admin data, not user location — §5.8).
+export type SafePlaceRow = {
+  id: string;
+  name: string;
+  category: string;
+  description: string | null;
+  address: string | null;
+  city: string | null;
+  latitude: number | null;
+  longitude: number | null;
+};
+
 // One row of the admin reports queue. `status`/`resourceType` are DB text
 // columns; the route narrows them to the DTO unions.
 export type ReportRow = {
@@ -2826,6 +2840,191 @@ export class DatabaseStorage {
         ipAddress: ipAddress ?? null,
       });
       return "removed";
+    });
+  }
+
+  // ── Safe places (admin-curated venues, docs/API.md §11) ─────────────────────
+  // Coordinates are admin-curated VENUE data, not user location (§5.8). Audit
+  // rows for safe-place mutations carry IDs only — NEVER name/category/address/
+  // city/coords. `near` (from a user query) is used ONLY for the ORDER BY below;
+  // it is never persisted or logged (the %3F logger is path-only; the request
+  // logger logs req.path only).
+
+  private safePlaceColumns() {
+    return {
+      id: safePlaces.id,
+      name: safePlaces.name,
+      category: safePlaces.category,
+      description: safePlaces.description,
+      address: safePlaces.address,
+      city: safePlaces.city,
+      latitude: safePlaces.latitude,
+      longitude: safePlaces.longitude,
+    };
+  }
+
+  // One page of visible (non-deleted) safe places + the total. Optional filters:
+  // category (exact), city (case-insensitive exact). `near` does NOT filter — it
+  // orders nearest-first via the great-circle central-angle cosine (higher cos =
+  // closer; no acos → float-safe), with null-coordinate rows LAST. Every list has
+  // a deterministic total order ending in `id`, so offset pagination can't drift.
+  async listSafePlaces(input: {
+    page: number;
+    pageSize: number;
+    category?: string;
+    city?: string;
+    near?: { lat: number; lng: number };
+  }): Promise<{ rows: SafePlaceRow[]; total: number }> {
+    const conditions: (SQL | undefined)[] = [isNull(safePlaces.deletedAt)];
+    if (input.category)
+      conditions.push(eq(safePlaces.category, input.category));
+    if (input.city)
+      conditions.push(ilike(safePlaces.city, likeEscape(input.city)));
+    const where = and(...conditions);
+
+    const orderBy: SQL[] = [];
+    if (input.near) {
+      orderBy.push(
+        sql`case when ${safePlaces.latitude} is null or ${safePlaces.longitude} is null then 1 else 0 end`,
+        sql`(sin(radians(${input.near.lat})) * sin(radians(${safePlaces.latitude})) + cos(radians(${input.near.lat})) * cos(radians(${safePlaces.latitude})) * cos(radians(${safePlaces.longitude}) - radians(${input.near.lng}))) desc`,
+      );
+    }
+    orderBy.push(
+      sql`${safePlaces.city} asc nulls last`,
+      sql`${safePlaces.name} asc`,
+      sql`${safePlaces.id} asc`,
+    );
+
+    const rows = await db
+      .select(this.safePlaceColumns())
+      .from(safePlaces)
+      .where(where)
+      .orderBy(...orderBy)
+      .limit(input.pageSize)
+      .offset((input.page - 1) * input.pageSize);
+
+    const [{ n }] = await db
+      .select({ n: count() })
+      .from(safePlaces)
+      .where(where);
+
+    return { rows, total: Number(n) };
+  }
+
+  async getSafePlace(id: string): Promise<SafePlaceRow | null> {
+    const [row] = await db
+      .select(this.safePlaceColumns())
+      .from(safePlaces)
+      .where(and(eq(safePlaces.id, id), isNull(safePlaces.deletedAt)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  // Admin create. Insert + safe_place.created audit commit together (§7).
+  async createSafePlace(
+    input: {
+      name: string;
+      category: string;
+      description?: string;
+      address?: string;
+      city?: string;
+      latitude?: number;
+      longitude?: number;
+    },
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<SafePlaceRow> {
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(safePlaces)
+        .values({
+          name: input.name,
+          category: input.category,
+          description: input.description ?? null,
+          address: input.address ?? null,
+          city: input.city ?? null,
+          latitude: input.latitude ?? null,
+          longitude: input.longitude ?? null,
+          createdById: actorId,
+        })
+        .returning(this.safePlaceColumns());
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "safe_place.created",
+        resourceType: "safe_place",
+        resourceId: row.id,
+        ipAddress: ipAddress ?? null,
+      });
+      return row;
+    });
+  }
+
+  // Admin partial update (guarded to non-deleted). Update + safe_place.updated
+  // audit commit together. Returns null if missing/deleted. Only provided fields
+  // are written (undefined = untouched); coords are both-or-neither at validation.
+  async updateSafePlace(
+    id: string,
+    input: {
+      name?: string;
+      category?: string;
+      description?: string;
+      address?: string;
+      city?: string;
+      latitude?: number;
+      longitude?: number;
+    },
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<SafePlaceRow | null> {
+    const fields: Partial<typeof safePlaces.$inferInsert> = {};
+    if (input.name !== undefined) fields.name = input.name;
+    if (input.category !== undefined) fields.category = input.category;
+    if (input.description !== undefined) fields.description = input.description;
+    if (input.address !== undefined) fields.address = input.address;
+    if (input.city !== undefined) fields.city = input.city;
+    if (input.latitude !== undefined) fields.latitude = input.latitude;
+    if (input.longitude !== undefined) fields.longitude = input.longitude;
+
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(safePlaces)
+        .set(fields)
+        .where(and(eq(safePlaces.id, id), isNull(safePlaces.deletedAt)))
+        .returning(this.safePlaceColumns());
+      if (!row) return null;
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "safe_place.updated",
+        resourceType: "safe_place",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return row;
+    });
+  }
+
+  // Admin soft-delete (guarded UPDATE ... WHERE deletedAt IS NULL). Idempotent-
+  // safe: "not_found" if missing/already deleted. Audited safe_place.deleted.
+  async softDeleteSafePlace(
+    id: string,
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<"deleted" | "not_found"> {
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(safePlaces)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(safePlaces.id, id), isNull(safePlaces.deletedAt)))
+        .returning({ id: safePlaces.id });
+      if (!row) return "not_found";
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "safe_place.deleted",
+        resourceType: "safe_place",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return "deleted";
     });
   }
 

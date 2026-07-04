@@ -187,10 +187,29 @@ export type EventDTO = {
   category: EventCategory | null; // predefined event-type tag, or null (unset)
 };
 
+// Predefined safe-place categories (Sprint 7). Coarse VENUE-TYPE tags for
+// browsing/filtering — deliberately never identity/orientation labels, so a
+// category can't infer Article 9 data (mirrors EVENT_CATEGORIES). The Zod
+// validator (server/validation.ts) enums over this tuple; the admin picker
+// labels these keys. FROZEN once venues carry them — append, never rename.
+export const SAFE_PLACE_CATEGORIES = [
+  "cafe",
+  "club",
+  "bar",
+  "ngo",
+  "health",
+  "community_center",
+  "education",
+  "service",
+  "other",
+] as const;
+
+export type SafePlaceCategory = (typeof SAFE_PLACE_CATEGORIES)[number];
+
 export type SafePlaceDTO = {
   id: string;
   name: string;
-  category: string;
+  category: SafePlaceCategory;
   description: string | null;
   address: string | null;
   city: string | null;

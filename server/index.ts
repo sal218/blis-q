@@ -4,6 +4,7 @@ import type { Request, Response, NextFunction } from "express";
 import compression from "compression";
 import helmet from "helmet";
 import { validateEnv } from "./env";
+import { resendUrlFix } from "./resendUrlFix";
 
 // ./auth, ./routes and ./db read env at import time, so they are imported
 // DYNAMICALLY inside the bootstrap below — only after validateEnv() passes.
@@ -127,21 +128,10 @@ function setupRequestLogging(app: express.Application) {
   });
 }
 
-// Resend click-tracking encodes '?' as '%3F' in redirect URLs, which makes
-// Express treat the query string as part of the path and breaks route matching
-// for links like /reset-password?token=… . Detect the first %3F in the raw URL
-// and redirect with a real '?'. See CLAUDE.md "Resend %3F" gotcha.
+// Resend %3F URL fix — see server/resendUrlFix.ts (extracted so it's unit-
+// testable). The middleware logs the PATH ONLY, never the query string.
 function setupResendUrlFix(app: express.Application) {
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    const match = req.url.match(/%3[Ff]/);
-    if (!match) return next();
-    const idx = match.index!;
-    const fixed = req.url.substring(0, idx) + "?" + req.url.substring(idx + 3);
-    log(
-      `[URL-FIX] Resend encoding detected, redirecting: ${fixed.substring(0, 60)}…`,
-    );
-    return res.redirect(302, fixed);
-  });
+  app.use(resendUrlFix(log));
 }
 
 // HTTP security headers. CSP connectSrc lists only Blis-Q's real service

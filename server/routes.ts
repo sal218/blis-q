@@ -6,6 +6,7 @@ import { registerCommunityRoutes } from "./routes/communities";
 import { registerPostRoutes } from "./routes/posts";
 import { registerChatRoutes } from "./routes/chat";
 import { registerEventRoutes } from "./routes/events";
+import { registerSafePlaceRoutes } from "./routes/safePlaces";
 import { registerSafetyRoutes } from "./routes/safety";
 import { registerAdminRoutes } from "./routes/admin";
 
@@ -26,6 +27,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerPostRoutes(app);
   registerChatRoutes(app);
   registerEventRoutes(app);
+  registerSafePlaceRoutes(app);
   registerSafetyRoutes(app);
   registerAdminRoutes(app);
 

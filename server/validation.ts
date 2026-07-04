@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EVENT_CATEGORIES } from "@shared/types";
+import { EVENT_CATEGORIES, SAFE_PLACE_CATEGORIES } from "@shared/types";
 
 // Zod schemas for the backend request boundary. Every mutation route validates
 // its body against one of these before doing anything else (CLAUDE.md §6,
@@ -19,6 +19,9 @@ const MAX_DESCRIPTION_LENGTH = 1000;
 const MAX_POST_LENGTH = 2000;
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_EVENT_TITLE_LENGTH = 150;
+const MAX_SAFE_PLACE_NAME_LENGTH = 150;
+const MAX_SAFE_PLACE_ADDRESS_LENGTH = 200;
+const MAX_SAFE_PLACE_CITY_LENGTH = 100;
 const MAX_REPORT_REASON_LENGTH = 1000;
 const MAX_RESOLUTION_LENGTH = 1000;
 const MAX_POLICY_VERSION_LENGTH = 32;
@@ -203,6 +206,58 @@ export const adminUpdateCommunitySchema = z
   .refine((d) => d.name !== undefined || d.description !== undefined, {
     message: "At least one field is required",
   });
+
+// ── Safe places (admin-curated venues) ────────────────────────────────────────
+// Coordinates describe a public VENUE (admin data), never a user's location
+// (§5.8). latitude/longitude are BOTH-or-NEITHER (a lone coordinate is a bug),
+// range-checked. category is a frozen predefined venue-type (never identity).
+export const safePlaceCategorySchema = z.enum(SAFE_PLACE_CATEGORIES);
+
+const latitudeSchema = z.number().min(-90).max(90);
+const longitudeSchema = z.number().min(-180).max(180);
+
+// Reject a one-sided coordinate on any schema that carries lat/lng.
+const bothOrNeitherCoords = (d: {
+  latitude?: number;
+  longitude?: number;
+}): boolean => (d.latitude === undefined) === (d.longitude === undefined);
+const COORDS_REFINE = {
+  message: "latitude and longitude must be provided together",
+  path: ["latitude"] as (string | number)[],
+};
+
+export const createSafePlaceSchema = z
+  .object({
+    name: z.string().trim().min(1).max(MAX_SAFE_PLACE_NAME_LENGTH),
+    category: safePlaceCategorySchema,
+    description: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
+    address: z.string().trim().max(MAX_SAFE_PLACE_ADDRESS_LENGTH).optional(),
+    city: z.string().trim().max(MAX_SAFE_PLACE_CITY_LENGTH).optional(),
+    latitude: latitudeSchema.optional(),
+    longitude: longitudeSchema.optional(),
+  })
+  .strict()
+  .refine(bothOrNeitherCoords, COORDS_REFINE);
+
+export const updateSafePlaceSchema = z
+  .object({
+    name: z.string().trim().min(1).max(MAX_SAFE_PLACE_NAME_LENGTH).optional(),
+    category: safePlaceCategorySchema.optional(),
+    description: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
+    address: z.string().trim().max(MAX_SAFE_PLACE_ADDRESS_LENGTH).optional(),
+    city: z.string().trim().max(MAX_SAFE_PLACE_CITY_LENGTH).optional(),
+    latitude: latitudeSchema.optional(),
+    longitude: longitudeSchema.optional(),
+  })
+  .strict()
+  // PATCH must change something — an empty body is a 400, not a silent no-op.
+  .refine((d) => Object.values(d).some((v) => v !== undefined), {
+    message: "At least one field is required",
+  })
+  // Same one-sided-coordinate guard as create (a PATCH can still touch no coords).
+  .refine(bothOrNeitherCoords, COORDS_REFINE);
+
+// (safePlacesListQuerySchema is defined below, after the offset-page constants.)
 
 // ── Posts (communityId comes from /communities/:id/posts, not the body) ───────
 
@@ -404,6 +459,48 @@ export const offsetPageQuerySchema = z.object({
   order: z.enum(["asc", "desc"]).default("desc"),
 });
 
+// GET /safe-places query: offset page + optional predefined category + city +
+// an ephemeral `near=lat,lng` (used ONLY for this query's distance sort — never
+// stored/logged/analytics, §5.8). A dedicated schema so the filters stay
+// safe-places-only. An invalid category or malformed/out-of-range near → 400.
+export const safePlacesListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_OFFSET_PAGE_SIZE)
+    .default(DEFAULT_OFFSET_PAGE_SIZE),
+  category: safePlaceCategorySchema.optional(),
+  city: z.string().trim().min(1).max(MAX_SAFE_PLACE_CITY_LENGTH).optional(),
+  // "lat,lng" → a validated { lat, lng } tuple (or a 400).
+  near: z
+    .string()
+    .optional()
+    .transform((v, ctx) => {
+      if (v === undefined) return undefined;
+      const parts = v.split(",");
+      const lat = Number(parts[0]);
+      const lng = Number(parts[1]);
+      const ok =
+        parts.length === 2 &&
+        Number.isFinite(lat) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        Number.isFinite(lng) &&
+        lng >= -180 &&
+        lng <= 180;
+      if (!ok) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "near must be 'lat,lng' within valid ranges",
+        });
+        return z.NEVER;
+      }
+      return { lat, lng };
+    }),
+});
+
 // Admin reports queue: offset/page + optional status filter (read-only this
 // slice — resolve/dismiss is a Sprint-4 moderation action).
 export const adminReportsQuerySchema = z.object({
@@ -441,6 +538,9 @@ export type UpdateCommunityInput = z.infer<typeof updateCommunitySchema>;
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type UpdateEventInput = z.infer<typeof updateEventSchema>;
+export type CreateSafePlaceInput = z.infer<typeof createSafePlaceSchema>;
+export type UpdateSafePlaceInput = z.infer<typeof updateSafePlaceSchema>;
+export type SafePlacesListQuery = z.infer<typeof safePlacesListQuerySchema>;
 export type CreateReportInput = z.infer<typeof createReportSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type CursorPageQuery = z.infer<typeof cursorPageQuerySchema>;

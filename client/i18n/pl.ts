@@ -100,9 +100,29 @@ export const pl = {
     searchPlaceholder: "Szukaj wydarzeń", // "Search events"
     empty: "Nie ma jeszcze żadnych nadchodzących wydarzeń.", // "No upcoming events yet."
     emptySearch: "Brak wyników dla tego wyszukiwania.", // "No results for this search."
+    emptyCategory: "Brak wydarzeń w tej kategorii.", // "No events in this category."
     loadError: "Nie udało się załadować wydarzeń.", // "Couldn't load events."
     retry: "Spróbuj ponownie", // "Try again"
-    goingCount: "{count} idzie", // "{count} going"
+    goingCount: "{count} idzie", // "{count} going" (legacy; prefer goingLabel())
+    // Attendee count with Polish plural of "osoba" (person) — see goingLabel().
+    goingOne: "1 osoba idzie", // exactly one
+    goingFew: "{count} osoby idą", // 2–4 (not 12–14)
+    goingMany: "{count} osób idzie", // 0, 5+, and the teens
+
+    // Categories (slice D2). Keys MUST match EVENT_CATEGORIES in shared/types.ts.
+    // Coarse event-TYPE labels — never identity/orientation (Article 9).
+    filterAll: "Wszystkie", // "All" — the feed filter chip that clears the category
+    categoryLabel: "Kategoria (opcjonalnie)", // create-form picker label
+    categories: {
+      social: "Towarzyskie", // "Social"
+      support: "Wsparcie", // "Support"
+      activism: "Aktywizm", // "Activism"
+      education: "Edukacja", // "Education"
+      culture: "Kultura", // "Culture"
+      sports: "Sport", // "Sports"
+      health: "Zdrowie", // "Health"
+      other: "Inne", // "Other"
+    },
 
     // Detail
     detailLoadError: "Nie udało się załadować wydarzenia.", // "Couldn't load the event."
@@ -153,6 +173,7 @@ export const pl = {
     // Create event (form on Community detail)
     createCta: "Utwórz wydarzenie", // "Create event" (the entry button)
     createTitle: "Nowe wydarzenie", // "New event" (screen header)
+    createSubtitle: "Stwórz wydarzenie dla społeczności", // "Create an event for the community"
     titleLabel: "Tytuł", // "Title"
     titlePlaceholder: "Nazwa wydarzenia", // "Event name"
     descriptionLabel: "Opis (opcjonalnie)", // "Description (optional)"

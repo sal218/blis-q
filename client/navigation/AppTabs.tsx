@@ -213,6 +213,17 @@ export function AppTabs() {
       <Tabs.Screen
         name="Events"
         component={EventsStack}
+        listeners={({ navigation }) => ({
+          // Tapping the Events tab always lands on the events LIST — even when
+          // arriving from another tab that pushed an EventDetail/CommunityDetail
+          // into the Events stack. Without this, a cross-tab navigate leaves the
+          // stack on the detail screen (no pop-to-top fires across tabs), so the
+          // list becomes unreachable. Navigating to EventsHome pops back to it.
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate("Events", { screen: "EventsHome" });
+          },
+        })}
         options={{
           title: strings.tabs.events,
           tabBarIcon: ({ color, size }) => (

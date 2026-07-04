@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react-native";
 import { EventCard } from "@/components/EventCard";
+import { strings } from "@/i18n";
 import type { EventDTO } from "@shared/types";
 
 // Local (no-Z) datetimes → getDay()/getHours() are deterministic regardless of
@@ -33,8 +34,8 @@ describe("EventCard", () => {
     expect(screen.getByText("Pride Planning Meetup")).toBeTruthy();
     expect(screen.getByText(/16:00 – 18:00/)).toBeTruthy();
     expect(screen.getByText(/Warszawa/)).toBeTruthy();
-    // Going COUNT only — never attendee identities.
-    expect(screen.getByText("46 idzie")).toBeTruthy();
+    // Going COUNT only (Polish plural) — never attendee identities.
+    expect(screen.getByText("46 osób idzie")).toBeTruthy();
   });
 
   it("calls onPress with the event id", () => {
@@ -50,5 +51,50 @@ describe("EventCard", () => {
     );
     expect(screen.getByText(/16:00/)).toBeTruthy();
     expect(screen.queryByText(/–/)).toBeNull();
+  });
+
+  it("renders the category chip when the event has a category (slice D2)", () => {
+    render(
+      <EventCard
+        event={{ ...event, category: "support" }}
+        onPress={jest.fn()}
+      />,
+    );
+    expect(screen.getByText(strings.events.categories.support)).toBeTruthy();
+  });
+
+  it("renders no category chip when category is null", () => {
+    render(<EventCard event={event} onPress={jest.fn()} />); // category null
+    expect(screen.queryByText(strings.events.categories.support)).toBeNull();
+  });
+
+  it("renders a save bookmark when onToggleSave is provided; tap calls it", () => {
+    const onToggleSave = jest.fn();
+    render(
+      <EventCard
+        event={event}
+        onPress={jest.fn()}
+        onToggleSave={onToggleSave}
+      />,
+    ); // event.saved is false → the "Zapisz" a11y label
+    fireEvent.press(screen.getByLabelText(strings.events.saveAction));
+    expect(onToggleSave).toHaveBeenCalledWith(event);
+  });
+
+  it("shows the saved (Zapisano) bookmark when event.saved", () => {
+    render(
+      <EventCard
+        event={{ ...event, saved: true }}
+        onPress={jest.fn()}
+        onToggleSave={jest.fn()}
+      />,
+    );
+    expect(screen.getByLabelText(strings.events.savedAction)).toBeTruthy();
+  });
+
+  it("renders no bookmark without onToggleSave (Home rail / saved list)", () => {
+    render(<EventCard event={event} onPress={jest.fn()} />);
+    expect(screen.queryByLabelText(strings.events.saveAction)).toBeNull();
+    expect(screen.queryByLabelText(strings.events.savedAction)).toBeNull();
   });
 });

@@ -118,6 +118,7 @@ describe("HomeScreen", () => {
     expect(navigation.navigate).toHaveBeenCalledWith("Events", {
       screen: "CommunityDetail",
       params: { id: "c1" },
+      initial: false, // keep EventsHome beneath so Back lands on the list
     });
   });
 
@@ -151,6 +152,7 @@ describe("HomeScreen", () => {
       expect(navigation.navigate).toHaveBeenCalledWith("Events", {
         screen: "EventDetail",
         params: { id: "e1" },
+        initial: false, // keep EventsHome beneath so Back lands on the list
       });
     });
 

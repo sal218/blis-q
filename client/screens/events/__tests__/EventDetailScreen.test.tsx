@@ -70,7 +70,7 @@ describe("EventDetailScreen", () => {
     expect(screen.getByText("Pride Meetup")).toBeTruthy();
     expect(screen.getByText("Warszawa")).toBeTruthy();
     expect(screen.getByText("Spotkanie społeczności")).toBeTruthy();
-    expect(screen.getByText("46 idzie")).toBeTruthy();
+    expect(screen.getByText("46 osób idzie")).toBeTruthy();
     // stacked date badge for 2026-07-04 (a Saturday in July) → SOB / 4 / LIP
     expect(screen.getByText("SOB")).toBeTruthy();
     expect(screen.getByText("4")).toBeTruthy();
@@ -86,7 +86,7 @@ describe("EventDetailScreen", () => {
     expect(screen.getByTestId("event-banner-placeholder")).toBeTruthy();
     expect(screen.queryByTestId("event-banner")).toBeNull();
     // privacy: going COUNT only — no attendee images/identities are rendered
-    expect(screen.getByText("46 idzie")).toBeTruthy();
+    expect(screen.getByText("46 osób idzie")).toBeTruthy();
   });
 
   it("renders the banner image when the event has one", () => {
@@ -241,5 +241,17 @@ describe("EventDetailScreen", () => {
     renderDetail();
     expect(screen.queryByLabelText(strings.events.saveAction)).toBeNull();
     expect(screen.queryByLabelText(strings.events.savedAction)).toBeNull();
+  });
+
+  it("renders the category chip when the event has a category (slice D2)", () => {
+    eventMock.mockReturnValue(state({ event: event({ category: "culture" }) }));
+    renderDetail();
+    expect(screen.getByText(strings.events.categories.culture)).toBeTruthy();
+  });
+
+  it("renders no category chip when the event has none", () => {
+    eventMock.mockReturnValue(state({ event: event({ category: null }) }));
+    renderDetail();
+    expect(screen.queryByText(strings.events.categories.culture)).toBeNull();
   });
 });

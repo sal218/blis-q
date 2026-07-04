@@ -17,6 +17,9 @@ import { spacing, radius, type ThemeColors } from "@/constants/theme";
 
 type Props = {
   label: string;
+  // Hide the visible label (the input keeps it as its accessibilityLabel). Used
+  // when a parent already shows the field title, e.g. a SectionCard header.
+  hideLabel?: boolean;
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
@@ -34,6 +37,7 @@ type Props = {
 
 export function TextField({
   label,
+  hideLabel = false,
   value,
   onChangeText,
   placeholder,
@@ -53,8 +57,8 @@ export function TextField({
   const [focused, setFocused] = useState(false);
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={[styles.wrap, hideLabel && styles.wrapNoMargin]}>
+      {!hideLabel && <Text style={styles.label}>{label}</Text>}
       <View
         style={[
           styles.inputRow,
@@ -96,6 +100,9 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     wrap: {
       marginBottom: spacing.md,
+    },
+    wrapNoMargin: {
+      marginBottom: 0,
     },
     label: {
       color: colors.textMuted,

@@ -37,3 +37,16 @@ export function format(
     key in vars ? String(vars[key]) : match,
   );
 }
+
+// Attendee count with correct Polish plural of "osoba" (person):
+//   1 → "1 osoba idzie" · 2–4 → "N osoby idą" · 0/5+/teens → "N osób idzie".
+export function goingLabel(count: number): string {
+  const s = strings.events;
+  if (count === 1) return s.goingOne;
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) {
+    return format(s.goingFew, { count });
+  }
+  return format(s.goingMany, { count });
+}

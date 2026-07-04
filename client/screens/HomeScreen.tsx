@@ -44,15 +44,24 @@ export function HomeScreen({ navigation }: Props) {
     ? format(strings.home.greeting, { name })
     : strings.home.greetingNoName;
 
+  // `initial: false` puts the Events-stack root (EventsHome) BENEATH the pushed
+  // screen, so Back from a Home-opened event/community lands on the events list
+  // (not straight back to Home) and the Events tab is never left holding a lone
+  // detail screen with no list under it.
   const openCommunity = (id: string) =>
     navigation.navigate("Events", {
       screen: "CommunityDetail",
       params: { id },
+      initial: false,
     });
   const goToCommunities = () =>
     navigation.navigate("Events", { screen: "EventsHome" });
   const openEvent = (id: string) =>
-    navigation.navigate("Events", { screen: "EventDetail", params: { id } });
+    navigation.navigate("Events", {
+      screen: "EventDetail",
+      params: { id },
+      initial: false,
+    });
   const goToEvents = () =>
     navigation.navigate("Events", { screen: "EventsHome" });
 

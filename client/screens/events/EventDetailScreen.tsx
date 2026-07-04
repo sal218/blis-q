@@ -16,6 +16,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { ReportPostModal } from "@/components/ReportPostModal";
+import { CategoryChip } from "@/components/CategoryChip";
 import {
   Clock,
   MapPin,
@@ -30,7 +31,7 @@ import {
   formatEventDateLong,
   formatEventTimeRange,
 } from "@/lib/relativeTime";
-import { strings, format } from "@/i18n";
+import { strings, goingLabel } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type { EventsStackParamList } from "@/navigation/AppTabs";
 
@@ -253,6 +254,15 @@ export function EventDetailScreen({ route, navigation }: Props) {
         <View style={styles.body}>
           <Text style={styles.title}>{event.title}</Text>
 
+          {event.category ? (
+            <View style={styles.categoryRow}>
+              <CategoryChip
+                label={strings.events.categories[event.category]}
+                category={event.category}
+              />
+            </View>
+          ) : null}
+
           {isCancelled ? (
             <View style={[styles.notice, styles.noticeCancelled]}>
               <Text style={styles.noticeCancelledText}>
@@ -281,9 +291,7 @@ export function EventDetailScreen({ route, navigation }: Props) {
             </Text>
           </View>
 
-          <Text style={styles.going}>
-            {format(strings.events.goingCount, { count: event.goingCount })}
-          </Text>
+          <Text style={styles.going}>{goingLabel(event.goingCount)}</Text>
 
           <View style={styles.divider} />
 
@@ -589,6 +597,14 @@ function createStyles(colors: ThemeColors) {
       color: colors.text,
       fontSize: 26,
       fontWeight: "800",
+      marginBottom: spacing.md,
+    },
+    // The category chip sits just under the title (a row so it hugs its content
+    // width instead of stretching). Negative top margin tucks it up under the
+    // title's bottom margin without over-spacing.
+    categoryRow: {
+      flexDirection: "row",
+      marginTop: -spacing.xs,
       marginBottom: spacing.md,
     },
     notice: {

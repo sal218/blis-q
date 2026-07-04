@@ -7,6 +7,7 @@ import type {
   CommunityRow,
   ModeratedReportRow,
   AdminUserRow,
+  SafePlaceRow,
 } from "../storage";
 import { supabaseClient, supabaseAdmin } from "../supabase";
 import {
@@ -19,6 +20,9 @@ import {
   adminUsersQuerySchema,
   adminBanUserSchema,
   offsetPageQuerySchema,
+  safePlacesListQuerySchema,
+  createSafePlaceSchema,
+  updateSafePlaceSchema,
 } from "../validation";
 import {
   checkAdminLoginRateLimit,
@@ -30,6 +34,8 @@ import type {
   CommunityDTO,
   AdminReportDTO,
   AdminUserDTO,
+  SafePlaceDTO,
+  SafePlaceCategory,
   OffsetPage,
 } from "@shared/types";
 
@@ -92,6 +98,27 @@ export function registerAdminRoutes(app: Express): void {
   app.get("/api/admin/users/:id", ...admin, handleGetUser);
   app.post("/api/admin/moderation/ban", ...admin, handleBanUser);
   app.post("/api/admin/moderation/unban", ...admin, handleUnbanUser);
+
+  // Safe places CRUD (docs/API.md §11/§14). Curated venues; mutations are
+  // adminMutationUser-rate-limited + audited (IDs only) in storage. Backend-only
+  // this slice — admin-web CRUD page is deferred.
+  app.get("/api/admin/safe-places", ...admin, handleListSafePlaces);
+  app.post("/api/admin/safe-places", ...admin, handleCreateSafePlace);
+  app.patch("/api/admin/safe-places/:id", ...admin, handleUpdateSafePlace);
+  app.delete("/api/admin/safe-places/:id", ...admin, handleDeleteSafePlace);
+}
+
+function toSafePlaceDTO(row: SafePlaceRow): SafePlaceDTO {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category as SafePlaceCategory,
+    description: row.description,
+    address: row.address,
+    city: row.city,
+    latitude: row.latitude,
+    longitude: row.longitude,
+  };
 }
 
 function toCommunityDTO(row: CommunityRow): CommunityDTO {
@@ -667,6 +694,140 @@ async function handleAdminLogin(
     return res.status(200).json(body);
   } catch (err) {
     console.error("[POST /api/admin/login] unexpected error", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// ── Safe places CRUD (docs/API.md §11/§14) ──────────────────────────────────
+
+async function handleListSafePlaces(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const parsed = safePlacesListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const q = parsed.data;
+    const { rows, total } = await storage.listSafePlaces({
+      page: q.page,
+      pageSize: q.pageSize,
+      category: q.category,
+      city: q.city,
+      near: q.near,
+    });
+    const body: OffsetPage<SafePlaceDTO> = {
+      data: rows.map(toSafePlaceDTO),
+      page: q.page,
+      pageSize: q.pageSize,
+      total,
+      totalPages: Math.ceil(total / q.pageSize),
+    };
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[GET /api/admin/safe-places]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleCreateSafePlace(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = createSafePlaceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const row = await storage.createSafePlace(
+      parsed.data,
+      userId,
+      req.ip ?? null,
+    );
+    return res.status(201).json(toSafePlaceDTO(row));
+  } catch (err) {
+    console.error("[POST /api/admin/safe-places]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleUpdateSafePlace(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = updateSafePlaceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const row = await storage.updateSafePlace(
+      id,
+      parsed.data,
+      userId,
+      req.ip ?? null,
+    );
+    if (!row) return res.status(404).json({ error: "Not found" });
+    return res.status(200).json(toSafePlaceDTO(row));
+  } catch (err) {
+    console.error("[PATCH /api/admin/safe-places/:id]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleDeleteSafePlace(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const result = await storage.softDeleteSafePlace(
+      id,
+      userId,
+      req.ip ?? null,
+    );
+    if (result === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/admin/safe-places/:id]", {
       code: safeErrorCode(err),
     });
     return res.status(500).json({ error: "Internal Server Error" });

@@ -273,6 +273,8 @@ Hybrid: **HTTP for persistence + history, Supabase Realtime Broadcast for live d
 
 User writes to safe places are **admin-only** (§14). 🚧 whether `/safe-places` is `🔑` or `🌐` is provisional pending the DPIA's location-feature review — defaulting to `🔑`.
 
+**Implemented (Sprint 7, backend).** `category` is a **frozen predefined venue-type** set — `SAFE_PLACE_CATEGORIES = {cafe, club, bar, ngo, health, community_center, education, service, other}` (🔒 coarse venue-type, never an identity/orientation label; an out-of-set value → `400`). `city` filter is case-insensitive. Every list has a **deterministic total order** (`city, name, id`) so offset pages don't drift; with **`near`** the order is **null-coordinate rows last**, then nearest-first (great-circle, no `acos` → float-safe), then `city, name, id`. `near` is **ephemeral** — used only for the `ORDER BY`, never persisted; and the `%3F` URL-fix middleware now logs the **path only** so an encoded `?near=lat,lng` can't leak coordinates. Admin CRUD (§14) is `requireAdmin` + `adminMutationUser`-rate-limited + audited **IDs-only** (`safe_place.created/updated/deleted`; audit `metadata` is null — never name/category/address/city/coords). `latitude`/`longitude` are **both-or-neither** on create and update. The **mobile map/list UI** (needs the R2/PMTiles basemap + MapLibre) and the **admin-web CRUD page** are deferred follow-ups.
+
 ---
 
 ## 12. Reporting, blocking & notifications — `/api/v1`
@@ -345,7 +347,7 @@ Both mutations are `isAuthenticated → requireAdmin`, rate-limited `adminMutati
 | Users        | ✅ `GET /admin/users` (offset, `?search=&status=`), `GET /admin/users/:id` · ⛔ `PATCH /admin/users/:id` set `isAdmin` (P-16)                     |
 | Communities  | ✅ `GET/POST /admin/communities`, `GET/PATCH/DELETE /admin/communities/:id`                                                                       |
 | Events       | `GET/POST /admin/events`, `GET/PATCH/DELETE /admin/events/:id`                                                                                    |
-| Safe places  | `GET/POST /admin/safe-places`, `GET/PATCH/DELETE /admin/safe-places/:id` (the only write path for venues)                                         |
+| Safe places  | ✅ `GET/POST /admin/safe-places`, `PATCH/DELETE /admin/safe-places/:id` (the only write path for venues; soft-delete; audited IDs-only)           |
 | Reports      | ✅ `GET /admin/reports` (offset, `?status=`) · ✅ `PATCH /admin/reports/:id` (resolve/dismiss + `resolution`)                                     |
 | Moderation   | ✅ `POST /admin/moderation/remove-content` (posts + events) · ✅ `/ban` · ✅ `/unban` · ⛔ `/mute` (DPIA) — each writes `audit_log: moderation.*` |
 | Ad campaigns | `GET/POST /admin/ad-campaigns`, `GET/PATCH/DELETE /admin/ad-campaigns/:id`                                                                        |

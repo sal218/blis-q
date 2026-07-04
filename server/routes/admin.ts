@@ -23,10 +23,16 @@ import {
   safePlacesListQuerySchema,
   createSafePlaceSchema,
   updateSafePlaceSchema,
+  uploadUrlSchema,
   osmSearchSchema,
   bulkCreateSafePlacesSchema,
 } from "../validation";
 import { searchOverpass, OverpassError } from "../overpass";
+import {
+  createUploadUrl,
+  confirmUpload,
+  getDownloadUrl,
+} from "../objectStorage";
 import {
   checkAdminLoginRateLimit,
   checkAdminMutationRateLimit,
@@ -107,6 +113,13 @@ export function registerAdminRoutes(app: Express): void {
   // this slice — admin-web CRUD page is deferred.
   app.get("/api/admin/safe-places", ...admin, handleListSafePlaces);
   app.post("/api/admin/safe-places", ...admin, handleCreateSafePlace);
+  // Presigned upload URL for a venue photo (SP-6a) → the admin PUTs the file
+  // directly to R2, then passes the returned key on create/update.
+  app.post(
+    "/api/admin/safe-places/upload-url",
+    ...admin,
+    handleSafePlaceUploadUrl,
+  );
   // OSM import (SP-2) — search + bulk. Registered before "/:id" isn't required
   // (these are POSTs to distinct sub-paths), but keep them grouped.
   app.post("/api/admin/safe-places/osm-search", ...admin, handleOsmSearch);
@@ -115,7 +128,7 @@ export function registerAdminRoutes(app: Express): void {
   app.delete("/api/admin/safe-places/:id", ...admin, handleDeleteSafePlace);
 }
 
-function toSafePlaceDTO(row: SafePlaceRow): SafePlaceDTO {
+async function toSafePlaceDTO(row: SafePlaceRow): Promise<SafePlaceDTO> {
   return {
     id: row.id,
     name: row.name,
@@ -125,6 +138,10 @@ function toSafePlaceDTO(row: SafePlaceRow): SafePlaceDTO {
     city: row.city,
     latitude: row.latitude,
     longitude: row.longitude,
+    // Signed url for the venue photo (or null); the raw R2 key never leaves us.
+    imageUrl: row.imageKey
+      ? await getDownloadUrl("safeplace", row.imageKey)
+      : null,
     // Admin responses have no caller-save context; the field is user-only.
     saved: false,
   };
@@ -711,6 +728,42 @@ async function handleAdminLogin(
 
 // ── Safe places CRUD (docs/API.md §11/§14) ──────────────────────────────────
 
+// POST /api/admin/safe-places/upload-url — mint a presigned PUT for a venue
+// photo. The admin PUTs the file straight to R2 with the declared content type,
+// then passes the returned `key` on create/update (confirmed there). SW-1: the
+// content type is validated + signed into the PUT.
+async function handleSafePlaceUploadUrl(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = uploadUrlSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const { uploadUrl, key } = await createUploadUrl(
+      "safeplace",
+      userId,
+      parsed.data.contentType,
+    );
+    return res.status(200).json({ uploadUrl, key });
+  } catch (err) {
+    console.error("[POST /api/admin/safe-places/upload-url]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
 async function handleListSafePlaces(
   req: Request,
   res: Response,
@@ -732,7 +785,7 @@ async function handleListSafePlaces(
       near: q.near,
     });
     const body: OffsetPage<SafePlaceDTO> = {
-      data: rows.map(toSafePlaceDTO),
+      data: await Promise.all(rows.map(toSafePlaceDTO)),
       page: q.page,
       pageSize: q.pageSize,
       total,
@@ -763,12 +816,21 @@ async function handleCreateSafePlace(
         .status(400)
         .json({ error: "Invalid input", details: parsed.error.issues });
     }
+    // Verify a supplied image belongs to this admin AND is a valid image
+    // (allowlisted type, ≤5 MB) before it's stored — SW-1. Do it BEFORE the DB
+    // write so a bad image never half-creates the place.
+    if (
+      parsed.data.imageKey &&
+      !(await confirmUpload("safeplace", parsed.data.imageKey, userId))
+    ) {
+      return res.status(400).json({ error: "Invalid image upload" });
+    }
     const row = await storage.createSafePlace(
       parsed.data,
       userId,
       req.ip ?? null,
     );
-    return res.status(201).json(toSafePlaceDTO(row));
+    return res.status(201).json(await toSafePlaceDTO(row));
   } catch (err) {
     console.error("[POST /api/admin/safe-places]", {
       code: safeErrorCode(err),
@@ -797,6 +859,14 @@ async function handleUpdateSafePlace(
         .status(400)
         .json({ error: "Invalid input", details: parsed.error.issues });
     }
+    // A NEW image (a uuid, not null=clear / undefined=unchanged) must be
+    // confirmed before it's stored — SW-1.
+    if (
+      typeof parsed.data.imageKey === "string" &&
+      !(await confirmUpload("safeplace", parsed.data.imageKey, userId))
+    ) {
+      return res.status(400).json({ error: "Invalid image upload" });
+    }
     const row = await storage.updateSafePlace(
       id,
       parsed.data,
@@ -804,7 +874,7 @@ async function handleUpdateSafePlace(
       req.ip ?? null,
     );
     if (!row) return res.status(404).json({ error: "Not found" });
-    return res.status(200).json(toSafePlaceDTO(row));
+    return res.status(200).json(await toSafePlaceDTO(row));
   } catch (err) {
     console.error("[PATCH /api/admin/safe-places/:id]", {
       code: safeErrorCode(err),

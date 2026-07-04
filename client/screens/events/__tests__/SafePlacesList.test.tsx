@@ -21,6 +21,7 @@ const place = (
   city,
   latitude: null,
   longitude: null,
+  imageUrl: null,
   saved: false,
 });
 

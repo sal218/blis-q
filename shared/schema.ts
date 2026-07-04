@@ -292,6 +292,9 @@ export const safePlaces = pgTable(
     // venue was imported from OSM (slice SP-2). Server-internal dedupe key — NOT
     // on the public SafePlaceDTO. Null for manual entries.
     osmId: text("osm_id"),
+    // R2 object key (a random UUID) for the admin-uploaded venue photo (SP-6a).
+    // Server-internal — NEVER on the DTO; the DTO exposes a signed `imageUrl`.
+    imageKey: text("image_key"),
     createdById: uuid("created_by_id").references(() => users.id, {
       onDelete: "set null",
     }),

@@ -4,6 +4,7 @@ import { isAuthenticated } from "../auth";
 import { safeErrorCode } from "./auth";
 import { storage } from "../storage";
 import type { SafePlaceReadRow } from "../storage";
+import { getDownloadUrl } from "../objectStorage";
 import { checkRsvpRateLimit } from "../rateLimit";
 import { safePlacesListQuerySchema } from "../validation";
 import type {
@@ -32,8 +33,10 @@ const SAVED_SAFE_PLACES_LIMIT = 50;
 
 // category is DB text; only validated categories are ever written, so the narrow
 // to the SafePlaceCategory union is safe. `saved` is the caller's own private
-// bookmark flag (no count / who-saved surface — Article 9).
-function toSafePlaceDTO(row: SafePlaceReadRow): SafePlaceDTO {
+// bookmark flag (no count / who-saved surface — Article 9). `imageUrl` is a
+// short-lived SIGNED url — the raw R2 `imageKey` is never serialised. Async
+// because signing the download url is per-object (a local crypto op, no network).
+async function toSafePlaceDTO(row: SafePlaceReadRow): Promise<SafePlaceDTO> {
   return {
     id: row.id,
     name: row.name,
@@ -43,6 +46,9 @@ function toSafePlaceDTO(row: SafePlaceReadRow): SafePlaceDTO {
     city: row.city,
     latitude: row.latitude,
     longitude: row.longitude,
+    imageUrl: row.imageKey
+      ? await getDownloadUrl("safeplace", row.imageKey)
+      : null,
     saved: row.callerSaved,
   };
 }
@@ -73,7 +79,7 @@ async function handleList(req: Request, res: Response): Promise<Response> {
     });
 
     const body: OffsetPage<SafePlaceDTO> = {
-      data: rows.map(toSafePlaceDTO),
+      data: await Promise.all(rows.map(toSafePlaceDTO)),
       page: q.page,
       pageSize: q.pageSize,
       total,
@@ -94,7 +100,7 @@ async function handleListSaved(req: Request, res: Response): Promise<Response> {
       callerId: req.user!.id,
       limit: SAVED_SAFE_PLACES_LIMIT,
     });
-    const body: SafePlaceDTO[] = rows.map(toSafePlaceDTO);
+    const body: SafePlaceDTO[] = await Promise.all(rows.map(toSafePlaceDTO));
     return res.status(200).json(body);
   } catch (err) {
     console.error("[GET /api/v1/safe-places/saved]", {
@@ -111,7 +117,7 @@ async function handleGet(req: Request, res: Response): Promise<Response> {
 
     const row = await storage.getSafePlace(id.data, req.user!.id);
     if (!row) return res.status(404).json({ error: "Not found" });
-    return res.status(200).json(toSafePlaceDTO(row));
+    return res.status(200).json(await toSafePlaceDTO(row));
   } catch (err) {
     console.error("[GET /api/v1/safe-places/:id]", {
       code: safeErrorCode(err),

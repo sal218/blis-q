@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { EVENT_CATEGORIES, SAFE_PLACE_CATEGORIES } from "@shared/types";
+import { ALLOWED_IMAGE_CONTENT_TYPES } from "./objectStorage";
 
 // Zod schemas for the backend request boundary. Every mutation route validates
 // its body against one of these before doing anything else (CLAUDE.md §6,
@@ -235,9 +236,18 @@ export const createSafePlaceSchema = z
     city: z.string().trim().max(MAX_SAFE_PLACE_CITY_LENGTH).optional(),
     latitude: latitudeSchema.optional(),
     longitude: longitudeSchema.optional(),
+    // The R2 key from a prior upload-url + PUT (confirmed server-side). Omitted =
+    // no image. `null` is meaningless on create (there's nothing to clear).
+    imageKey: z.string().uuid().optional(),
   })
   .strict()
   .refine(bothOrNeitherCoords, COORDS_REFINE);
+
+// POST /admin/safe-places/upload-url body — the client declares the image's
+// content type up front so it can be signed into the presigned PUT (SW-1).
+export const uploadUrlSchema = z
+  .object({ contentType: z.enum(ALLOWED_IMAGE_CONTENT_TYPES) })
+  .strict();
 
 export const updateSafePlaceSchema = z
   .object({
@@ -248,6 +258,8 @@ export const updateSafePlaceSchema = z
     city: z.string().trim().max(MAX_SAFE_PLACE_CITY_LENGTH).optional(),
     latitude: latitudeSchema.optional(),
     longitude: longitudeSchema.optional(),
+    // undefined = leave the image unchanged · null = REMOVE it · uuid = set/replace.
+    imageKey: z.string().uuid().nullable().optional(),
   })
   .strict()
   // PATCH must change something — an empty body is a 400, not a silent no-op.

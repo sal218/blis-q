@@ -3,6 +3,7 @@ import {
   useEffect,
   useState,
   type CSSProperties,
+  type ChangeEvent,
   type FormEvent,
 } from "react";
 import { adminFetch } from "../lib/api";
@@ -58,6 +59,14 @@ export function SafePlacesPage() {
   const [city, setCity] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  // Image state: imageKey undefined = leave unchanged, null = remove, string =
+  // a freshly-uploaded (confirmed on save) R2 key. imagePreview drives the thumb.
+  const [imageKey, setImageKey] = useState<string | null | undefined>(
+    undefined,
+  );
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -115,7 +124,56 @@ export function SafePlacesPage() {
     setCity("");
     setLatitude("");
     setLongitude("");
+    setImageKey(undefined);
+    setImagePreview(null);
+    setImageError(null);
     setFormError(null);
+  }
+
+  const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+  // Upload a chosen file straight to R2 via a presigned PUT, then hold its key.
+  async function onPickImage(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setImageError("Dozwolone formaty: JPG, PNG, WebP.");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setImageError("Maksymalny rozmiar to 5 MB.");
+      return;
+    }
+    setImageBusy(true);
+    setImageError(null);
+    try {
+      const { uploadUrl, key } = await adminFetch<{
+        uploadUrl: string;
+        key: string;
+      }>("POST", "/api/admin/safe-places/upload-url", {
+        contentType: file.type,
+      });
+      const put = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!put.ok) throw new Error(`upload failed: ${put.status}`);
+      setImageKey(key);
+      setImagePreview(URL.createObjectURL(file));
+    } catch {
+      setImageError("Nie udało się przesłać zdjęcia. Spróbuj ponownie.");
+    } finally {
+      setImageBusy(false);
+    }
+  }
+
+  function removeImage() {
+    setImageKey(null);
+    setImagePreview(null);
+    setImageError(null);
   }
 
   function startEdit(place: SafePlaceDTO) {
@@ -127,6 +185,9 @@ export function SafePlacesPage() {
     setCity(place.city ?? "");
     setLatitude(place.latitude === null ? "" : String(place.latitude));
     setLongitude(place.longitude === null ? "" : String(place.longitude));
+    setImageKey(undefined); // unchanged until the admin uploads/removes
+    setImagePreview(place.imageUrl);
+    setImageError(null);
     setFormError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -182,6 +243,10 @@ export function SafePlacesPage() {
         body.latitude = coords.lat;
         body.longitude = coords.lng;
       }
+      // imageKey: a new upload (string) sets/replaces; null clears (edit only —
+      // meaningless on create); undefined leaves the current image untouched.
+      if (typeof imageKey === "string") body.imageKey = imageKey;
+      else if (imageKey === null && editingId) body.imageKey = null;
       if (editingId) {
         await adminFetch("PATCH", `/api/admin/safe-places/${editingId}`, body);
       } else {
@@ -277,6 +342,16 @@ export function SafePlacesPage() {
   }
 
   const columns: Column<SafePlaceDTO>[] = [
+    {
+      key: "image",
+      header: "",
+      render: (p) =>
+        p.imageUrl ? (
+          <img src={p.imageUrl} alt="" style={styles.thumb} />
+        ) : (
+          <div style={styles.thumbEmpty} />
+        ),
+    },
     { key: "name", header: "Nazwa", render: (p) => p.name },
     {
       key: "category",
@@ -360,6 +435,44 @@ export function SafePlacesPage() {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
+
+        <label style={styles.label}>
+          Zdjęcie (opcjonalnie — JPG/PNG/WebP, do 5 MB)
+        </label>
+        <div style={styles.imageRow}>
+          {imagePreview ? (
+            <img src={imagePreview} alt="" style={styles.imagePreview} />
+          ) : (
+            <div style={styles.imagePlaceholder}>Brak zdjęcia</div>
+          )}
+          <div style={styles.imageControls}>
+            <label style={styles.uploadBtn}>
+              {imageBusy
+                ? "Przesyłanie…"
+                : imagePreview
+                  ? "Zmień zdjęcie"
+                  : "Dodaj zdjęcie"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={onPickImage}
+                disabled={imageBusy}
+                style={{ display: "none" }}
+              />
+            </label>
+            {imagePreview ? (
+              <button
+                type="button"
+                onClick={removeImage}
+                disabled={imageBusy}
+                style={styles.removeBtn}
+              >
+                Usuń zdjęcie
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {imageError ? <p style={styles.error}>{imageError}</p> : null}
 
         <div style={styles.grid2}>
           <div>
@@ -696,6 +809,61 @@ const styles: Record<string, CSSProperties> = {
   pager: { display: "flex", gap: 12, alignItems: "center", marginTop: 16 },
   muted: { color: "#6B7280", fontSize: 14 },
   error: { color: "#DC2626", fontSize: 14, margin: "6px 0 0" },
+  imageRow: { display: "flex", alignItems: "center", gap: 12, marginTop: 2 },
+  imagePreview: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    objectFit: "cover",
+    border: "1px solid #D1D5DB",
+  },
+  imagePlaceholder: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    border: "1px dashed #D1D5DB",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 11,
+    color: "#9CA3AF",
+    textAlign: "center",
+  },
+  thumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    objectFit: "cover",
+    display: "block",
+  },
+  thumbEmpty: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    background: "#F3F4F6",
+  },
+  imageControls: { display: "flex", flexDirection: "column", gap: 6 },
+  uploadBtn: {
+    padding: "8px 14px",
+    borderRadius: 8,
+    border: "1px solid #6D28D9",
+    color: "#6D28D9",
+    background: "#F5F3FF",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    textAlign: "center",
+  },
+  removeBtn: {
+    padding: "6px 14px",
+    borderRadius: 8,
+    border: "1px solid #D1D5DB",
+    background: "#FFFFFF",
+    color: "#374151",
+    fontSize: 13,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
   importRow: {
     display: "flex",
     gap: 8,

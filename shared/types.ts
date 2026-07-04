@@ -216,6 +216,9 @@ export type SafePlaceDTO = {
   // Venue coordinates (admin-curated venue data, NOT user location — §5.8).
   latitude: number | null;
   longitude: number | null;
+  // A short-lived signed URL for the admin-uploaded venue photo, or null. The
+  // underlying R2 object key is NEVER exposed (private bucket, signed reads only).
+  imageUrl: string | null;
   // The caller's OWN private bookmark flag. No count / who-saved surface
   // (Article 9), mirroring EventDTO.saved. Admin responses set this false.
   saved: boolean;

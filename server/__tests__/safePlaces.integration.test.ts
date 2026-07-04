@@ -52,10 +52,24 @@ jest.mock("../overpass", () => ({
   OverpassError: class OverpassError extends Error {},
 }));
 
+// Mock R2 (SP-6a). The pipeline's own SW-1 logic is covered by
+// objectStorage.integration.test.ts; here we only assert route/storage wiring.
+jest.mock("../objectStorage", () => ({
+  createUploadUrl: jest.fn(),
+  confirmUpload: jest.fn(),
+  getDownloadUrl: jest.fn(),
+  ALLOWED_IMAGE_CONTENT_TYPES: ["image/jpeg", "image/png", "image/webp"],
+}));
+
 import { registerSafePlaceRoutes } from "../routes/safePlaces";
 import { registerAdminRoutes } from "../routes/admin";
 import { checkAdminMutationRateLimit, checkRsvpRateLimit } from "../rateLimit";
 import { searchOverpass, OverpassError } from "../overpass";
+import {
+  createUploadUrl,
+  confirmUpload,
+  getDownloadUrl,
+} from "../objectStorage";
 import { storage } from "../storage";
 import { db, pool } from "../db";
 import {
@@ -80,6 +94,9 @@ jest.setTimeout(30000);
 
 const mutationRl = checkAdminMutationRateLimit as unknown as jest.Mock;
 const rsvpRl = checkRsvpRateLimit as unknown as jest.Mock;
+const createUploadUrlMock = createUploadUrl as unknown as jest.Mock;
+const confirmUploadMock = confirmUpload as unknown as jest.Mock;
+const getDownloadUrlMock = getDownloadUrl as unknown as jest.Mock;
 
 const POLICY_VERSION = "2026-06-10";
 const createdUserIds: string[] = [];
@@ -136,6 +153,14 @@ beforeEach(() => {
   mockUser = null;
   mutationRl.mockResolvedValue({ allowed: true });
   rsvpRl.mockResolvedValue({ allowed: true });
+  confirmUploadMock.mockResolvedValue(true);
+  getDownloadUrlMock.mockImplementation(
+    async (_type: string, key: string) => `https://signed.example/${key}`,
+  );
+  createUploadUrlMock.mockResolvedValue({
+    uploadUrl: "https://r2.example/put",
+    key: "11111111-1111-1111-1111-111111111111",
+  });
 });
 
 afterEach(async () => {
@@ -558,6 +583,129 @@ describe("GDPR: erasure + export cover saved bookmarks", () => {
     const row = data.savedSafePlaces.find((x) => x.id === p);
     expect(row?.name).toBe("Zapisane Miejsce");
     expect(row?.savedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe("Safe-place images (SP-6a)", () => {
+  it("POST /admin/safe-places/upload-url → admin 200 {uploadUrl,key}; non-admin 403; bad type 400; 429", async () => {
+    const admin = await seedUser();
+
+    mockUser = { id: admin, isAdmin: true };
+    const ok = await request(app)
+      .post("/api/admin/safe-places/upload-url")
+      .send({ contentType: "image/png" });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toEqual({
+      uploadUrl: "https://r2.example/put",
+      key: "11111111-1111-1111-1111-111111111111",
+    });
+    expect(createUploadUrlMock).toHaveBeenCalledWith(
+      "safeplace",
+      admin,
+      "image/png",
+    );
+
+    const bad = await request(app)
+      .post("/api/admin/safe-places/upload-url")
+      .send({ contentType: "application/pdf" });
+    expect(bad.status).toBe(400);
+
+    mockUser = { id: admin, isAdmin: false };
+    const forbidden = await request(app)
+      .post("/api/admin/safe-places/upload-url")
+      .send({ contentType: "image/png" });
+    expect(forbidden.status).toBe(403);
+
+    mockUser = { id: admin, isAdmin: true };
+    mutationRl.mockResolvedValueOnce({ allowed: false, retryAfter: 5 });
+    const limited = await request(app)
+      .post("/api/admin/safe-places/upload-url")
+      .send({ contentType: "image/png" });
+    expect(limited.status).toBe(429);
+  });
+
+  it("create with a confirmed imageKey stores it; the DTO exposes a signed imageUrl, never the key", async () => {
+    const admin = await seedUser();
+    const imageKey = randomUUID();
+    mockUser = { id: admin, isAdmin: true };
+
+    const res = await request(app)
+      .post("/api/admin/safe-places")
+      .send({ name: "Foto Cafe", category: "cafe", imageKey });
+    expect(res.status).toBe(201);
+    expect(confirmUploadMock).toHaveBeenCalledWith(
+      "safeplace",
+      imageKey,
+      admin,
+    );
+    expect(res.body.imageUrl).toBe(`https://signed.example/${imageKey}`);
+    expect(res.body.imageKey).toBeUndefined(); // key never serialised
+    createdSafePlaceIds.push(res.body.id);
+
+    // A regular user sees the same signed imageUrl on the read path.
+    mockUser = { id: admin, isAdmin: false };
+    const got = await request(app).get(`/api/v1/safe-places/${res.body.id}`);
+    expect(got.body.imageUrl).toBe(`https://signed.example/${imageKey}`);
+    expect(got.body.imageKey).toBeUndefined();
+  });
+
+  it("create with an UNconfirmed imageKey → 400, nothing stored", async () => {
+    const admin = await seedUser();
+    confirmUploadMock.mockResolvedValueOnce(false);
+    mockUser = { id: admin, isAdmin: true };
+
+    const res = await request(app)
+      .post("/api/admin/safe-places")
+      .send({
+        name: "Bad Image Place",
+        category: "cafe",
+        imageKey: randomUUID(),
+      });
+    expect(res.status).toBe(400);
+
+    const rows = await db
+      .select()
+      .from(safePlaces)
+      .where(eq(safePlaces.createdById, admin));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("update can set, replace and CLEAR the image", async () => {
+    const admin = await seedUser();
+    const p = await seedPlace(admin, { name: "Editable" });
+    mockUser = { id: admin, isAdmin: true };
+
+    // set
+    const k1 = randomUUID();
+    const set = await request(app)
+      .patch(`/api/admin/safe-places/${p}`)
+      .send({ imageKey: k1 });
+    expect(set.status).toBe(200);
+    expect(set.body.imageUrl).toBe(`https://signed.example/${k1}`);
+
+    // omit imageKey → unchanged
+    const unchanged = await request(app)
+      .patch(`/api/admin/safe-places/${p}`)
+      .send({ city: "Warszawa" });
+    expect(unchanged.body.imageUrl).toBe(`https://signed.example/${k1}`);
+
+    // null → clear
+    const cleared = await request(app)
+      .patch(`/api/admin/safe-places/${p}`)
+      .send({ imageKey: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.imageUrl).toBeNull();
+  });
+
+  it("imageUrl is null when a place has no image; getDownloadUrl isn't called", async () => {
+    const admin = await seedUser();
+    const p = await seedPlace(admin);
+    mockUser = { id: admin, isAdmin: false };
+
+    getDownloadUrlMock.mockClear();
+    const res = await request(app).get(`/api/v1/safe-places/${p}`);
+    expect(res.body.imageUrl).toBeNull();
+    expect(getDownloadUrlMock).not.toHaveBeenCalled();
   });
 });
 

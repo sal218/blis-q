@@ -43,7 +43,10 @@ export function EventCard({ event, onPress, onToggleSave }: Props) {
       </View>
 
       <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={2}>
+        {/* Single line + the same rows on EVERY card (location always shown, a
+            fixed-height tag slot) so all feed cards are a uniform height, and
+            each element shares the same left edge as the title. */}
+        <Text style={styles.title} numberOfLines={1}>
           {event.title}
         </Text>
 
@@ -54,27 +57,25 @@ export function EventCard({ event, onPress, onToggleSave }: Props) {
           </Text>
         </View>
 
-        {event.location ? (
-          <View style={styles.row}>
-            <MapPin size={14} color={colors.textMuted} />
-            <Text style={styles.rowText} numberOfLines={1}>
-              {event.location}
-            </Text>
-          </View>
-        ) : null}
+        <View style={styles.row}>
+          <MapPin size={14} color={colors.textMuted} />
+          <Text style={styles.rowText} numberOfLines={1}>
+            {event.location ?? strings.events.noLocation}
+          </Text>
+        </View>
 
         <Text style={styles.going}>
           {format(strings.events.goingCount, { count: event.goingCount })}
         </Text>
 
-        {event.category ? (
-          <View style={styles.tagRow}>
+        <View style={styles.tagRow}>
+          {event.category ? (
             <CategoryChip
               label={strings.events.categories[event.category]}
               category={event.category}
             />
-          </View>
-        ) : null}
+          ) : null}
+        </View>
       </View>
 
       {onToggleSave ? (
@@ -154,8 +155,14 @@ function createStyles(colors: ThemeColors) {
       fontSize: 13,
       marginTop: spacing.xs,
     },
+    // A fixed-height slot (chip height) so a card WITHOUT a category is the same
+    // height as one with it. flex-start keeps the pill flush with the title's
+    // left edge (not indented/right of the rows above).
     tagRow: {
       flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      minHeight: 30,
       marginTop: spacing.sm,
     },
     saveBtn: {

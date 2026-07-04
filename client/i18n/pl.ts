@@ -200,7 +200,8 @@ export const pl = {
 
   // Safe Places — the mobile list (epic P-40 slice SP-3).
   safePlaces: {
-    searchPlaceholder: "Szukaj po mieście", // "Search by city"
+    searchPlaceholder: "Szukaj miejsca lub miasta", // "Search a place or city"
+    clear: "Wyczyść wyszukiwanie", // "Clear search" (a11y label for the ✕)
     filterAll: "Wszystkie", // "All" — the category filter chip that clears
     empty: "Nie ma jeszcze żadnych bezpiecznych miejsc.", // "No safe places yet."
     emptyCategory: "Brak miejsc w tej kategorii.", // "No places in this category."

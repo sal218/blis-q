@@ -18,19 +18,21 @@ import {
 
 export type SafePlacesResult<T> = ApiResult<T, CommonApiError>;
 
-// GET /api/v1/safe-places — offset page + optional category + city filters.
+// GET /api/v1/safe-places — offset page + optional category + free-text search.
+// `search` is a case-insensitive substring over name + city + address (the
+// mobile type-ahead box); blank is omitted (→ full list).
 export function listSafePlaces(params: {
   page?: number;
   category?: SafePlaceCategory;
-  city?: string;
+  search?: string;
 }): Promise<SafePlacesResult<OffsetPage<SafePlaceDTO>>> {
   const parts: string[] = [];
   if (params.page) parts.push(`page=${params.page}`);
   if (params.category) {
     parts.push(`category=${encodeURIComponent(params.category)}`);
   }
-  const city = params.city?.trim();
-  if (city) parts.push(`city=${encodeURIComponent(city)}`);
+  const search = params.search?.trim();
+  if (search) parts.push(`search=${encodeURIComponent(search)}`);
   const query = parts.length ? `?${parts.join("&")}` : "";
   return request(
     "GET",

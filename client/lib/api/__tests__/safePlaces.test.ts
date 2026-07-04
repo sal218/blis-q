@@ -39,19 +39,19 @@ describe("listSafePlaces", () => {
     );
   });
 
-  it("composes page + category + (encoded) city", async () => {
+  it("composes page + category + (encoded) search", async () => {
     fetchMock.mockResolvedValue(res(200, PAGE));
-    await listSafePlaces({ page: 2, category: "club", city: "Kraków" });
+    await listSafePlaces({ page: 2, category: "club", search: "Kraków" });
     expect(fetchMock).toHaveBeenCalledWith(
       "GET",
-      "/api/v1/safe-places?page=2&category=club&city=Krak%C3%B3w",
+      "/api/v1/safe-places?page=2&category=club&search=Krak%C3%B3w",
       undefined,
     );
   });
 
-  it("omits a blank city", async () => {
+  it("omits a blank search", async () => {
     fetchMock.mockResolvedValue(res(200, PAGE));
-    await listSafePlaces({ city: "   " });
+    await listSafePlaces({ search: "   " });
     expect(fetchMock).toHaveBeenCalledWith(
       "GET",
       "/api/v1/safe-places",

@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   TextInput,
+  Pressable,
   FlatList,
   ScrollView,
   ActivityIndicator,
@@ -10,7 +11,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
-import { MagnifyingGlass } from "@/components/icons/PhosphorIcons";
+import { MagnifyingGlass, X } from "@/components/icons/PhosphorIcons";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { CategoryChip } from "@/components/CategoryChip";
 import { SafePlaceCard } from "@/components/SafePlaceCard";
@@ -35,18 +36,32 @@ export function SafePlacesList() {
     refreshing,
     loadingMore,
     category,
-    city,
+    search,
     setCategory,
-    setCity,
+    setSearch,
     refresh,
     loadMore,
     retry,
   } = useSafePlaces();
   const [query, setQuery] = useState("");
 
-  // Empty-copy precedence: a city SEARCH that matches nothing → search message;
-  // else an active CATEGORY → category message; else the plain empty list.
-  const emptyText = city
+  // Live type-ahead: debounce the text box so the list filters as the user
+  // types (no need to submit). setSearch no-ops when the trimmed term is
+  // unchanged, so deleting back to empty falls straight through to the full
+  // list. A stray keystroke is coalesced by the trailing timer.
+  useEffect(() => {
+    const id = setTimeout(() => setSearch(query), 250);
+    return () => clearTimeout(id);
+  }, [query, setSearch]);
+
+  const clearSearch = () => {
+    setQuery("");
+    setSearch(""); // reset to the full list immediately, don't wait for debounce
+  };
+
+  // Empty-copy precedence: an active SEARCH that matches nothing → search
+  // message; else an active CATEGORY → category message; else the plain empty.
+  const emptyText = search
     ? strings.safePlaces.emptySearch
     : category
       ? strings.safePlaces.emptyCategory
@@ -86,9 +101,19 @@ export function SafePlacesList() {
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
-          clearButtonMode="while-editing"
-          onSubmitEditing={() => setCity(query)}
+          onSubmitEditing={() => setSearch(query)}
         />
+        {query.length > 0 && (
+          <Pressable
+            onPress={clearSearch}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={strings.safePlaces.clear}
+            style={styles.clearBtn}
+          >
+            <X size={16} color={colors.textMuted} />
+          </Pressable>
+        )}
       </View>
 
       <ScrollView
@@ -181,6 +206,10 @@ function createStyles(colors: ThemeColors) {
       marginLeft: spacing.sm,
       color: colors.text,
       fontSize: 16,
+    },
+    clearBtn: {
+      padding: spacing.xs,
+      marginLeft: spacing.xs,
     },
     filterScroll: { flexGrow: 0 },
     disclaimer: {

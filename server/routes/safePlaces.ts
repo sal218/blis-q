@@ -53,6 +53,7 @@ async function handleList(req: Request, res: Response): Promise<Response> {
       pageSize: q.pageSize,
       category: q.category,
       city: q.city,
+      search: q.search,
       near: q.near, // ephemeral: order-by only, never stored/logged
     });
 

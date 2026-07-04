@@ -23,9 +23,9 @@ export type UseSafePlaces = {
   refreshing: boolean;
   loadingMore: boolean;
   category: SafePlaceCategory | null; // active filter (null = all)
-  city: string; // active city filter ("" = all)
+  search: string; // active search term ("" = all)
   setCategory: (category: SafePlaceCategory | null) => void;
-  setCity: (city: string) => void;
+  setSearch: (search: string) => void;
   refresh: () => void;
   loadMore: () => void;
   retry: () => void;
@@ -40,15 +40,15 @@ export function useSafePlaces(): UseSafePlaces {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [category, setCategoryState] = useState<SafePlaceCategory | null>(null);
-  const [city, setCityState] = useState("");
+  const [search, setSearchState] = useState("");
 
   const requestSeq = useRef(0);
   const loadedOnce = useRef(false);
   // Filters are read from refs inside fetchPage so focus-refetch + load-more use
-  // the CURRENT filter (setCategory/setCity update them synchronously before the
-  // reload they trigger).
+  // the CURRENT filter (setCategory/setSearch update them synchronously before
+  // the reload they trigger).
   const categoryRef = useRef<SafePlaceCategory | null>(null);
-  const cityRef = useRef("");
+  const searchRef = useRef("");
 
   const fetchPage = useCallback(async (targetPage: number, mode: LoadMode) => {
     const seq = ++requestSeq.current;
@@ -60,7 +60,7 @@ export function useSafePlaces(): UseSafePlaces {
     const result = await listSafePlaces({
       page: targetPage,
       category: categoryRef.current ?? undefined,
-      city: cityRef.current || undefined,
+      search: searchRef.current || undefined,
     });
 
     if (mode === "more") setLoadingMore(false);
@@ -105,13 +105,15 @@ export function useSafePlaces(): UseSafePlaces {
     [fetchPage],
   );
 
-  // Apply a city filter (called on search submit). Trimmed; reloads from page 1.
-  const setCity = useCallback(
+  // Apply the free-text search (called debounced as the user types, or on
+  // submit). Trimmed; a blank term clears the filter → full list. A no-op if
+  // unchanged. requestSeq drops any in-flight page from the previous term.
+  const setSearch = useCallback(
     (next: string) => {
       const trimmed = next.trim();
-      if (trimmed === cityRef.current) return;
-      cityRef.current = trimmed;
-      setCityState(trimmed);
+      if (trimmed === searchRef.current) return;
+      searchRef.current = trimmed;
+      setSearchState(trimmed);
       void fetchPage(1, "replace");
     },
     [fetchPage],
@@ -131,9 +133,9 @@ export function useSafePlaces(): UseSafePlaces {
     refreshing,
     loadingMore,
     category,
-    city,
+    search,
     setCategory,
-    setCity,
+    setSearch,
     refresh,
     loadMore,
     retry,

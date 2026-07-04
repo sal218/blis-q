@@ -1,6 +1,6 @@
 jest.mock("@/hooks/useSafePlaces", () => ({ useSafePlaces: jest.fn() }));
 
-import { render, screen, fireEvent } from "@testing-library/react-native";
+import { render, screen, fireEvent, act } from "@testing-library/react-native";
 import { SafePlacesList } from "@/screens/events/SafePlacesList";
 import { useSafePlaces } from "@/hooks/useSafePlaces";
 import { strings } from "@/i18n";
@@ -31,9 +31,9 @@ function state(over: Partial<ReturnType<typeof useSafePlaces>> = {}) {
     refreshing: false,
     loadingMore: false,
     category: null,
-    city: "",
+    search: "",
     setCategory: jest.fn(),
-    setCity: jest.fn(),
+    setSearch: jest.fn(),
     refresh: jest.fn(),
     loadMore: jest.fn(),
     retry: jest.fn(),
@@ -81,16 +81,46 @@ describe("SafePlacesList", () => {
     expect(setCategory).toHaveBeenCalledWith(null);
   });
 
-  it("submitting the search box applies the city filter", () => {
-    const setCity = jest.fn();
-    spMock.mockReturnValue(state({ setCity }));
+  it("submitting the search box applies the search immediately", () => {
+    const setSearch = jest.fn();
+    spMock.mockReturnValue(state({ setSearch }));
     render(<SafePlacesList />);
     const input = screen.getByPlaceholderText(
       strings.safePlaces.searchPlaceholder,
     );
     fireEvent.changeText(input, "Kraków");
     fireEvent(input, "submitEditing");
-    expect(setCity).toHaveBeenCalledWith("Kraków");
+    expect(setSearch).toHaveBeenCalledWith("Kraków");
+  });
+
+  it("filters as you type (debounced) without submitting", () => {
+    jest.useFakeTimers();
+    const setSearch = jest.fn();
+    spMock.mockReturnValue(state({ setSearch }));
+    render(<SafePlacesList />);
+    const input = screen.getByPlaceholderText(
+      strings.safePlaces.searchPlaceholder,
+    );
+    fireEvent.changeText(input, "war");
+    expect(setSearch).not.toHaveBeenCalledWith("war"); // not yet — debounced
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(setSearch).toHaveBeenCalledWith("war");
+    jest.useRealTimers();
+  });
+
+  it("the clear (✕) button resets the box and the filter to the full list", () => {
+    const setSearch = jest.fn();
+    spMock.mockReturnValue(state({ setSearch }));
+    render(<SafePlacesList />);
+    const input = screen.getByPlaceholderText(
+      strings.safePlaces.searchPlaceholder,
+    );
+    fireEvent.changeText(input, "Kraków");
+    fireEvent.press(screen.getByLabelText(strings.safePlaces.clear));
+    expect(input.props.value).toBe("");
+    expect(setSearch).toHaveBeenCalledWith(""); // immediate reset
   });
 
   it("empty-copy precedence: plain / category / search", () => {
@@ -102,7 +132,7 @@ describe("SafePlacesList", () => {
     rerender(<SafePlacesList />);
     expect(screen.getByText(strings.safePlaces.emptyCategory)).toBeTruthy();
 
-    spMock.mockReturnValue(state({ items: [], city: "Zzz" }));
+    spMock.mockReturnValue(state({ items: [], search: "Zzz" }));
     rerender(<SafePlacesList />);
     expect(screen.getByText(strings.safePlaces.emptySearch)).toBeTruthy();
   });

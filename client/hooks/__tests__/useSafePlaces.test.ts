@@ -81,24 +81,47 @@ describe("useSafePlaces", () => {
     expect(listMock).toHaveBeenLastCalledWith({
       page: 1,
       category: "club",
-      city: undefined,
+      search: undefined,
     });
   });
 
-  it("setCity applies a city filter (reloads page 1)", async () => {
+  it("setSearch applies a search term (trimmed, reloads page 1)", async () => {
     listMock.mockResolvedValueOnce(pageOf(["s1"], 1, 1));
     const { result } = renderHook(() => useSafePlaces());
     await waitFor(() => expect(result.current.status).toBe("ready"));
 
     listMock.mockResolvedValueOnce(pageOf(["k1"], 1, 1));
     await act(async () => {
-      result.current.setCity("  Kraków  ");
+      result.current.setSearch("  Kraków  ");
     });
-    await waitFor(() => expect(result.current.city).toBe("Kraków")); // trimmed
+    await waitFor(() => expect(result.current.search).toBe("Kraków")); // trimmed
     expect(listMock).toHaveBeenLastCalledWith({
       page: 1,
       category: undefined,
-      city: "Kraków",
+      search: "Kraków",
+    });
+  });
+
+  it("setSearch back to blank clears the filter → full list", async () => {
+    listMock.mockResolvedValueOnce(pageOf(["s1"], 1, 1));
+    const { result } = renderHook(() => useSafePlaces());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    listMock.mockResolvedValueOnce(pageOf(["k1"], 1, 1));
+    await act(async () => {
+      result.current.setSearch("Kraków");
+    });
+    await waitFor(() => expect(result.current.search).toBe("Kraków"));
+
+    listMock.mockResolvedValueOnce(pageOf(["s1"], 1, 1));
+    await act(async () => {
+      result.current.setSearch("   "); // blank → clear
+    });
+    await waitFor(() => expect(result.current.search).toBe(""));
+    expect(listMock).toHaveBeenLastCalledWith({
+      page: 1,
+      category: undefined,
+      search: undefined, // no filter sent
     });
   });
 

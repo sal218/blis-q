@@ -252,6 +252,9 @@ export type SafePlaceRow = {
   // R2 object key for the venue photo (server-internal — the DTO exposes a
   // signed `imageUrl`, never this key).
   imageKey: string | null;
+  // Raw accessibility-feature keys as stored (text[]). The DTO builders narrow
+  // these to the known ACCESSIBILITY_FEATURES union.
+  accessibilityFeatures: string[];
 };
 
 // A safe-place row on a USER read path, carrying the caller's private `saved`
@@ -2911,6 +2914,7 @@ export class DatabaseStorage {
       latitude: safePlaces.latitude,
       longitude: safePlaces.longitude,
       imageKey: safePlaces.imageKey,
+      accessibilityFeatures: safePlaces.accessibilityFeatures,
     };
   }
 
@@ -3016,6 +3020,7 @@ export class DatabaseStorage {
       latitude?: number;
       longitude?: number;
       imageKey?: string; // already confirmed by the route before we're called
+      accessibilityFeatures?: string[];
     },
     actorId: string,
     ipAddress?: string | null,
@@ -3032,6 +3037,9 @@ export class DatabaseStorage {
           latitude: input.latitude ?? null,
           longitude: input.longitude ?? null,
           imageKey: input.imageKey ?? null,
+          accessibilityFeatures: [
+            ...new Set(input.accessibilityFeatures ?? []),
+          ],
           createdById: actorId,
         })
         .returning(this.safePlaceColumns());
@@ -3061,6 +3069,8 @@ export class DatabaseStorage {
       longitude?: number;
       // undefined = untouched · null = clear the photo · string = a confirmed key.
       imageKey?: string | null;
+      // undefined = untouched · a provided array = full replace ([] clears).
+      accessibilityFeatures?: string[];
     },
     actorId: string,
     ipAddress?: string | null,
@@ -3074,6 +3084,8 @@ export class DatabaseStorage {
     if (input.latitude !== undefined) fields.latitude = input.latitude;
     if (input.longitude !== undefined) fields.longitude = input.longitude;
     if (input.imageKey !== undefined) fields.imageKey = input.imageKey;
+    if (input.accessibilityFeatures !== undefined)
+      fields.accessibilityFeatures = [...new Set(input.accessibilityFeatures)];
 
     return db.transaction(async (tx) => {
       const [row] = await tx

@@ -43,6 +43,7 @@ const place = (over: Partial<SafePlaceDTO> = {}): SafePlaceDTO => ({
   latitude: 52.23,
   longitude: 21.01,
   imageUrl: null,
+  accessibilityFeatures: [],
   saved: false,
   ...over,
 });
@@ -110,6 +111,47 @@ describe("SafePlaceDetailScreen", () => {
     renderScreen();
     fireEvent.press(screen.getByLabelText(strings.safePlaces.saveAction));
     expect(toggleSave).toHaveBeenCalled();
+  });
+
+  it("renders the accessibility section only when features are present", () => {
+    hookMock.mockReturnValue(
+      state({
+        place: place({
+          accessibilityFeatures: ["wheelchair_accessible", "free_wifi"],
+        }),
+      }),
+    );
+    const { rerender } = render(
+      <SafePlaceDetailScreen
+        navigation={{ goBack: jest.fn() } as never}
+        route={{ params: { id: "p1" } } as never}
+      />,
+    );
+    expect(screen.getByTestId("accessibility-section")).toBeTruthy();
+    expect(
+      screen.getByText(strings.safePlaces.accessibility.wheelchair_accessible),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(strings.safePlaces.accessibility.free_wifi),
+    ).toBeTruthy();
+    // The unset feature is not shown (confirmed-present-only).
+    expect(
+      screen.queryByText(
+        strings.safePlaces.accessibility.gender_neutral_restroom,
+      ),
+    ).toBeNull();
+
+    // Empty → the whole section is absent.
+    hookMock.mockReturnValue(
+      state({ place: place({ accessibilityFeatures: [] }) }),
+    );
+    rerender(
+      <SafePlaceDetailScreen
+        navigation={{ goBack: jest.fn() } as never}
+        route={{ params: { id: "p1" } } as never}
+      />,
+    );
+    expect(screen.queryByTestId("accessibility-section")).toBeNull();
   });
 
   it("shows an error state with retry", () => {

@@ -40,6 +40,7 @@ const place = (over: Partial<SafePlaceDTO> = {}): SafePlaceDTO => ({
   latitude: null,
   longitude: null,
   imageUrl: null,
+  accessibilityFeatures: [],
   saved: false,
   ...over,
 });

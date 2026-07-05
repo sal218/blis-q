@@ -295,6 +295,12 @@ export const safePlaces = pgTable(
     // R2 object key (a random UUID) for the admin-uploaded venue photo (SP-6a).
     // Server-internal — NEVER on the DTO; the DTO exposes a signed `imageUrl`.
     imageKey: text("image_key"),
+    // Admin-verified accessibility features CONFIRMED PRESENT (a frozen-set of
+    // keys — see ACCESSIBILITY_FEATURES). Empty = none confirmed (≠ "inaccessible").
+    accessibilityFeatures: text("accessibility_features")
+      .array()
+      .notNull()
+      .default([]),
     createdById: uuid("created_by_id").references(() => users.id, {
       onDelete: "set null",
     }),

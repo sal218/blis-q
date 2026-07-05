@@ -10,10 +10,13 @@ import { adminFetch } from "../lib/api";
 import {
   type SafePlaceDTO,
   type SafePlaceCategory,
+  type AccessibilityFeature,
   type OsmCandidate,
   type OffsetPage,
   SAFE_PLACE_CATEGORIES,
   SAFE_PLACE_CATEGORY_META,
+  ACCESSIBILITY_FEATURES,
+  ACCESSIBILITY_FEATURE_LABELS,
 } from "../lib/types";
 import { DataTable, type Column } from "../components/DataTable";
 
@@ -41,6 +44,39 @@ function CategoryChip({ category }: { category: SafePlaceCategory }) {
   );
 }
 
+// Phosphor (regular, MIT) paths for the accessibility features — inlined so the
+// admin table can render the same glyphs as the mobile detail screen.
+const FEATURE_ICON_PATHS: Record<AccessibilityFeature, string> = {
+  wheelchair_accessible:
+    "M255.59,189.47a8,8,0,0,0-10.12-5.06l-17.42,5.81-28.9-57.8A8,8,0,0,0,192,128H112V104h56a8,8,0,0,0,0-16H112V79a32,32,0,1,0-16,0V89.81A72,72,0,0,0,112,232c33.52,0,63.69-22.71,71.75-54a8,8,0,1,0-15.5-4C162.09,198,137.91,216,112,216A56,56,0,0,1,96,106.34V136a8,8,0,0,0,8,8h83.05l29.79,59.58a8,8,0,0,0,9.69,4l24-8A8,8,0,0,0,255.59,189.47ZM88,48a16,16,0,1,1,16,16A16,16,0,0,1,88,48Z",
+  gender_neutral_restroom:
+    "M208,104a80,80,0,1,0-88,79.6V232a8,8,0,0,0,16,0V183.6A80.11,80.11,0,0,0,208,104Zm-80,64a64,64,0,1,1,64-64A64.07,64.07,0,0,1,128,168Z",
+  free_wifi:
+    "M140,204a12,12,0,1,1-12-12A12,12,0,0,1,140,204ZM237.08,87A172,172,0,0,0,18.92,87,8,8,0,0,0,29.08,99.37a156,156,0,0,1,197.84,0A8,8,0,0,0,237.08,87ZM205,122.77a124,124,0,0,0-153.94,0A8,8,0,0,0,61,135.31a108,108,0,0,1,134.06,0,8,8,0,0,0,11.24-1.3A8,8,0,0,0,205,122.77Zm-32.26,35.76a76.05,76.05,0,0,0-89.42,0,8,8,0,0,0,9.42,12.94,60,60,0,0,1,70.58,0,8,8,0,1,0,9.42-12.94Z",
+};
+
+function FeatureIcons({ features }: { features: AccessibilityFeature[] }) {
+  if (features.length === 0) return <span style={styles.muted}>—</span>;
+  return (
+    <span style={{ display: "flex", gap: 6 }}>
+      {features.map((f) => (
+        <svg
+          key={f}
+          width={20}
+          height={20}
+          viewBox="0 0 256 256"
+          fill="#4F46E5"
+          role="img"
+          aria-label={ACCESSIBILITY_FEATURE_LABELS[f]}
+        >
+          <title>{ACCESSIBILITY_FEATURE_LABELS[f]}</title>
+          <path d={FEATURE_ICON_PATHS[f]} />
+        </svg>
+      ))}
+    </span>
+  );
+}
+
 export function SafePlacesPage() {
   const [page, setPage] = useState<OffsetPage<SafePlaceDTO> | null>(null);
   const [pageNum, setPageNum] = useState(1);
@@ -59,6 +95,11 @@ export function SafePlacesPage() {
   const [city, setCity] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  // Confirmed-present accessibility features (multi-select). Sent as a full
+  // replace on save; only what the admin has verified is ever set.
+  const [accessibility, setAccessibility] = useState<AccessibilityFeature[]>(
+    [],
+  );
   // Image state: imageKey undefined = leave unchanged, null = remove, string =
   // a freshly-uploaded (confirmed on save) R2 key. imagePreview drives the thumb.
   const [imageKey, setImageKey] = useState<string | null | undefined>(
@@ -124,10 +165,17 @@ export function SafePlacesPage() {
     setCity("");
     setLatitude("");
     setLongitude("");
+    setAccessibility([]);
     setImageKey(undefined);
     setImagePreview(null);
     setImageError(null);
     setFormError(null);
+  }
+
+  function toggleFeature(f: AccessibilityFeature) {
+    setAccessibility((prev) =>
+      prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f],
+    );
   }
 
   const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -185,6 +233,7 @@ export function SafePlacesPage() {
     setCity(place.city ?? "");
     setLatitude(place.latitude === null ? "" : String(place.latitude));
     setLongitude(place.longitude === null ? "" : String(place.longitude));
+    setAccessibility(place.accessibilityFeatures);
     setImageKey(undefined); // unchanged until the admin uploads/removes
     setImagePreview(place.imageUrl);
     setImageError(null);
@@ -247,6 +296,8 @@ export function SafePlacesPage() {
       // meaningless on create); undefined leaves the current image untouched.
       if (typeof imageKey === "string") body.imageKey = imageKey;
       else if (imageKey === null && editingId) body.imageKey = null;
+      // Accessibility: always send the current selection (a full replace).
+      body.accessibilityFeatures = accessibility;
       if (editingId) {
         await adminFetch("PATCH", `/api/admin/safe-places/${editingId}`, body);
       } else {
@@ -360,6 +411,11 @@ export function SafePlacesPage() {
     },
     { key: "city", header: "Miasto", render: (p) => p.city ?? "—" },
     {
+      key: "accessibility",
+      header: "Dostępność",
+      render: (p) => <FeatureIcons features={p.accessibilityFeatures} />,
+    },
+    {
       key: "coords",
       header: "Współrzędne",
       render: (p) =>
@@ -435,6 +491,30 @@ export function SafePlacesPage() {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
+
+        <label style={styles.label}>
+          Udogodnienia (opcjonalnie — tylko potwierdzone przez zespół)
+        </label>
+        <div style={styles.chipRow}>
+          {ACCESSIBILITY_FEATURES.map((f) => {
+            const selected = accessibility.includes(f);
+            return (
+              <button
+                type="button"
+                key={f}
+                onClick={() => toggleFeature(f)}
+                style={{
+                  ...styles.pickChip,
+                  color: selected ? "#FFFFFF" : "#374151",
+                  background: selected ? "#4F46E5" : "#F3F4F6",
+                  borderColor: selected ? "#4F46E5" : "#D1D5DB",
+                }}
+              >
+                {ACCESSIBILITY_FEATURE_LABELS[f]}
+              </button>
+            );
+          })}
+        </div>
 
         <label style={styles.label}>
           Zdjęcie (opcjonalnie — JPG/PNG/WebP, do 5 MB)

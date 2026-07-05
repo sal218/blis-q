@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { EVENT_CATEGORIES, SAFE_PLACE_CATEGORIES } from "@shared/types";
+import {
+  EVENT_CATEGORIES,
+  SAFE_PLACE_CATEGORIES,
+  ACCESSIBILITY_FEATURES,
+} from "@shared/types";
 import { ALLOWED_IMAGE_CONTENT_TYPES } from "./objectStorage";
 
 // Zod schemas for the backend request boundary. Every mutation route validates
@@ -239,6 +243,12 @@ export const createSafePlaceSchema = z
     // The R2 key from a prior upload-url + PUT (confirmed server-side). Omitted =
     // no image. `null` is meaningless on create (there's nothing to clear).
     imageKey: z.string().uuid().optional(),
+    // Confirmed-present accessibility features (a frozen set — out-of-set → 400,
+    // never free-text). Deduped in storage. Omitted = none.
+    accessibilityFeatures: z
+      .array(z.enum(ACCESSIBILITY_FEATURES))
+      .max(20)
+      .optional(),
   })
   .strict()
   .refine(bothOrNeitherCoords, COORDS_REFINE);
@@ -260,6 +270,11 @@ export const updateSafePlaceSchema = z
     longitude: longitudeSchema.optional(),
     // undefined = leave the image unchanged · null = REMOVE it · uuid = set/replace.
     imageKey: z.string().uuid().nullable().optional(),
+    // undefined = unchanged · a provided array = full replace ([] clears).
+    accessibilityFeatures: z
+      .array(z.enum(ACCESSIBILITY_FEATURES))
+      .max(20)
+      .optional(),
   })
   .strict()
   // PATCH must change something — an empty body is a 400, not a silent no-op.

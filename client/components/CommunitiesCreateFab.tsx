@@ -94,7 +94,12 @@ export function CommunitiesCreateFab({
     testID: string,
   ) => (
     <Animated.View
+      testID={`${testID}-wrapper`}
       pointerEvents={open ? "auto" : "none"}
+      // Keep the collapsed options out of the a11y tree too — pointerEvents only
+      // blocks touch, not screen-reader discovery.
+      accessibilityElementsHidden={!open}
+      importantForAccessibility={open ? "auto" : "no-hide-descendants"}
       style={[styles.optionRow, { opacity: anim, transform: [{ translateY }] }]}
     >
       <Pressable

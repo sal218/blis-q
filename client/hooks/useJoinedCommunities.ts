@@ -50,7 +50,14 @@ export function useJoinedCommunities(enabled = true): UseJoinedCommunities {
   }, []);
 
   useEffect(() => {
-    if (enabled) load();
+    if (enabled) {
+      load();
+    } else {
+      // Closing the sheet invalidates any in-flight paginated load so a late
+      // result can't apply after `enabled` flips false (seq only advances inside
+      // load(), so bump it here to supersede the running one).
+      seq.current++;
+    }
   }, [enabled, load]);
 
   return { communities, status, retry: load };

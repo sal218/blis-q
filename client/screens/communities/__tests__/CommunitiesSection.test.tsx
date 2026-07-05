@@ -146,8 +146,10 @@ describe("CommunitiesSection", () => {
     renderSection();
     await screen.findByText(strings.communities.empty);
 
-    // Options are hidden until the FAB is tapped.
-    expect(screen.queryByTestId("fab-create-community")).toBeTruthy(); // mounted
+    // Options are hidden (from touch + the a11y tree) until the FAB is tapped.
+    expect(
+      screen.queryByRole("button", { name: strings.communities.create }),
+    ).toBeNull();
     fireEvent.press(screen.getByTestId("communities-fab"));
     expect(
       screen.getByRole("button", { name: strings.communities.create }),

@@ -17,7 +17,12 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { ReportPostModal } from "@/components/ReportPostModal";
 import { CategoryChip } from "@/components/CategoryChip";
-import { MapPin, CaretLeft, Bookmark } from "@/components/icons/PhosphorIcons";
+import {
+  MapPin,
+  CaretLeft,
+  Bookmark,
+  Check,
+} from "@/components/icons/PhosphorIcons";
 import { useSafePlace } from "@/hooks/useSafePlace";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
@@ -187,6 +192,25 @@ export function SafePlaceDetailScreen({ route, navigation }: Props) {
               </Text>
               <Text style={styles.description}>{place.description}</Text>
             </>
+          ) : null}
+
+          {place.accessibilityFeatures.length > 0 ? (
+            <View testID="accessibility-section">
+              <View style={styles.divider} />
+              <Text style={styles.sectionTitle}>
+                {strings.safePlaces.accessibilityTitle}
+              </Text>
+              {place.accessibilityFeatures.map((f) => (
+                <View key={f} style={styles.accessRow}>
+                  <View style={styles.accessCheck}>
+                    <Check size={14} color={colors.primary} />
+                  </View>
+                  <Text style={styles.accessText}>
+                    {strings.safePlaces.accessibility[f]}
+                  </Text>
+                </View>
+              ))}
+            </View>
           ) : null}
         </View>
       </ScrollView>
@@ -400,6 +424,21 @@ function createStyles(colors: ThemeColors) {
       marginBottom: spacing.sm,
     },
     description: { color: colors.textMuted, fontSize: 15, lineHeight: 22 },
+    accessRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+    accessCheck: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface,
+    },
+    accessText: { flex: 1, color: colors.text, fontSize: 15 },
     bottomBar: {
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,

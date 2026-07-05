@@ -7,10 +7,11 @@ import type { SafePlaceReadRow } from "../storage";
 import { getDownloadUrl } from "../objectStorage";
 import { checkRsvpRateLimit, checkReportRateLimit } from "../rateLimit";
 import { safePlacesListQuerySchema, postReportSchema } from "../validation";
-import type {
-  SafePlaceDTO,
-  SafePlaceCategory,
-  OffsetPage,
+import {
+  isAccessibilityFeature,
+  type SafePlaceDTO,
+  type SafePlaceCategory,
+  type OffsetPage,
 } from "@shared/types";
 
 // Safe places — admin-curated LGBT-friendly venues (docs/API.md §11). Read-only
@@ -50,6 +51,9 @@ async function toSafePlaceDTO(row: SafePlaceReadRow): Promise<SafePlaceDTO> {
     imageUrl: row.imageKey
       ? await getDownloadUrl("safeplace", row.imageKey)
       : null,
+    accessibilityFeatures: [...new Set(row.accessibilityFeatures ?? [])].filter(
+      isAccessibilityFeature,
+    ),
     saved: row.callerSaved,
   };
 }

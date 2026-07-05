@@ -207,6 +207,27 @@ export const SAFE_PLACE_CATEGORIES = [
 
 export type SafePlaceCategory = (typeof SAFE_PLACE_CATEGORIES)[number];
 
+// Predefined venue accessibility features (P-40). ADMIN-VERIFIED + confirmed-
+// present-only: a feature appears on a place only when the curating team has
+// affirmed it. Absent = UNKNOWN, never rendered as "not accessible" (a false
+// positive would send an at-risk user to a place they can't use). 🔒 Deliberately
+// venue attributes (they describe the PLACE, not the user — Article-9-safe),
+// never identity/orientation. A frozen set (like SAFE_PLACE_CATEGORIES); the
+// client extends it. Custom/free-text is rejected.
+export const ACCESSIBILITY_FEATURES = [
+  "wheelchair_accessible",
+  "gender_neutral_restroom",
+  "free_wifi",
+] as const;
+
+export type AccessibilityFeature = (typeof ACCESSIBILITY_FEATURES)[number];
+
+// Type guard used server-side to DEFENSIVELY narrow the raw stored text[] to the
+// known set before it reaches the DTO (drops any legacy/unknown array element).
+export function isAccessibilityFeature(v: string): v is AccessibilityFeature {
+  return (ACCESSIBILITY_FEATURES as readonly string[]).includes(v);
+}
+
 export type SafePlaceDTO = {
   id: string;
   name: string;
@@ -220,6 +241,9 @@ export type SafePlaceDTO = {
   // A short-lived signed URL for the admin-uploaded venue photo, or null. The
   // underlying R2 object key is NEVER exposed (private bucket, signed reads only).
   imageUrl: string | null;
+  // Admin-verified accessibility features that are CONFIRMED PRESENT (may be []).
+  // Absence of a feature means "unknown", never "not accessible".
+  accessibilityFeatures: AccessibilityFeature[];
   // The caller's OWN private bookmark flag. No count / who-saved surface
   // (Article 9), mirroring EventDTO.saved. Admin responses set this false.
   saved: boolean;

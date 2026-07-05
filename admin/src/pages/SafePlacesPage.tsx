@@ -10,10 +10,13 @@ import { adminFetch } from "../lib/api";
 import {
   type SafePlaceDTO,
   type SafePlaceCategory,
+  type AccessibilityFeature,
   type OsmCandidate,
   type OffsetPage,
   SAFE_PLACE_CATEGORIES,
   SAFE_PLACE_CATEGORY_META,
+  ACCESSIBILITY_FEATURES,
+  ACCESSIBILITY_FEATURE_LABELS,
 } from "../lib/types";
 import { DataTable, type Column } from "../components/DataTable";
 
@@ -59,6 +62,11 @@ export function SafePlacesPage() {
   const [city, setCity] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  // Confirmed-present accessibility features (multi-select). Sent as a full
+  // replace on save; only what the admin has verified is ever set.
+  const [accessibility, setAccessibility] = useState<AccessibilityFeature[]>(
+    [],
+  );
   // Image state: imageKey undefined = leave unchanged, null = remove, string =
   // a freshly-uploaded (confirmed on save) R2 key. imagePreview drives the thumb.
   const [imageKey, setImageKey] = useState<string | null | undefined>(
@@ -124,10 +132,17 @@ export function SafePlacesPage() {
     setCity("");
     setLatitude("");
     setLongitude("");
+    setAccessibility([]);
     setImageKey(undefined);
     setImagePreview(null);
     setImageError(null);
     setFormError(null);
+  }
+
+  function toggleFeature(f: AccessibilityFeature) {
+    setAccessibility((prev) =>
+      prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f],
+    );
   }
 
   const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -185,6 +200,7 @@ export function SafePlacesPage() {
     setCity(place.city ?? "");
     setLatitude(place.latitude === null ? "" : String(place.latitude));
     setLongitude(place.longitude === null ? "" : String(place.longitude));
+    setAccessibility(place.accessibilityFeatures);
     setImageKey(undefined); // unchanged until the admin uploads/removes
     setImagePreview(place.imageUrl);
     setImageError(null);
@@ -247,6 +263,8 @@ export function SafePlacesPage() {
       // meaningless on create); undefined leaves the current image untouched.
       if (typeof imageKey === "string") body.imageKey = imageKey;
       else if (imageKey === null && editingId) body.imageKey = null;
+      // Accessibility: always send the current selection (a full replace).
+      body.accessibilityFeatures = accessibility;
       if (editingId) {
         await adminFetch("PATCH", `/api/admin/safe-places/${editingId}`, body);
       } else {
@@ -435,6 +453,30 @@ export function SafePlacesPage() {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
+
+        <label style={styles.label}>
+          Udogodnienia (opcjonalnie — tylko potwierdzone przez zespół)
+        </label>
+        <div style={styles.chipRow}>
+          {ACCESSIBILITY_FEATURES.map((f) => {
+            const selected = accessibility.includes(f);
+            return (
+              <button
+                type="button"
+                key={f}
+                onClick={() => toggleFeature(f)}
+                style={{
+                  ...styles.pickChip,
+                  color: selected ? "#FFFFFF" : "#374151",
+                  background: selected ? "#4F46E5" : "#F3F4F6",
+                  borderColor: selected ? "#4F46E5" : "#D1D5DB",
+                }}
+              >
+                {ACCESSIBILITY_FEATURE_LABELS[f]}
+              </button>
+            );
+          })}
+        </div>
 
         <label style={styles.label}>
           Zdjęcie (opcjonalnie — JPG/PNG/WebP, do 5 MB)

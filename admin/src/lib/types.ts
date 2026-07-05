@@ -53,6 +53,23 @@ export const SAFE_PLACE_CATEGORY_META: Record<
   other: { label: "Inne", color: "#6B7280" },
 };
 
+// Predefined venue accessibility features (mirror of shared ACCESSIBILITY_FEATURES;
+// admin has no @shared). Admin-verified + confirmed-present-only.
+export const ACCESSIBILITY_FEATURES = [
+  "wheelchair_accessible",
+  "gender_neutral_restroom",
+  "free_wifi",
+] as const;
+export type AccessibilityFeature = (typeof ACCESSIBILITY_FEATURES)[number];
+export const ACCESSIBILITY_FEATURE_LABELS: Record<
+  AccessibilityFeature,
+  string
+> = {
+  wheelchair_accessible: "Dostęp dla wózków",
+  gender_neutral_restroom: "Toaleta neutralna płciowo",
+  free_wifi: "Darmowe Wi-Fi",
+};
+
 export type SafePlaceDTO = {
   id: string;
   name: string;
@@ -65,6 +82,8 @@ export type SafePlaceDTO = {
   // Short-lived signed URL for the venue photo (or null). The raw R2 key is
   // never exposed — uploads go via POST /admin/safe-places/upload-url.
   imageUrl: string | null;
+  // Admin-verified accessibility features CONFIRMED PRESENT (may be []).
+  accessibilityFeatures: AccessibilityFeature[];
 };
 
 // One OSM search result from POST /api/admin/safe-places/osm-search (SP-2). The

@@ -37,6 +37,7 @@ import {
   checkAdminLoginRateLimit,
   checkAdminMutationRateLimit,
 } from "../rateLimit";
+import { isAccessibilityFeature } from "@shared/types";
 import type {
   AccountProfile,
   SessionResponse,
@@ -142,6 +143,9 @@ async function toSafePlaceDTO(row: SafePlaceRow): Promise<SafePlaceDTO> {
     imageUrl: row.imageKey
       ? await getDownloadUrl("safeplace", row.imageKey)
       : null,
+    accessibilityFeatures: [...new Set(row.accessibilityFeatures ?? [])].filter(
+      isAccessibilityFeature,
+    ),
     // Admin responses have no caller-save context; the field is user-only.
     saved: false,
   };

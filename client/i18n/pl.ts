@@ -219,6 +219,13 @@ export const pl = {
     reportAction: "Zgłoś to miejsce", // ⋯ menu row + a11y label ("Report this place")
     reportTitle: "Zgłoś miejsce", // report modal title
     reportPlaceholder: "Opisz, co jest nie tak z tym miejscem", // "Describe what's wrong with this place"
+    // Accessibility features (P-40) — keys MUST match ACCESSIBILITY_FEATURES.
+    accessibilityTitle: "Udogodnienia", // "Accessibility / amenities" section heading
+    accessibility: {
+      wheelchair_accessible: "Dostęp dla wózków", // "Wheelchair accessible"
+      gender_neutral_restroom: "Toaleta neutralna płciowo", // "Gender-neutral restroom"
+      free_wifi: "Darmowe Wi-Fi", // "Free Wi-Fi"
+    },
     // Curation framing (COMPLIANCE §5.8 / P-40): present as team-curated
     // LGBT-friendly places, NOT an absolute safety guarantee.
     disclaimer:

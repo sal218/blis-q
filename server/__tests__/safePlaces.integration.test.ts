@@ -133,6 +133,7 @@ type SeedInput = {
   address?: string;
   latitude?: number;
   longitude?: number;
+  accessibilityFeatures?: string[];
 };
 
 async function seedPlace(
@@ -147,6 +148,7 @@ async function seedPlace(
       address: over.address,
       latitude: over.latitude,
       longitude: over.longitude,
+      accessibilityFeatures: over.accessibilityFeatures,
     },
     actorId,
     null,
@@ -522,6 +524,100 @@ describe("safe-place save / unsave + GET /api/v1/safe-places/saved", () => {
     expect(audits.some((a) => a.action.startsWith("safe_place.save"))).toBe(
       false,
     );
+  });
+});
+
+describe("safe-place accessibility features (P-40)", () => {
+  it("create stores the (deduped) features and the DTO carries them", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+
+    const res = await request(app)
+      .post("/api/admin/safe-places")
+      .send({
+        name: "Dostępna Kawiarnia",
+        category: "cafe",
+        accessibilityFeatures: [
+          "wheelchair_accessible",
+          "free_wifi",
+          "wheelchair_accessible", // dup → collapsed
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect([...res.body.accessibilityFeatures].sort()).toEqual([
+      "free_wifi",
+      "wheelchair_accessible",
+    ]);
+    createdSafePlaceIds.push(res.body.id);
+
+    // A regular user sees the same on the read path.
+    mockUser = { id: admin, isAdmin: false };
+    const got = await request(app).get(`/api/v1/safe-places/${res.body.id}`);
+    expect([...got.body.accessibilityFeatures].sort()).toEqual([
+      "free_wifi",
+      "wheelchair_accessible",
+    ]);
+  });
+
+  it("update replaces the set; omitting leaves it unchanged; [] clears it", async () => {
+    const admin = await seedUser();
+    const p = await seedPlace(admin, {
+      accessibilityFeatures: ["wheelchair_accessible"],
+    });
+    mockUser = { id: admin, isAdmin: true };
+
+    // replace
+    const replaced = await request(app)
+      .patch(`/api/admin/safe-places/${p}`)
+      .send({
+        accessibilityFeatures: ["free_wifi", "gender_neutral_restroom"],
+      });
+    expect([...replaced.body.accessibilityFeatures].sort()).toEqual([
+      "free_wifi",
+      "gender_neutral_restroom",
+    ]);
+
+    // omit → unchanged
+    const unchanged = await request(app)
+      .patch(`/api/admin/safe-places/${p}`)
+      .send({ city: "Warszawa" });
+    expect([...unchanged.body.accessibilityFeatures].sort()).toEqual([
+      "free_wifi",
+      "gender_neutral_restroom",
+    ]);
+
+    // [] → cleared
+    const cleared = await request(app)
+      .patch(`/api/admin/safe-places/${p}`)
+      .send({ accessibilityFeatures: [] });
+    expect(cleared.body.accessibilityFeatures).toEqual([]);
+  });
+
+  it("an out-of-set feature value → 400", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+    const res = await request(app)
+      .post("/api/admin/safe-places")
+      .send({
+        name: "X",
+        category: "cafe",
+        accessibilityFeatures: ["wheelchair_accessible", "sexual_orientation"],
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it("the DTO defensively narrows out an unknown stored value", async () => {
+    const admin = await seedUser();
+    const p = await seedPlace(admin);
+    // Write a bogus value directly (bypassing validation) to simulate legacy data.
+    await db
+      .update(safePlaces)
+      .set({ accessibilityFeatures: ["wheelchair_accessible", "legacy_bogus"] })
+      .where(eq(safePlaces.id, p));
+    mockUser = { id: admin, isAdmin: false };
+
+    const res = await request(app).get(`/api/v1/safe-places/${p}`);
+    expect(res.body.accessibilityFeatures).toEqual(["wheelchair_accessible"]);
   });
 });
 

@@ -60,10 +60,37 @@ describe("SafePlacesList", () => {
     );
   });
 
-  it("shows the curation/safety-framing disclaimer up front", () => {
+  it("shows the curation/safety-framing disclaimer in the bottom info panel", () => {
     spMock.mockReturnValue(state({ items: [] }));
     render(<SafePlacesList />);
     expect(screen.getByText(strings.safePlaces.disclaimer)).toBeTruthy();
+  });
+
+  it("renders the map placeholder (interactive map deferred to SP-4)", () => {
+    spMock.mockReturnValue(state({ items: [] }));
+    render(<SafePlacesList />);
+    expect(screen.getByTestId("safe-places-map-placeholder")).toBeTruthy();
+    expect(screen.getByText(strings.safePlaces.mapComingSoon)).toBeTruthy();
+    expect(screen.getByText(strings.safePlaces.viewMap)).toBeTruthy();
+  });
+
+  it("marks the active category filter pill as selected", () => {
+    spMock.mockReturnValue(state({ items: [], category: "bar" }));
+    render(<SafePlacesList />);
+    // Each pill is an accessibilityRole="button" carrying selected state.
+    expect(
+      screen.getByRole("button", {
+        name: strings.safePlaces.categories.bar,
+        selected: true,
+      }),
+    ).toBeTruthy();
+    // "Wszystkie" is inactive while a category is active.
+    expect(
+      screen.queryByRole("button", {
+        name: strings.safePlaces.filterAll,
+        selected: true,
+      }),
+    ).toBeNull();
   });
 
   it("renders the filter chip row: 'Wszystkie' + category labels", () => {

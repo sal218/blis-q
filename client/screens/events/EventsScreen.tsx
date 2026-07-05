@@ -9,7 +9,7 @@ import { EventsList } from "@/screens/events/EventsList";
 import { SafePlacesList } from "@/screens/events/SafePlacesList";
 import { CommunitiesSection } from "@/screens/communities/CommunitiesSection";
 import { strings } from "@/i18n";
-import { spacing, type ThemeColors } from "@/constants/theme";
+import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type { EventsStackParamList } from "@/navigation/AppTabs";
 
 // Events tab landing screen. A segmented control switches between three
@@ -46,7 +46,7 @@ export function EventsScreen({ navigation }: Props) {
           onPress={() => navigation.navigate("Saved")}
           style={({ pressed }) => [styles.savedBtn, pressed && styles.pressed]}
         >
-          <Bookmark size={24} color={colors.primary} />
+          <Bookmark size={22} color={colors.primary} />
         </Pressable>
       </View>
       <SegmentedControl
@@ -90,15 +90,24 @@ function createStyles(colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "space-between",
       paddingHorizontal: spacing.lg,
-      marginBottom: spacing.md,
+      marginBottom: spacing.lg,
     },
     title: {
       color: colors.text,
-      fontSize: 28,
+      fontSize: 32,
       fontWeight: "800",
+      letterSpacing: -0.5,
     },
+    // Circular icon button — a subtle bordered surface pill, per the reference.
     savedBtn: {
-      padding: spacing.xs,
+      width: 44,
+      height: 44,
+      borderRadius: radius.full,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     pressed: {
       opacity: 0.6,

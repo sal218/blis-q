@@ -1,10 +1,9 @@
 import { useMemo } from "react";
 import { View, Text, Image, Pressable, StyleSheet } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
-import { CategoryChip } from "@/components/CategoryChip";
 import { MapPin, Bookmark } from "@/components/icons/PhosphorIcons";
 import { strings } from "@/i18n";
-import { spacing, shadow, type ThemeColors } from "@/constants/theme";
+import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
 import type { SafePlaceDTO } from "@shared/types";
 
 // One venue in the Safe Places list (epic P-40, per assets/safe-places-with-map).
@@ -51,7 +50,9 @@ export function SafePlaceCard({ place, onToggleSave, onPress }: Props) {
           testID="safe-place-thumb-placeholder"
           style={[styles.thumb, styles.thumbPlaceholder]}
         >
-          <MapPin size={26} color={colors.textMuted} />
+          <View style={styles.placeholderCircle}>
+            <MapPin size={26} color={colors.primary} />
+          </View>
         </View>
       )}
 
@@ -59,9 +60,11 @@ export function SafePlaceCard({ place, onToggleSave, onPress }: Props) {
         <Text style={styles.name} numberOfLines={2}>
           {place.name}
         </Text>
-        <View style={styles.chipRow}>
-          <CategoryChip label={strings.safePlaces.categories[place.category]} />
-        </View>
+        {/* Muted metadata line. Category only for now; a distance ("0.8 km ·")
+            prepends here once "near me" ships with the map (SP-4). */}
+        <Text style={styles.meta} numberOfLines={1}>
+          {strings.safePlaces.categories[place.category]}
+        </Text>
         {where ? (
           <View style={styles.row}>
             <MapPin size={14} color={colors.textMuted} />
@@ -100,45 +103,58 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     card: {
       flexDirection: "row",
-      alignItems: "flex-start",
+      alignItems: "center",
       gap: spacing.md,
       backgroundColor: colors.card,
-      borderRadius: 18,
+      borderRadius: radius.lg,
       borderWidth: 1,
       borderColor: colors.border,
       padding: spacing.md,
       ...shadow,
+      shadowOpacity: 0.06,
     },
     cardPressed: {
       opacity: 0.85,
     },
     thumb: {
-      width: 68,
-      height: 68,
-      borderRadius: 14,
+      width: 84,
+      height: 84,
+      borderRadius: radius.md,
       backgroundColor: colors.surface,
     },
     thumbPlaceholder: {
       alignItems: "center",
       justifyContent: "center",
     },
+    // A tinted brand-purple disc behind the pin — softer than a bare grey box.
+    placeholderCircle: {
+      width: 52,
+      height: 52,
+      borderRadius: radius.full,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.primary + "1A", // ~10% brand tint
+    },
     content: {
       flex: 1,
+      gap: spacing.xs,
     },
     name: {
       color: colors.text,
-      fontSize: 16,
+      fontSize: 17,
       fontWeight: "700",
+      letterSpacing: -0.2,
     },
-    chipRow: {
-      flexDirection: "row",
-      marginTop: spacing.xs,
+    meta: {
+      color: colors.textMuted,
+      fontSize: 13,
+      fontWeight: "600",
     },
     row: {
       flexDirection: "row",
       alignItems: "center",
       gap: spacing.xs,
-      marginTop: spacing.sm,
+      marginTop: spacing.xs,
     },
     where: {
       flex: 1,
@@ -146,7 +162,9 @@ function createStyles(colors: ThemeColors) {
       fontSize: 14,
     },
     saveBtn: {
+      alignSelf: "flex-start",
       marginTop: -2,
+      marginLeft: spacing.xs,
     },
     pressed: {
       opacity: 0.6,

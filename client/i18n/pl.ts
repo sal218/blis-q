@@ -226,6 +226,10 @@ export const pl = {
       gender_neutral_restroom: "Toaleta neutralna płciowo", // "Gender-neutral restroom"
       free_wifi: "Darmowe Wi-Fi", // "Free Wi-Fi"
     },
+    // Map placeholder (P-40 / SP-4). The interactive map isn't built yet; the
+    // list reserves a rounded panel that renders this hint and a "view map" CTA.
+    mapComingSoon: "Mapa już wkrótce", // "Map coming soon"
+    viewMap: "Zobacz mapę", // "View map" (reserved expand CTA — inert until SP-4)
     // Curation framing (COMPLIANCE §5.8 / P-40): present as team-curated
     // LGBT-friendly places, NOT an absolute safety guarantee.
     disclaimer:

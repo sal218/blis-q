@@ -28,14 +28,18 @@ export function SegmentedControl({ segments, selectedIndex, onChange }: Props) {
             accessibilityState={{ selected: active }}
             accessibilityLabel={label}
             onPress={() => onChange(index)}
-            style={[styles.segment, active && styles.segmentActive]}
+            style={styles.segment}
           >
-            <Text
-              style={[styles.label, active && styles.labelActive]}
-              numberOfLines={1}
-            >
-              {label}
-            </Text>
+            {/* The active underline hugs the label text (not the full segment
+                width) — a thinner, more premium indicator. */}
+            <View style={[styles.labelWrap, active && styles.labelWrapActive]}>
+              <Text
+                style={[styles.label, active && styles.labelActive]}
+                numberOfLines={1}
+              >
+                {label}
+              </Text>
+            </View>
           </Pressable>
         );
       })}
@@ -53,11 +57,16 @@ function createStyles(colors: ThemeColors) {
     segment: {
       flex: 1,
       alignItems: "center",
-      paddingVertical: spacing.md,
+      paddingTop: spacing.md,
+    },
+    // Wraps just the label so the active underline is text-width, not
+    // segment-width. Carries the bottom border + the gap under the text.
+    labelWrap: {
+      paddingBottom: spacing.sm,
       borderBottomWidth: 2,
       borderBottomColor: "transparent",
     },
-    segmentActive: {
+    labelWrapActive: {
       borderBottomColor: colors.primary,
     },
     label: {
@@ -65,7 +74,7 @@ function createStyles(colors: ThemeColors) {
       // Uniform across all three segments — sized so the longest label
       // ("Bezpieczne miejsca") stays on one line on narrow phones, instead of
       // per-label auto-shrink (which made that one tab visibly smaller).
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: "600",
     },
     labelActive: {

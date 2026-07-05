@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   View,
   Text,
   Pressable,
+  Modal,
   Animated,
   StyleSheet,
   Easing,
@@ -11,6 +12,7 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   Plus,
+  X,
   UsersThree,
   CalendarBlank,
 } from "@/components/icons/PhosphorIcons";
@@ -18,20 +20,21 @@ import { strings } from "@/i18n";
 import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
 
 // The Communities-segment creation entry point (design ref:
-// assets/event-communities-screen.png): a bottom-right FAB that expands into a
-// speed-dial of "Załóż społeczność" + "Utwórz wydarzenie". Animated with RN's
-// core Animated API (useNativeDriver transform/opacity) — deliberately NOT
-// reanimated, so it needs no new native dependency / dev-client rebuild. Purely
-// a nicer trigger for the EXISTING create flows — no functionality change.
+// assets/event-communities-screen.png): a bottom-right FAB that opens a
+// speed-dial of "Utwórz wydarzenie" + "Załóż społeczność". The OPEN menu lives
+// in a full-screen Modal so (a) the dim covers the whole screen — not just the
+// list — and (b) the option rows get the full screen width and never clip.
+// Purely a nicer trigger for the EXISTING create flows — no functionality change.
 
 interface Props {
   onCreateCommunity: () => void;
   onCreateEvent: () => void;
 }
 
-// How far each option row rises above the FAB when open.
-const OPTION_1_RISE = 72;
-const OPTION_2_RISE = 136;
+const FAB_SIZE = 56;
+// Resting FAB clears the (opaque) bottom tab bar by a small margin; the list
+// already ends at the tab bar, so we do NOT add the tab-bar height here.
+const RESTING_BOTTOM = spacing.lg;
 
 export function CommunitiesCreateFab({
   onCreateCommunity,
@@ -41,67 +44,46 @@ export function CommunitiesCreateFab({
   const styles = useMemo(() => createStyles(colors), [colors]);
   const tabBarHeight = useBottomTabBarHeight();
   const [open, setOpen] = useState(false);
-  const anim = useRef(new Animated.Value(0)).current;
+  const rise = useRef(new Animated.Value(0)).current;
 
-  const animateTo = useCallback(
-    (to: number) =>
-      Animated.timing(anim, {
-        toValue: to,
+  useEffect(() => {
+    if (open) {
+      rise.setValue(0);
+      Animated.timing(rise, {
+        toValue: 1,
         duration: 200,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
-      }).start(),
-    [anim],
-  );
+      }).start();
+    }
+  }, [open, rise]);
 
-  const close = useCallback(() => {
-    setOpen(false);
-    animateTo(0);
-  }, [animateTo]);
+  const close = () => setOpen(false);
+  const runAction = (action: () => void) => {
+    close();
+    action();
+  };
 
-  const toggle = useCallback(() => {
-    const next = !open;
-    setOpen(next);
-    animateTo(next ? 1 : 0);
-  }, [open, animateTo]);
-
-  const runAction = useCallback(
-    (action: () => void) => {
-      close();
-      action();
-    },
-    [close],
-  );
-
-  const rotate = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "45deg"],
-  });
-  const option1Y = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -OPTION_1_RISE],
-  });
-  const option2Y = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -OPTION_2_RISE],
+  const optionStyle = (extraLift: number) => ({
+    opacity: rise,
+    transform: [
+      {
+        translateY: rise.interpolate({
+          inputRange: [0, 1],
+          outputRange: [extraLift, 0],
+        }),
+      },
+    ],
   });
 
   const renderOption = (
     label: string,
     icon: ReactNode,
-    translateY: Animated.AnimatedInterpolation<number>,
+    lift: number,
     onPress: () => void,
     testID: string,
   ) => (
-    <Animated.View
-      testID={`${testID}-wrapper`}
-      pointerEvents={open ? "auto" : "none"}
-      // Keep the collapsed options out of the a11y tree too — pointerEvents only
-      // blocks touch, not screen-reader discovery.
-      accessibilityElementsHidden={!open}
-      importantForAccessibility={open ? "auto" : "no-hide-descendants"}
-      style={[styles.optionRow, { opacity: anim, transform: [{ translateY }] }]}
-    >
+    <Animated.View style={optionStyle(lift)}>
       <Pressable
         testID={testID}
         accessibilityRole="button"
@@ -110,7 +92,9 @@ export function CommunitiesCreateFab({
         style={styles.optionPressable}
       >
         <View style={styles.optionLabel}>
-          <Text style={styles.optionLabelText}>{label}</Text>
+          <Text style={styles.optionLabelText} numberOfLines={1}>
+            {label}
+          </Text>
         </View>
         <View style={styles.optionIcon}>{icon}</View>
       </Pressable>
@@ -119,63 +103,79 @@ export function CommunitiesCreateFab({
 
   return (
     <>
-      <Animated.View
-        pointerEvents={open ? "auto" : "none"}
-        style={[styles.backdrop, { opacity: anim }]}
-      >
-        <Pressable style={StyleSheet.absoluteFill} onPress={close} />
-      </Animated.View>
-
+      {/* Resting FAB, in the screen. */}
       <View
         pointerEvents="box-none"
-        style={[styles.fabArea, { bottom: tabBarHeight + spacing.lg }]}
+        style={[styles.anchor, { bottom: RESTING_BOTTOM }]}
       >
-        {renderOption(
-          strings.communities.createEvent,
-          <CalendarBlank size={22} color="#FFFFFF" />,
-          option2Y,
-          () => runAction(onCreateEvent),
-          "fab-create-event",
-        )}
-        {renderOption(
-          strings.communities.create,
-          <UsersThree size={22} color="#FFFFFF" />,
-          option1Y,
-          () => runAction(onCreateCommunity),
-          "fab-create-community",
-        )}
-
         <Pressable
           testID="communities-fab"
           accessibilityRole="button"
           accessibilityLabel={strings.communities.createMenu}
           accessibilityState={{ expanded: open }}
-          onPress={toggle}
+          onPress={() => setOpen(true)}
           style={styles.fab}
         >
-          <Animated.View style={{ transform: [{ rotate }] }}>
-            <Plus size={26} color="#FFFFFF" />
-          </Animated.View>
+          <Plus size={26} color="#FFFFFF" />
         </Pressable>
       </View>
+
+      {/* Open menu — full-screen so the dim + options cover the whole screen. */}
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={close}
+        statusBarTranslucent
+      >
+        <Pressable
+          style={styles.backdrop}
+          onPress={close}
+          accessibilityLabel={strings.communities.pickCommunityClose}
+        />
+        <View
+          pointerEvents="box-none"
+          style={[styles.menu, { bottom: tabBarHeight + RESTING_BOTTOM }]}
+        >
+          {renderOption(
+            strings.communities.createEvent,
+            <CalendarBlank size={22} color="#FFFFFF" />,
+            24,
+            () => runAction(onCreateEvent),
+            "fab-create-event",
+          )}
+          {renderOption(
+            strings.communities.create,
+            <UsersThree size={22} color="#FFFFFF" />,
+            12,
+            () => runAction(onCreateCommunity),
+            "fab-create-community",
+          )}
+          <Pressable
+            testID="communities-fab-close"
+            accessibilityRole="button"
+            accessibilityLabel={strings.communities.pickCommunityClose}
+            onPress={close}
+            style={styles.fab}
+          >
+            <X size={24} color="#FFFFFF" />
+          </Pressable>
+        </View>
+      </Modal>
     </>
   );
 }
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    backdrop: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: "rgba(0,0,0,0.35)",
-    },
-    fabArea: {
+    anchor: {
       position: "absolute",
       right: spacing.lg,
       alignItems: "flex-end",
     },
     fab: {
-      width: 56,
-      height: 56,
+      width: FAB_SIZE,
+      height: FAB_SIZE,
       borderRadius: radius.full,
       backgroundColor: colors.primary,
       alignItems: "center",
@@ -183,17 +183,21 @@ function createStyles(colors: ThemeColors) {
       ...shadow,
       shadowOpacity: 0.25,
     },
-    // Option rows sit at the FAB's baseline and rise via translateY when open.
-    optionRow: {
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(0,0,0,0.35)",
+    },
+    menu: {
       position: "absolute",
-      bottom: 0,
-      right: 0,
-      flexDirection: "row",
-      alignItems: "center",
+      right: spacing.lg,
+      left: spacing.lg,
+      alignItems: "flex-end",
+      gap: spacing.md,
     },
     optionPressable: {
       flexDirection: "row",
       alignItems: "center",
+      gap: spacing.sm,
     },
     optionLabel: {
       backgroundColor: colors.card,
@@ -202,7 +206,6 @@ function createStyles(colors: ThemeColors) {
       borderColor: colors.border,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
-      marginRight: spacing.sm,
       ...shadow,
       shadowOpacity: 0.12,
     },

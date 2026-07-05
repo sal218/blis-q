@@ -249,6 +249,9 @@ export type SafePlaceRow = {
   city: string | null;
   latitude: number | null;
   longitude: number | null;
+  // R2 object key for the venue photo (server-internal — the DTO exposes a
+  // signed `imageUrl`, never this key).
+  imageKey: string | null;
 };
 
 // A safe-place row on a USER read path, carrying the caller's private `saved`
@@ -2907,6 +2910,7 @@ export class DatabaseStorage {
       city: safePlaces.city,
       latitude: safePlaces.latitude,
       longitude: safePlaces.longitude,
+      imageKey: safePlaces.imageKey,
     };
   }
 
@@ -3011,6 +3015,7 @@ export class DatabaseStorage {
       city?: string;
       latitude?: number;
       longitude?: number;
+      imageKey?: string; // already confirmed by the route before we're called
     },
     actorId: string,
     ipAddress?: string | null,
@@ -3026,6 +3031,7 @@ export class DatabaseStorage {
           city: input.city ?? null,
           latitude: input.latitude ?? null,
           longitude: input.longitude ?? null,
+          imageKey: input.imageKey ?? null,
           createdById: actorId,
         })
         .returning(this.safePlaceColumns());
@@ -3053,6 +3059,8 @@ export class DatabaseStorage {
       city?: string;
       latitude?: number;
       longitude?: number;
+      // undefined = untouched · null = clear the photo · string = a confirmed key.
+      imageKey?: string | null;
     },
     actorId: string,
     ipAddress?: string | null,
@@ -3065,6 +3073,7 @@ export class DatabaseStorage {
     if (input.city !== undefined) fields.city = input.city;
     if (input.latitude !== undefined) fields.latitude = input.latitude;
     if (input.longitude !== undefined) fields.longitude = input.longitude;
+    if (input.imageKey !== undefined) fields.imageKey = input.imageKey;
 
     return db.transaction(async (tx) => {
       const [row] = await tx

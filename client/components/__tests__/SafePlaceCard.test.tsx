@@ -12,6 +12,7 @@ const place = (over: Partial<SafePlaceDTO> = {}): SafePlaceDTO => ({
   city: "Warszawa",
   latitude: 52.23,
   longitude: 21.01,
+  imageUrl: null,
   saved: false,
   ...over,
 });
@@ -38,6 +39,19 @@ describe("SafePlaceCard", () => {
   it("omits the location row when neither address nor city is set", () => {
     render(<SafePlaceCard place={place({ address: null, city: null })} />);
     expect(screen.queryByText("Warszawa")).toBeNull();
+  });
+
+  it("renders the venue photo when imageUrl is set", () => {
+    render(<SafePlaceCard place={place({ imageUrl: "https://r2/signed" })} />);
+    const img = screen.getByTestId("safe-place-thumb");
+    expect(img.props.source).toEqual({ uri: "https://r2/signed" });
+    expect(screen.queryByTestId("safe-place-thumb-placeholder")).toBeNull();
+  });
+
+  it("shows a placeholder square when there is no image", () => {
+    render(<SafePlaceCard place={place({ imageUrl: null })} />);
+    expect(screen.getByTestId("safe-place-thumb-placeholder")).toBeTruthy();
+    expect(screen.queryByTestId("safe-place-thumb")).toBeNull();
   });
 
   it("shows no bookmark when onToggleSave is omitted (display-only)", () => {

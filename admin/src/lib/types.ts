@@ -62,6 +62,9 @@ export type SafePlaceDTO = {
   city: string | null;
   latitude: number | null;
   longitude: number | null;
+  // Short-lived signed URL for the venue photo (or null). The raw R2 key is
+  // never exposed — uploads go via POST /admin/safe-places/upload-url.
+  imageUrl: string | null;
 };
 
 // One OSM search result from POST /api/admin/safe-places/osm-search (SP-2). The

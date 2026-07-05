@@ -19,6 +19,7 @@ const place = (id: string, name: string): SafePlaceDTO => ({
   city: "Warszawa",
   latitude: null,
   longitude: null,
+  imageUrl: null,
   saved: true,
 });
 

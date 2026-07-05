@@ -1,19 +1,19 @@
-import { useEffect } from "react";
-import type { DimensionValue, StyleProp, ViewStyle } from "react-native";
-import Animated, {
-  cancelAnimation,
+import { useEffect, useRef } from "react";
+import {
+  Animated,
   Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
+  type DimensionValue,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 
 // A single shimmering placeholder block — the primitive every screen skeleton is
-// composed from. It pulses opacity between full and dim on a loop. Colour is
-// theme-aware (a subtle tint over the surface) so it reads correctly in light
-// AND dark without callers passing an isDark flag. Sizes/radius are passed in.
+// composed from. It pulses opacity between full and dim on a loop, using RN's
+// core Animated (useNativeDriver) — deliberately NOT reanimated, so it needs no
+// native module / dev-client rebuild. Colour is theme-aware (a subtle tint over
+// the surface) so it reads correctly in light AND dark without an isDark flag.
+// Sizes/radius are passed in.
 
 type SkeletonBlockProps = {
   height: number;
@@ -31,18 +31,28 @@ export function SkeletonBlock({
   testID,
 }: SkeletonBlockProps) {
   const { mode } = useTheme();
-  const opacity = useSharedValue(1);
+  const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    opacity.value = withRepeat(
-      withTiming(0.35, { duration: 750, easing: Easing.inOut(Easing.sin) }),
-      -1,
-      true,
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0.35,
+          duration: 750,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 750,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
     );
-    return () => cancelAnimation(opacity);
+    loop.start();
+    return () => loop.stop();
   }, [opacity]);
-
-  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   // A neutral tint that sits above the card/surface in both themes.
   const backgroundColor =
@@ -54,11 +64,7 @@ export function SkeletonBlock({
       // Not a11y-relevant: skeletons are transient visual placeholders.
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[
-        { width, height, borderRadius, backgroundColor },
-        style,
-        animatedStyle,
-      ]}
+      style={[{ width, height, borderRadius, backgroundColor, opacity }, style]}
     />
   );
 }

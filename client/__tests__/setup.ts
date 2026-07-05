@@ -69,36 +69,6 @@ jest.mock("@/contexts/ThemeContext", () => {
   };
 });
 
-// react-native-reanimated (v4) is a native module; under jest it has no runtime,
-// and its official `/mock` transitively loads react-native-worklets native code
-// that throws in the test env. So we hand-roll a minimal, synchronous stub of
-// just the APIs our animated components use (SkeletonBlock's pulse). Animations
-// are no-ops; useAnimatedStyle returns a plain (empty) style. Enough for any
-// component that imports reanimated to render in tests.
-jest.mock("react-native-reanimated", () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { View } = require("react-native");
-  const identity = (value: unknown) => value;
-  return {
-    __esModule: true,
-    default: { View, createAnimatedComponent: (c: unknown) => c },
-    View,
-    useSharedValue: (initial: unknown) => ({ value: initial }),
-    useAnimatedStyle: () => ({}),
-    withTiming: identity,
-    withRepeat: identity,
-    withSequence: identity,
-    cancelAnimation: () => {},
-    Easing: {
-      inOut: () => (t: number) => t,
-      out: () => (t: number) => t,
-      sin: (t: number) => t,
-      cubic: (t: number) => t,
-      linear: (t: number) => t,
-    },
-  };
-});
-
 // The native Google Sign-In module has no JS fallback under jest. Tests that
 // exercise the Google flow mock our wrapper (@/lib/googleAuth) instead; this
 // just keeps imports resolvable.

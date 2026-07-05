@@ -47,6 +47,19 @@ function state(over: Partial<ReturnType<typeof useSafePlaces>> = {}) {
 beforeEach(() => spMock.mockReset());
 
 describe("SafePlacesList", () => {
+  it("shows the skeleton on the first load and not once places arrive", () => {
+    spMock.mockReturnValue(state({ status: "loading", items: [] }));
+    const { rerender } = render(<SafePlacesList />);
+    expect(screen.getByTestId("card-list-skeleton")).toBeTruthy();
+
+    spMock.mockReturnValue(
+      state({ items: [place("s1", "Miejsce Alpha", "Warszawa")] }),
+    );
+    rerender(<SafePlacesList />);
+    expect(screen.queryByTestId("card-list-skeleton")).toBeNull();
+    expect(screen.getByText("Miejsce Alpha")).toBeTruthy();
+  });
+
   it("renders cards and the OSM attribution footer", () => {
     spMock.mockReturnValue(
       state({ items: [place("s1", "Miejsce Alpha", "Warszawa")] }),

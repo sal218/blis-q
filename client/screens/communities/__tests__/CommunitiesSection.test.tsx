@@ -62,6 +62,14 @@ function renderSection(
 beforeEach(() => listMock.mockReset());
 
 describe("CommunitiesSection", () => {
+  it("shows the skeleton while the first page is loading", () => {
+    // A pending (never-resolving) fetch keeps the hook in its initial loading
+    // state so the skeleton is shown in place of the list.
+    listMock.mockReturnValue(new Promise(() => {}));
+    renderSection();
+    expect(screen.getByTestId("card-list-skeleton")).toBeTruthy();
+  });
+
   it("renders communities after the initial load", async () => {
     listMock.mockResolvedValue(
       page([

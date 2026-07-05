@@ -14,6 +14,7 @@ import { MagnifyingGlass } from "@/components/icons/PhosphorIcons";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { CategoryChip } from "@/components/CategoryChip";
 import { EventCard } from "@/components/EventCard";
+import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
 import { useEvents } from "@/hooks/useEvents";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
@@ -65,11 +66,7 @@ export function EventsList({ onOpenEvent }: Props) {
       : strings.events.empty;
 
   if (status === "loading" && events.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
+    return <CardListSkeleton showSearch count={6} variant="event" />;
   }
 
   if (status === "error" && events.length === 0) {

@@ -99,6 +99,63 @@ describe("useSafePlace", () => {
     await waitFor(() => expect(result.current.place?.saved).toBe(false));
   });
 
+  it("ignores a second toggle while the first is in flight (per-flight guard)", async () => {
+    getMock.mockResolvedValue(ok(place({ saved: false })));
+    let resolveSave!: (v: unknown) => void;
+    saveMock.mockReturnValue(
+      new Promise((r) => {
+        resolveSave = r;
+      }),
+    );
+    const { result } = renderHook(() => useSafePlace("p1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    act(() => {
+      result.current.toggleSave();
+    });
+    expect(result.current.place?.saved).toBe(true); // optimistic
+    act(() => {
+      result.current.toggleSave(); // ignored — one already in flight
+    });
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(unsaveMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveSave({ ok: true, data: { ok: true } });
+    });
+    expect(result.current.place?.saved).toBe(true);
+  });
+
+  it("a stale refetch resolving after a toggle can't clobber the optimistic saved", async () => {
+    getMock.mockResolvedValueOnce(ok(place({ saved: false })));
+    const { result } = renderHook(() => useSafePlace("p1"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // A slow refetch is in flight...
+    let resolveLoad!: (v: unknown) => void;
+    getMock.mockReturnValueOnce(
+      new Promise((r) => {
+        resolveLoad = r;
+      }),
+    );
+    act(() => {
+      result.current.retry();
+    });
+
+    // ...the user toggles save (bumps requestSeq) → optimistic saved:true.
+    saveMock.mockResolvedValue({ ok: true, data: { ok: true } });
+    await act(async () => {
+      result.current.toggleSave();
+    });
+    expect(result.current.place?.saved).toBe(true);
+
+    // The stale load resolves LAST with saved:false → must be DROPPED.
+    await act(async () => {
+      resolveLoad(ok(place({ saved: false })));
+    });
+    expect(result.current.place?.saved).toBe(true);
+  });
+
   it("report returns ok on success and a message on failure", async () => {
     getMock.mockResolvedValue(ok(place()));
     const { result } = renderHook(() => useSafePlace("p1"));

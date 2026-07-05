@@ -62,6 +62,18 @@ describe("SafePlaceCard", () => {
     expect(onPress).toHaveBeenCalledWith(p);
   });
 
+  it("tapping the bookmark toggles save WITHOUT firing the card onPress", () => {
+    const onPress = jest.fn();
+    const onToggleSave = jest.fn();
+    const p = place();
+    render(
+      <SafePlaceCard place={p} onPress={onPress} onToggleSave={onToggleSave} />,
+    );
+    fireEvent.press(screen.getByLabelText(strings.safePlaces.saveAction));
+    expect(onToggleSave).toHaveBeenCalledWith(p);
+    expect(onPress).not.toHaveBeenCalled(); // the nested Pressable captures the tap
+  });
+
   it("shows no bookmark when onToggleSave is omitted (display-only)", () => {
     render(<SafePlaceCard place={place()} />);
     expect(screen.queryByLabelText(strings.safePlaces.saveAction)).toBeNull();

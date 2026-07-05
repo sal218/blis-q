@@ -46,7 +46,7 @@ describe("CommunitiesCreateFab", () => {
     expect(onCreateEvent).toHaveBeenCalledTimes(1);
   });
 
-  it("closes via the backdrop / close button without firing an action", () => {
+  it("closes via the X button without firing an action", () => {
     const onCreateCommunity = jest.fn();
     const onCreateEvent = jest.fn();
     render(
@@ -58,6 +58,24 @@ describe("CommunitiesCreateFab", () => {
 
     fireEvent.press(screen.getByTestId("communities-fab"));
     fireEvent.press(screen.getByTestId("communities-fab-close"));
+
+    expect(screen.queryByTestId("fab-create-community")).toBeNull();
+    expect(onCreateCommunity).not.toHaveBeenCalled();
+    expect(onCreateEvent).not.toHaveBeenCalled();
+  });
+
+  it("closes when the backdrop is tapped without firing an action", () => {
+    const onCreateCommunity = jest.fn();
+    const onCreateEvent = jest.fn();
+    render(
+      <CommunitiesCreateFab
+        onCreateCommunity={onCreateCommunity}
+        onCreateEvent={onCreateEvent}
+      />,
+    );
+
+    fireEvent.press(screen.getByTestId("communities-fab"));
+    fireEvent.press(screen.getByTestId("communities-fab-backdrop"));
 
     expect(screen.queryByTestId("fab-create-community")).toBeNull();
     expect(onCreateCommunity).not.toHaveBeenCalled();

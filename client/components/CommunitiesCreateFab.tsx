@@ -129,6 +129,7 @@ export function CommunitiesCreateFab({
         statusBarTranslucent
       >
         <Pressable
+          testID="communities-fab-backdrop"
           style={styles.backdrop}
           onPress={close}
           accessibilityLabel={strings.communities.pickCommunityClose}

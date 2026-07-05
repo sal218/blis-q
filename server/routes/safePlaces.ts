@@ -5,8 +5,8 @@ import { safeErrorCode } from "./auth";
 import { storage } from "../storage";
 import type { SafePlaceReadRow } from "../storage";
 import { getDownloadUrl } from "../objectStorage";
-import { checkRsvpRateLimit } from "../rateLimit";
-import { safePlacesListQuerySchema } from "../validation";
+import { checkRsvpRateLimit, checkReportRateLimit } from "../rateLimit";
+import { safePlacesListQuerySchema, postReportSchema } from "../validation";
 import type {
   SafePlaceDTO,
   SafePlaceCategory,
@@ -27,6 +27,7 @@ export function registerSafePlaceRoutes(app: Express): void {
   app.get("/api/v1/safe-places/:id", isAuthenticated, handleGet);
   app.post("/api/v1/safe-places/:id/save", isAuthenticated, handleSave);
   app.delete("/api/v1/safe-places/:id/save", isAuthenticated, handleUnsave);
+  app.post("/api/v1/safe-places/:id/report", isAuthenticated, handleReport);
 }
 
 const SAVED_SAFE_PLACES_LIMIT = 50;
@@ -170,6 +171,52 @@ async function handleUnsave(req: Request, res: Response): Promise<Response> {
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("[DELETE /api/v1/safe-places/:id/save]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// POST /api/v1/safe-places/:id/report — report a place into the moderation queue
+// (mirrors the events/posts report routes). parseId → rate-limit → reason schema
+// → an EXISTENCE/visibility check (only a real, non-deleted place is reportable,
+// closing the generic /reports F-02 gap for this surface) → submitReport (which
+// inserts the report + a report.submitted audit, IDs-only, in one transaction).
+async function handleReport(req: Request, res: Response): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
+
+    const rate = await checkReportRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+
+    const parsed = postReportSchema.safeParse(req.body); // { reason } — shared shape
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+
+    const place = await storage.getSafePlace(id, userId);
+    if (!place) return res.status(404).json({ error: "Not found" });
+
+    await storage.submitReport(
+      userId,
+      {
+        resourceType: "safe_place",
+        resourceId: id,
+        reason: parsed.data.reason,
+      },
+      req.ip ?? null,
+    );
+    return res.status(201).json({ ok: true });
+  } catch (err) {
+    console.error("[POST /api/v1/safe-places/:id/report]", {
       code: safeErrorCode(err),
     });
     return res.status(500).json({ error: "Internal Server Error" });

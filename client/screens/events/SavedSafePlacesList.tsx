@@ -18,7 +18,9 @@ import { spacing, type ThemeColors } from "@/constants/theme";
 // useSavedSafePlaces. Every row is saved, so the card's bookmark unsaves and
 // optimistically removes the row. No detail nav (no safe-place detail screen).
 
-export function SavedSafePlacesList() {
+type Props = { onOpenPlace?: (id: string) => void };
+
+export function SavedSafePlacesList({ onOpenPlace }: Props = {}) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { places, status, toggleSave, retry } = useSavedSafePlaces();
@@ -53,7 +55,11 @@ export function SavedSafePlacesList() {
       keyExtractor={(p) => p.id}
       contentContainerStyle={styles.listContent}
       renderItem={({ item }) => (
-        <SafePlaceCard place={item} onToggleSave={toggleSave} />
+        <SafePlaceCard
+          place={item}
+          onToggleSave={toggleSave}
+          onPress={onOpenPlace ? (p) => onOpenPlace(p.id) : undefined}
+        />
       )}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       ListEmptyComponent={

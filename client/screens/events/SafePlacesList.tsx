@@ -26,7 +26,9 @@ import { SAFE_PLACE_CATEGORIES } from "@shared/types";
 // footer satisfies the ODbL licence. Proximity ("near me") ordering ships with
 // the map (SP-4). No coordinates are shown to the user.
 
-export function SafePlacesList() {
+type Props = { onOpenPlace?: (id: string) => void };
+
+export function SafePlacesList({ onOpenPlace }: Props = {}) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const {
@@ -148,7 +150,11 @@ export function SafePlacesList() {
         keyExtractor={(p) => p.id}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
-          <SafePlaceCard place={item} onToggleSave={toggleSave} />
+          <SafePlaceCard
+            place={item}
+            onToggleSave={toggleSave}
+            onPress={onOpenPlace ? (p) => onOpenPlace(p.id) : undefined}
+          />
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         refreshControl={

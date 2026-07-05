@@ -56,6 +56,35 @@ export function listSavedSafePlaces(): Promise<
   );
 }
 
+// GET /api/v1/safe-places/:id — one place (fresh `saved` + a fresh signed
+// imageUrl). 404 = missing / soft-deleted.
+export function getSafePlace(
+  id: string,
+): Promise<SafePlacesResult<SafePlaceDTO>> {
+  return request(
+    "GET",
+    `/api/v1/safe-places/${id}`,
+    undefined,
+    (res) => res.json() as Promise<SafePlaceDTO>,
+    commonApiError,
+  );
+}
+
+// POST /api/v1/safe-places/:id/report — report a place into the moderation
+// queue. 404 = not visible. Returns { ok: true }.
+export function reportSafePlace(
+  id: string,
+  reason: string,
+): Promise<SafePlacesResult<{ ok: true }>> {
+  return request(
+    "POST",
+    `/api/v1/safe-places/${id}/report`,
+    { reason },
+    async () => ({ ok: true }) as const,
+    commonApiError,
+  );
+}
+
 // POST /api/v1/safe-places/:id/save — bookmark a place (idempotent). 404 = not
 // visible. Returns { ok: true }.
 export function saveSafePlace(

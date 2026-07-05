@@ -41,7 +41,11 @@ export function SavedScreen({ navigation }: Props) {
             onOpenEvent={(id) => navigation.navigate("EventDetail", { id })}
           />
         )}
-        {tab === TAB_SAFE_PLACES && <SavedSafePlacesList />}
+        {tab === TAB_SAFE_PLACES && (
+          <SavedSafePlacesList
+            onOpenPlace={(id) => navigation.navigate("SafePlaceDetail", { id })}
+          />
+        )}
       </View>
     </View>
   );

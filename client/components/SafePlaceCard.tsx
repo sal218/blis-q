@@ -19,16 +19,26 @@ import type { SafePlaceDTO } from "@shared/types";
 type Props = {
   place: SafePlaceDTO;
   onToggleSave?: (place: SafePlaceDTO) => void;
+  // Tapping the card body opens the detail screen. The bookmark is a NESTED
+  // Pressable, so its tap is captured there and doesn't also trigger onPress.
+  onPress?: (place: SafePlaceDTO) => void;
 };
 
-export function SafePlaceCard({ place, onToggleSave }: Props) {
+export function SafePlaceCard({ place, onToggleSave, onPress }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const where = [place.address, place.city].filter(Boolean).join(", ");
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      onPress={onPress ? () => onPress(place) : undefined}
+      style={({ pressed }) => [
+        styles.card,
+        onPress && pressed && styles.cardPressed,
+      ]}
+    >
       {place.imageUrl ? (
         <Image
           testID="safe-place-thumb"
@@ -82,7 +92,7 @@ export function SafePlaceCard({ place, onToggleSave }: Props) {
           />
         </Pressable>
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -98,6 +108,9 @@ function createStyles(colors: ThemeColors) {
       borderColor: colors.border,
       padding: spacing.md,
       ...shadow,
+    },
+    cardPressed: {
+      opacity: 0.85,
     },
     thumb: {
       width: 68,

@@ -5,6 +5,8 @@ import { fetchWithAuth } from "@/lib/auth";
 import {
   listSafePlaces,
   listSavedSafePlaces,
+  getSafePlace,
+  reportSafePlace,
   saveSafePlace,
   unsaveSafePlace,
 } from "@/lib/api/safePlaces";
@@ -97,6 +99,37 @@ describe("listSafePlaces", () => {
       "GET",
       "/api/v1/safe-places/saved",
       undefined,
+    );
+  });
+
+  it("getSafePlace → GET /:id → the DTO", async () => {
+    fetchMock.mockResolvedValue(res(200, PLACE));
+    expect(await getSafePlace("p1")).toEqual({ ok: true, data: PLACE });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "GET",
+      "/api/v1/safe-places/p1",
+      undefined,
+    );
+  });
+
+  it("getSafePlace maps a 404 to server (place gone)", async () => {
+    fetchMock.mockResolvedValue(res(404, {}));
+    expect(await getSafePlace("p1")).toEqual({
+      ok: false,
+      error: { kind: "server" },
+    });
+  });
+
+  it("reportSafePlace → POST /:id/report with the reason", async () => {
+    fetchMock.mockResolvedValue(res(201, { ok: true }));
+    expect(await reportSafePlace("p1", "spam")).toEqual({
+      ok: true,
+      data: { ok: true },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/v1/safe-places/p1/report",
+      { reason: "spam" },
     );
   });
 

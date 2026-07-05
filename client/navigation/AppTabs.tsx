@@ -12,6 +12,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { EventsScreen } from "@/screens/events/EventsScreen";
 import { EventDetailScreen } from "@/screens/events/EventDetailScreen";
+import { SafePlaceDetailScreen } from "@/screens/events/SafePlaceDetailScreen";
 import { SavedScreen } from "@/screens/events/SavedScreen";
 import { CreateEventScreen } from "@/screens/events/CreateEventScreen";
 import { CommunityDetailScreen } from "@/screens/communities/CommunityDetailScreen";
@@ -51,6 +52,7 @@ export type AppTabsParamList = {
 export type EventsStackParamList = {
   EventsHome: undefined;
   EventDetail: { id: string };
+  SafePlaceDetail: { id: string };
   Saved: undefined;
   CreateEvent: { communityId: string };
   CommunityDetail: { id: string };
@@ -98,6 +100,12 @@ function EventsStack() {
         // No native header: the screen is full-bleed so the banner runs
         // edge-to-edge under the status bar (immersive, per the mockup). The
         // screen renders its own floating back button.
+        options={{ headerShown: false }}
+      />
+      <EventsStackNav.Screen
+        name="SafePlaceDetail"
+        component={SafePlaceDetailScreen}
+        // Full-bleed banner like EventDetail — the screen owns its back button.
         options={{ headerShown: false }}
       />
       <EventsStackNav.Screen

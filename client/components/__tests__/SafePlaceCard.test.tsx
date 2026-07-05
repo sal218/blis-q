@@ -54,6 +54,14 @@ describe("SafePlaceCard", () => {
     expect(screen.queryByTestId("safe-place-thumb")).toBeNull();
   });
 
+  it("tapping the card body fires onPress with the place", () => {
+    const onPress = jest.fn();
+    const p = place();
+    render(<SafePlaceCard place={p} onPress={onPress} />);
+    fireEvent.press(screen.getByText("Tęczowa Kawiarnia"));
+    expect(onPress).toHaveBeenCalledWith(p);
+  });
+
   it("shows no bookmark when onToggleSave is omitted (display-only)", () => {
     render(<SafePlaceCard place={place()} />);
     expect(screen.queryByLabelText(strings.safePlaces.saveAction)).toBeNull();

@@ -212,6 +212,13 @@ export const pl = {
     savedAction: "Zapisano", // "Saved" (already bookmarked) — a11y label
     savedEmpty: "Nie masz jeszcze zapisanych miejsc.", // "No saved places yet."
     savedLoadError: "Nie udało się załadować zapisanych miejsc.", // saved-list load error
+    // Detail screen (P-40)
+    detailLoadError: "Nie udało się załadować miejsca.", // "Couldn't load the place." (singular)
+    aboutLabel: "O miejscu", // "About" section heading
+    moreActions: "Więcej opcji", // ⋯ accessibility label
+    reportAction: "Zgłoś to miejsce", // ⋯ menu row + a11y label ("Report this place")
+    reportTitle: "Zgłoś miejsce", // report modal title
+    reportPlaceholder: "Opisz, co jest nie tak z tym miejscem", // "Describe what's wrong with this place"
     // Curation framing (COMPLIANCE §5.8 / P-40): present as team-curated
     // LGBT-friendly places, NOT an absolute safety guarantee.
     disclaimer:

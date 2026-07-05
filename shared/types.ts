@@ -63,7 +63,8 @@ export type ReportResourceType =
   | "message"
   | "user"
   | "event"
-  | "community";
+  | "community"
+  | "safe_place";
 export type DevicePlatform = "ios" | "android" | "web";
 export type SubscriptionStatus =
   | "active"

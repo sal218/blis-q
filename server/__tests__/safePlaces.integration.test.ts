@@ -43,6 +43,7 @@ jest.mock("../rateLimit", () => ({
   checkAdminLoginRateLimit: jest.fn(),
   checkAdminMutationRateLimit: jest.fn(),
   checkRsvpRateLimit: jest.fn(),
+  checkReportRateLimit: jest.fn(),
 }));
 
 // Mock the Overpass client so osm-search route tests never hit the network. The
@@ -63,7 +64,11 @@ jest.mock("../objectStorage", () => ({
 
 import { registerSafePlaceRoutes } from "../routes/safePlaces";
 import { registerAdminRoutes } from "../routes/admin";
-import { checkAdminMutationRateLimit, checkRsvpRateLimit } from "../rateLimit";
+import {
+  checkAdminMutationRateLimit,
+  checkRsvpRateLimit,
+  checkReportRateLimit,
+} from "../rateLimit";
 import { searchOverpass, OverpassError } from "../overpass";
 import {
   createUploadUrl,
@@ -79,6 +84,7 @@ import {
   communities,
   events,
   eventSaves,
+  reports,
   auditLog,
 } from "@shared/schema";
 import { eq, inArray, and } from "drizzle-orm";
@@ -94,6 +100,7 @@ jest.setTimeout(30000);
 
 const mutationRl = checkAdminMutationRateLimit as unknown as jest.Mock;
 const rsvpRl = checkRsvpRateLimit as unknown as jest.Mock;
+const reportRl = checkReportRateLimit as unknown as jest.Mock;
 const createUploadUrlMock = createUploadUrl as unknown as jest.Mock;
 const confirmUploadMock = confirmUpload as unknown as jest.Mock;
 const getDownloadUrlMock = getDownloadUrl as unknown as jest.Mock;
@@ -153,6 +160,7 @@ beforeEach(() => {
   mockUser = null;
   mutationRl.mockResolvedValue({ allowed: true });
   rsvpRl.mockResolvedValue({ allowed: true });
+  reportRl.mockResolvedValue({ allowed: true });
   confirmUploadMock.mockResolvedValue(true);
   getDownloadUrlMock.mockImplementation(
     async (_type: string, key: string) => `https://signed.example/${key}`,
@@ -176,6 +184,7 @@ afterEach(async () => {
     await db
       .delete(safePlaces)
       .where(inArray(safePlaces.createdById, createdUserIds));
+    await db.delete(reports).where(inArray(reports.reporterId, createdUserIds));
     await db.delete(auditLog).where(inArray(auditLog.actorId, createdUserIds));
     await db.delete(users).where(inArray(users.id, createdUserIds));
   }
@@ -513,6 +522,94 @@ describe("safe-place save / unsave + GET /api/v1/safe-places/saved", () => {
     expect(audits.some((a) => a.action.startsWith("safe_place.save"))).toBe(
       false,
     );
+  });
+});
+
+describe("POST /api/v1/safe-places/:id/report", () => {
+  it("201 + a reports row (resourceType safe_place); audit report.submitted IDs-only", async () => {
+    const admin = await seedUser();
+    const reporter = await seedUser();
+    const p = await seedPlace(admin);
+    mockUser = { id: reporter, isAdmin: false };
+
+    const res = await request(app)
+      .post(`/api/v1/safe-places/${p}/report`)
+      .send({ reason: "Nieaktualne / niebezpieczne miejsce" });
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ ok: true });
+
+    const rows = await db
+      .select()
+      .from(reports)
+      .where(eq(reports.reporterId, reporter));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].resourceType).toBe("safe_place");
+    expect(rows[0].resourceId).toBe(p);
+
+    // The report.submitted audit references IDs only — no reason/PII in metadata.
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.actorId, reporter));
+    const submitted = audits.find((a) => a.action === "report.submitted");
+    expect(submitted).toBeTruthy();
+    expect(submitted?.metadata).toBeNull();
+  });
+
+  it("bad uuid → 400; empty reason → 400", async () => {
+    const admin = await seedUser();
+    const p = await seedPlace(admin);
+    mockUser = { id: admin, isAdmin: false };
+
+    expect(
+      (
+        await request(app)
+          .post("/api/v1/safe-places/not-a-uuid/report")
+          .send({ reason: "x" })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(app)
+          .post(`/api/v1/safe-places/${p}/report`)
+          .send({ reason: "   " })
+      ).status,
+    ).toBe(400);
+  });
+
+  it("missing / soft-deleted place → 404", async () => {
+    const admin = await seedUser();
+    const p = await seedPlace(admin);
+    await storage.softDeleteSafePlace(p, admin, null);
+    mockUser = { id: admin, isAdmin: false };
+
+    expect(
+      (
+        await request(app)
+          .post(`/api/v1/safe-places/${p}/report`)
+          .send({ reason: "x" })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await request(app)
+          .post(`/api/v1/safe-places/${randomUUID()}/report`)
+          .send({ reason: "x" })
+      ).status,
+    ).toBe(404);
+  });
+
+  it("rate-limited → 429", async () => {
+    const admin = await seedUser();
+    const p = await seedPlace(admin);
+    mockUser = { id: admin, isAdmin: false };
+    reportRl.mockResolvedValueOnce({ allowed: false, retryAfter: 30 });
+
+    const res = await request(app)
+      .post(`/api/v1/safe-places/${p}/report`)
+      .send({ reason: "x" });
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBe(30);
   });
 });
 

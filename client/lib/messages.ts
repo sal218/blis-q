@@ -8,6 +8,7 @@ import type { PostsApiError } from "@/lib/api/posts";
 import type { ChatApiError } from "@/lib/api/chat";
 import type { EventsApiError } from "@/lib/api/events";
 import type { EventFieldError } from "@/validation/events";
+import type { CommonApiError, NetworkError } from "@/lib/api/http";
 
 // The single place that turns locale-independent error codes (from validation +
 // the API client) into user-facing Polish copy. Centralised so every screen
@@ -81,6 +82,22 @@ export function communityApiErrorMessage(
 // Posts feed + report API errors → copy. `notFound` (404) means the post/feed is
 // no longer visible (deleted, or the community was removed) — the screen pairs
 // this with a refresh.
+// Safe-places calls use the common error union only (no domain-specific codes);
+// map it to shared copy for the detail screen's report outcome.
+export function safePlacesApiErrorMessage(
+  error: CommonApiError | NetworkError,
+): string {
+  switch (error.kind) {
+    case "rateLimited":
+      return format(strings.errors.rateLimited, { seconds: error.retryAfter });
+    case "network":
+      return strings.errors.network;
+    case "validation":
+    case "server":
+      return strings.errors.generic;
+  }
+}
+
 export function postsApiErrorMessage(error: PostsApiError): string {
   switch (error.kind) {
     case "rateLimited":

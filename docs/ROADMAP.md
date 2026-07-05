@@ -39,6 +39,21 @@
 
 ---
 
+## Pitch-deck pillar coverage (keep this honest)
+
+The client's pitch deck defines **4 feature pillars**. This maps each to where it lives in the plan + its tracker ID, so the roadmap can't silently drop deck scope again. Reconciled 2026-07-05 (originally the 2026-06-27 deck review filed these as P-items but didn't schedule them).
+
+| Deck pillar                       | Deck promises                                                                                                           | Where in the plan                                                              | Status                                                                  |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| **1. Community & Networking**     | Profiles, thematic groups & local communities, group chats, topic rooms, networking across Poland                       | Communities S3 · chat S5 · **profile/networking depth → S7 (P-33)**            | Communities ✅ · chat ✅ · profiles **minimal** (P-33 open)             |
+| **2. Events & Safe Places**       | LGBT event calendar & party listings **with map**; LGBT-friendly cafés/clubs/NGOs near you                              | Events S6 · Safe Places S7 (**P-40 epic**)                                     | Events ✅ · safe places mostly ✅ (**map SP-4**, submissions SP-5 open) |
+| **3. Support & Education**        | Contacts to **psychologists/orgs/hotlines**, LGBT **rights guide**, **coming-out** support, **mental-health** resources | **S7 (P-37)**                                                                  | **Open** — was under-scoped as "resources"; now expanded                |
+| **4. Safety, News & Initiatives** | Anonymity, reporting & moderation; **LGBT news** (PL+EU); **anonymous surveys, statistics, volunteering**               | Reporting/moderation S3–S4 ✅ · **News S7 (P-31)** · **Initiatives S7 (P-32)** | Moderation ✅ · **News + Initiatives open** (may fast-follow)           |
+
+**Also deck-specified, tracked separately:** seasonal **Pride theme + Pride app icon** (June, per-user opt-in — 🔒 safety tension with "discreet by design", **P-30**); revenue — install fee (**P-34**), premium entitlements (**P-35**, S8), curated ads (**P-36**, S9). Quick-exit safety UI is **paused pending a client decision** (**P-17**), a deviation from the deck's "never-cut" safety gate — reconcile before launch.
+
+---
+
 ## Week 0 — START IMMEDIATELY (parallel with Sprint 1)
 
 These have lead times and **block** later work. Kick all of them off in the first days.
@@ -141,20 +156,31 @@ All EU-region, **regions are irreversible at creation** (TRANSFER §3.1):
 - **Schema/DPIA:** new `conversations` + `direct_messages` tables (plaintext, explicit ON DELETE, sender SET NULL / content `[deleted]` on erasure) + `new_direct_message` push (sender alias only, never content). **Schema not locked before the DPIA covers DMs.**
 - **Deferred entirely (post-v1):** ad-hoc group chats (hand-picked private groups) — the one shape that would need friend/group machinery.
 
-## Sprint 6 — Events + RSVP + reminders + notifications complete (≈ Aug 18 – 29)
+## Sprint 6 — Events + RSVP + notification _plumbing_ (≈ Aug 18 – 29)
 
-- **Backend (👨‍💻):** 🧪 events `create/browse/get/RSVP`, `event_rsvps`; **scheduled job** (Fly cron / Supabase scheduled fn) for `event_reminder` push **and** retention cleanup (soft-delete purge, audit-log purge, inactivity warnings — COMPLIANCE §5.4); `new_event` push.
-- **Mobile (👨‍💻):** events list/detail/create/RSVP; **notification preferences** screen; wire **all** push types (`new_community_post`, `new_event`, `event_reminder`, `community_invite`, `new_member_joined`, `moderation_action`).
-- **Admin (👨‍💻):** events CRUD.
-- **Infra:** retention job is a compliance requirement — don't skip.
+> **Status correction (2026-07-05):** the events half shipped in full (backend #44, feed/detail/RSVP #45, create #46, detail redesign #47, Home rail #48, ⋯/report #50, cancel/past #51/#52, save #56/#57, categories #58/#59). **Notifications did NOT ship "complete"** — only the _sending pipeline_ was built (`server/notifications.ts` `notifyUser`/`notifyCommunityMembers` → Expo push + prefs check + stale-token cleanup), wired best-effort into **new posts + new events**. See the ⚠️ items below — until they land, **no device actually receives a push** (there's no token-registration route, so `getActiveTokensForUser` is always empty). Title was "notifications complete"; corrected.
 
-## Sprint 7 — Safe places + Resources + Store kickoff (MONTH 4) (≈ Sep 1 – 12)
+- **Backend (👨‍💻):** ✅ events `create/browse/get/RSVP`, `event_rsvps`; ✅ `notifyCommunityMembers` sending pipeline. **⚠️ Still open:**
+  - ⚠️ **`POST/DELETE /api/push-tokens`** — device Expo-push-token register/deregister (rate limiter `checkPushTokenRateLimit` already scaffolded; client `usePushNotifications.ts` + `deregisterPushToken` exist but have no endpoint to call). **Without this, notifications are dead-lettered.** _(tracker P-20 follow-up)_
+  - ⚠️ **`GET/PATCH /api/notification-preferences`** — read/update the per-user prefs the pipeline already checks.
+  - ⚠️ **Scheduled job** (Fly cron / Supabase scheduled fn) for `event_reminder` push **and** retention cleanup (soft-delete purge, audit-log purge, inactivity warnings — COMPLIANCE §5.4). Retention is a **compliance requirement — don't skip.**
+- **Mobile (👨‍💻):** ✅ events list/detail/create/RSVP. **⚠️ Still open:** **notification-preferences** screen; wire the token register-on-login / deregister-on-logout; the remaining push types (only `new_community_post` + `new_event` are wired — `event_reminder`, `community_invite`, `new_member_joined`, `moderation_action` are not).
+- **Admin (👨‍💻):** ✅ events CRUD (backend #44 + admin-web event removal #49).
+- **Where this lands:** the ⚠️ notification pieces slipped past Sprint 6; fold them into the Sprint 7 content sprint or a dedicated "notifications delivery" slice before beta (push is needed for `event_reminder` + `moderation_action`, and the retention cron is a launch compliance gate).
 
-**Goal:** content features done; **store pipeline starts now, not at the end.**
+## Sprint 7 — Safe places + Support & Education + Safety/News/Initiatives content + Store kickoff (MONTH 4) (≈ Sep 1 – 12)
 
-- **Backend (👨‍💻):** 🧪 `GET /api/safe-places` (filter by category, **city-level only, ephemeral query coords — no GPS persistence**, COMPLIANCE §5.8); resources/support content API; emergency-contacts content.
-- **Mobile (👨‍💻):** **map view** (🔒 Mapbox/OSM with GDPR terms — _not_ Google unless DPA), category filter, safe-place detail; resources/support screens; emergency contacts.
-- **Admin (👨‍💻):** safe-places CRUD, resources CRUD.
+**Goal:** the content pillars (deck pillars 3 + 4) done; **store pipeline starts now, not at the end.**
+
+> **Deck reconciliation (2026-07-05):** the original Sprint-7 line said only "Resources + emergency contacts", which **under-scoped the deck's pillars 3 + 4**. The deck promises, under **Support & Education** — _contacts to psychologists/organizations/hotlines, an LGBT rights guide, coming-out support, mental-health resources_ — and under **Safety, News & Initiatives** — _LGBT news (Poland + EU), anonymous surveys, statistics, volunteering_. Those were captured as tracker items (**P-31/P-32/P-33/P-37**) during the 2026-06-27 pitch-deck reconciliation but never folded into the sprint plan; doing that now. Some of pillar-4's News/Initiatives may **fast-follow** post-launch (see scope-cut plan) — but they must be _on the plan_, not invisible.
+
+- **Backend (👨‍💻):**
+  - 🧪 **Safe places** — ✅ largely done (the **P-40 epic**: read API + admin CRUD #60, admin CRUD page SP-1 #61, OSM import SP-2 #62, mobile list/search SP-3 #63, save #64, images SP-6a #65, detail #66, accessibility. **Remaining:** map + near-me **SP-4**, user submissions **SP-5**). `GET /api/safe-places` is **city-level only, ephemeral query coords — no GPS persistence**, COMPLIANCE §5.8.
+  - 🧪 **Support & Education content** (**P-37**, deck pillar 3) — a `resources` content API (admin-curated: LGBT rights guide, coming-out support, mental-health resources) + **structured emergency/crisis contacts** (psychologists, organizations, hotlines). 🔒 **Safety bar:** hotline/crisis data is **life-critical — verified, Poland-specific, kept current** (a wrong number is a real-world harm).
+  - 🧪 **News** (**P-31**, deck pillar 4) — LGBT news (Poland + EU). Recommend **admin-curated** (`news` table + admin CRUD + a mobile feed) for v1; an aggregated third-party feed adds copyright + a processor + external-content moderation (heavier). _May fast-follow._
+  - 🧪 **Initiatives** (**P-32**, deck pillar 4) — **anonymous surveys** (responses NOT linkable to a user — privacy-by-design, Article-9 care), **statistics** (aggregate/anonymised only), **volunteering** listings (reuse the safe-places/events content + admin-CRUD pattern). _Lower priority; may fast-follow._
+- **Mobile (👨‍💻):** safe-places **map view** (🔒 Mapbox/OSM with GDPR terms — _not_ Google unless DPA), category filter, detail (**SP-4**); **resources/support** screens + emergency contacts (**P-37**); **news** feed (**P-31**); **initiatives** surfaces (**P-32**). **Networking profile depth** (**P-33**, deck pillar 1) — a viewable profile (alias + optional bio/interests; city-level only) — schedule here or as its own slice; 🔒 Article-9 care ("interests" can imply orientation — optional, user-controlled).
+- **Admin (👨‍💻):** safe-places CRUD ✅; **resources CRUD**, **news CRUD**, **initiatives/surveys CRUD** (as those land).
 - **Store (👨‍💻 + 🏢):** ⛔ **EAS production profile** with the Fly.io API URL; first **TestFlight internal** build; **Android internal testing** track; 🔒 **Apple content-policy review** for LGBT+ content (know the rules before submission); **age-rating** questionnaires.
 - **Legal (🏢🔒):** ⛔ **Privacy Policy + ToS LIVE at a URL** (required for store listings + first real testers); **map provider DPA** documented.
 - **Design:** App Store screenshots + preview video; Play screenshots + feature graphic.

@@ -21,7 +21,9 @@ import {
   MapPin,
   CaretLeft,
   Bookmark,
-  Check,
+  Wheelchair,
+  WifiHigh,
+  GenderNeuter,
 } from "@/components/icons/PhosphorIcons";
 import { useSafePlace } from "@/hooks/useSafePlace";
 import { strings } from "@/i18n";
@@ -37,9 +39,18 @@ import type { EventsStackParamList } from "@/navigation/AppTabs";
 
 type Props = NativeStackScreenProps<EventsStackParamList, "SafePlaceDetail">;
 
+import type { AccessibilityFeature } from "@shared/types";
+
 const BANNER_HEIGHT = 240;
 const BANNER_RADIUS = 28;
 const SCRIM = "rgba(0,0,0,0.5)";
+
+// Per-feature Phosphor glyph (keys match ACCESSIBILITY_FEATURES).
+const ACCESSIBILITY_ICON: Record<AccessibilityFeature, typeof Wheelchair> = {
+  wheelchair_accessible: Wheelchair,
+  gender_neutral_restroom: GenderNeuter,
+  free_wifi: WifiHigh,
+};
 
 function BannerPlaceholder({ colors }: { colors: ThemeColors }) {
   return (
@@ -200,16 +211,19 @@ export function SafePlaceDetailScreen({ route, navigation }: Props) {
               <Text style={styles.sectionTitle}>
                 {strings.safePlaces.accessibilityTitle}
               </Text>
-              {place.accessibilityFeatures.map((f) => (
-                <View key={f} style={styles.accessRow}>
-                  <View style={styles.accessCheck}>
-                    <Check size={14} color={colors.primary} />
+              {place.accessibilityFeatures.map((f) => {
+                const Icon = ACCESSIBILITY_ICON[f];
+                return (
+                  <View key={f} style={styles.accessRow}>
+                    <View style={styles.accessIcon}>
+                      <Icon size={20} color={colors.primary} />
+                    </View>
+                    <Text style={styles.accessText}>
+                      {strings.safePlaces.accessibility[f]}
+                    </Text>
                   </View>
-                  <Text style={styles.accessText}>
-                    {strings.safePlaces.accessibility[f]}
-                  </Text>
-                </View>
-              ))}
+                );
+              })}
             </View>
           ) : null}
         </View>
@@ -430,13 +444,9 @@ function createStyles(colors: ThemeColors) {
       gap: spacing.sm,
       marginTop: spacing.sm,
     },
-    accessCheck: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,
+    accessIcon: {
+      width: 28,
       alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.surface,
     },
     accessText: { flex: 1, color: colors.text, fontSize: 15 },
     bottomBar: {

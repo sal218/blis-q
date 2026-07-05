@@ -274,14 +274,27 @@ export const pl = {
   communities: {
     searchPlaceholder: "Szukaj społeczności",
     empty: "Nie ma jeszcze żadnych społeczności.",
+    emptyEncourage: "Załóż pierwszą i zbuduj swoją społeczność.", // encouraging line under the empty state ("Create the first and build your community.")
     emptySearch: "Brak wyników dla tego wyszukiwania.",
     loadError: "Nie udało się załadować społeczności.",
     retry: "Spróbuj ponownie",
     create: "Załóż społeczność",
-    members: "Członkowie: {count}",
+    members: "Członkowie: {count}", // legacy long form (kept for other callers)
+    // Card metadata plural — see memberLabel(). "1 członek / 3 członkowie / 5 członków".
+    memberOne: "1 członek",
+    memberFew: "{count} członkowie",
+    memberMany: "{count} członków",
     joined: "Dołączono",
     join: "Dołącz",
     leave: "Opuść",
+    // FAB speed-dial + create-event community picker (Option 1)
+    createMenu: "Utwórz", // FAB a11y label (opens the create menu)
+    createEvent: "Utwórz wydarzenie", // FAB option + picker action ("Create event")
+    pickCommunityTitle: "Wybierz społeczność", // picker sheet title ("Choose a community")
+    pickCommunitySubtitle: "W której społeczności utworzyć wydarzenie?", // "In which community to create the event?"
+    pickCommunityEmpty:
+      "Dołącz najpierw do społeczności, aby utworzyć wydarzenie.", // no joined communities ("Join a community first to create an event.")
+    pickCommunityClose: "Zamknij", // sheet close a11y label ("Close")
     about: "O społeczności",
     notFound: "Nie znaleziono tej społeczności.",
     alreadyMember: "Już należysz do tej społeczności.",

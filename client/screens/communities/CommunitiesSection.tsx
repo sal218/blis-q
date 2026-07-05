@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   View,
   Text,
   TextInput,
+  Pressable,
   FlatList,
   ActivityIndicator,
   RefreshControl,
@@ -10,25 +11,36 @@ import {
 } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
+import {
+  MagnifyingGlass,
+  X,
+  UsersThree,
+} from "@/components/icons/PhosphorIcons";
 import { CommunityCard } from "@/components/CommunityCard";
+import { CommunitiesCreateFab } from "@/components/CommunitiesCreateFab";
+import { CommunityPickerSheet } from "@/components/CommunityPickerSheet";
 import { useCommunitiesList } from "@/hooks/useCommunitiesList";
 import { strings } from "@/i18n";
-import { spacing, radius, type ThemeColors } from "@/constants/theme";
+import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
 import type { CommunityDTO } from "@shared/types";
 
 // Communities browse list — the Events tab's "Communities" segment. Design ref:
 // assets/event-communities-screen.png. Data lives in useCommunitiesList; this
-// component is composition only (search box, create button, list of
-// CommunityCard, and the loading/empty/error states).
+// component is composition only: a premium search box, the list of
+// CommunityCards, loading/empty/error states, and the bottom-right create FAB
+// (speed-dial → Create community / Create event). Creation reuses the existing
+// CreateCommunity + CreateEvent routes — no functionality change.
 
 interface CommunitiesSectionProps {
   onOpenCommunity: (id: string) => void;
-  onCreate: () => void;
+  onCreateCommunity: () => void;
+  onCreateEvent: (communityId: string) => void;
 }
 
 export function CommunitiesSection({
   onOpenCommunity,
-  onCreate,
+  onCreateCommunity,
+  onCreateEvent,
 }: CommunitiesSectionProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -45,29 +57,37 @@ export function CommunitiesSection({
     loadMore,
     retry,
   } = useCommunitiesList();
+  const [pickerVisible, setPickerVisible] = useState(false);
 
   const showFullSpinner = status === "loading" && communities.length === 0;
   const showErrorState = status === "error" && communities.length === 0;
 
   return (
     <View style={styles.root}>
-      <TextInput
-        style={styles.search}
-        value={query}
-        onChangeText={setQuery}
-        placeholder={strings.communities.searchPlaceholder}
-        placeholderTextColor={colors.textMuted}
-        autoCapitalize="none"
-        autoCorrect={false}
-        returnKeyType="search"
-        accessibilityLabel={strings.communities.searchPlaceholder}
-      />
-      <View style={styles.createButton}>
-        <PrimaryButton
-          label={strings.communities.create}
-          onPress={onCreate}
-          variant="secondary"
+      <View style={styles.searchBox}>
+        <MagnifyingGlass size={20} color={colors.textMuted} />
+        <TextInput
+          style={styles.search}
+          value={query}
+          onChangeText={setQuery}
+          placeholder={strings.communities.searchPlaceholder}
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          accessibilityLabel={strings.communities.searchPlaceholder}
         />
+        {query.length > 0 && (
+          <Pressable
+            onPress={() => setQuery("")}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={strings.communities.searchPlaceholder}
+            style={styles.clearBtn}
+          >
+            <X size={16} color={colors.textMuted} />
+          </Pressable>
+        )}
       </View>
 
       {showFullSpinner ? (
@@ -103,11 +123,21 @@ export function CommunitiesSection({
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              {debouncedQuery
-                ? strings.communities.emptySearch
-                : strings.communities.empty}
-            </Text>
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <UsersThree size={30} color={colors.primary} />
+              </View>
+              <Text style={styles.emptyText}>
+                {debouncedQuery
+                  ? strings.communities.emptySearch
+                  : strings.communities.empty}
+              </Text>
+              {debouncedQuery ? null : (
+                <Text style={styles.emptyEncourage}>
+                  {strings.communities.emptyEncourage}
+                </Text>
+              )}
+            </View>
           }
           ListFooterComponent={
             loadingMore ? (
@@ -119,6 +149,20 @@ export function CommunitiesSection({
           }
         />
       )}
+
+      <CommunitiesCreateFab
+        onCreateCommunity={onCreateCommunity}
+        onCreateEvent={() => setPickerVisible(true)}
+      />
+
+      <CommunityPickerSheet
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        onPick={(communityId) => {
+          setPickerVisible(false);
+          onCreateEvent(communityId);
+        }}
+      />
     </View>
   );
 }
@@ -130,19 +174,26 @@ function createStyles(colors: ThemeColors) {
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
     },
-    search: {
+    searchBox: {
+      flexDirection: "row",
+      alignItems: "center",
       backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: radius.md,
+      borderRadius: radius.lg,
       paddingHorizontal: spacing.md,
-      height: 46,
+      marginBottom: spacing.md,
+      ...shadow,
+      shadowOpacity: 0.05,
+    },
+    search: {
+      flex: 1,
+      paddingVertical: spacing.md,
+      marginLeft: spacing.sm,
       color: colors.text,
       fontSize: 16,
     },
-    createButton: {
-      marginTop: spacing.sm,
-      marginBottom: spacing.sm,
+    clearBtn: {
+      padding: spacing.xs,
+      marginLeft: spacing.xs,
     },
     centered: {
       flex: 1,
@@ -159,8 +210,9 @@ function createStyles(colors: ThemeColors) {
     retryButton: {
       alignSelf: "stretch",
     },
+    // Extra bottom padding so the last card clears the bottom-right FAB.
     listContent: {
-      paddingBottom: spacing.xl,
+      paddingBottom: 96,
     },
     listEmpty: {
       flexGrow: 1,
@@ -168,9 +220,28 @@ function createStyles(colors: ThemeColors) {
       justifyContent: "center",
       padding: spacing.xl,
     },
+    emptyState: {
+      alignItems: "center",
+      gap: spacing.sm,
+    },
+    emptyIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: radius.full,
+      backgroundColor: colors.primary + "1A",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: spacing.xs,
+    },
     emptyText: {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: "700",
+      textAlign: "center",
+    },
+    emptyEncourage: {
       color: colors.textMuted,
-      fontSize: 15,
+      fontSize: 14,
       textAlign: "center",
     },
     footerSpinner: {

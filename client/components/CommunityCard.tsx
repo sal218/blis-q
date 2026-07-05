@@ -1,14 +1,20 @@
 import { useMemo } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Image, Pressable, StyleSheet } from "react-native";
+import Svg, { Defs, LinearGradient, Stop, Rect } from "react-native-svg";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Avatar } from "@/components/Avatar";
-import { strings, format } from "@/i18n";
-import { spacing, radius, type ThemeColors } from "@/constants/theme";
+import { strings, memberLabel } from "@/i18n";
+import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
 import type { CommunityDTO } from "@shared/types";
 
-// A single community row in the browse list: avatar, name, member count,
-// description, and a "joined" badge when the caller is a member. Pure
-// presentation — it takes a community and an onPress, and owns no data.
+// A single community row in the browse list (design ref:
+// assets/event-communities-screen.png). A raised card: the community image (or a
+// premium gradient placeholder with the initial) on the left, then the name, a
+// muted member-count line and a 2-line description, with a Join/Joined status
+// pill on the right. Pure presentation — it takes a community and an onPress and
+// owns no data. The pill is DISPLAY-ONLY: tapping anywhere on the card opens the
+// detail screen (where join/leave already lives) — no inline join here.
+
+const THUMB = 68;
 
 interface CommunityCardProps {
   community: CommunityDTO;
@@ -18,6 +24,7 @@ interface CommunityCardProps {
 export function CommunityCard({ community, onPress }: CommunityCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const isMember = community.membership !== null;
 
   return (
     <Pressable
@@ -26,22 +33,44 @@ export function CommunityCard({ community, onPress }: CommunityCardProps) {
       onPress={() => onPress(community.id)}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
-      <View style={styles.avatar}>
-        <Avatar
-          uri={community.imageUrl}
-          name={community.name}
-          size={48}
-          borderRadius={radius.sm}
+      {community.imageUrl ? (
+        <Image
+          testID="community-thumb"
+          source={{ uri: community.imageUrl }}
+          style={styles.thumb}
+          resizeMode="cover"
         />
-      </View>
+      ) : (
+        <View testID="community-thumb-placeholder" style={styles.thumb}>
+          <Svg width={THUMB} height={THUMB} style={StyleSheet.absoluteFill}>
+            <Defs>
+              <LinearGradient id="community-thumb" x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0" stopColor={colors.primary} />
+                <Stop offset="1" stopColor={colors.accent} />
+              </LinearGradient>
+            </Defs>
+            <Rect
+              width={THUMB}
+              height={THUMB}
+              rx={radius.md}
+              fill="url(#community-thumb)"
+            />
+          </Svg>
+          <Text style={styles.thumbInitial}>
+            {community.name.charAt(0).toUpperCase()}
+          </Text>
+        </View>
+      )}
+
       <View style={styles.body}>
         <Text style={styles.name} numberOfLines={1}>
           {community.name}
         </Text>
-        <Text style={styles.meta}>
-          {format(strings.communities.members, {
-            count: community.memberCount,
-          })}
+        {/* Member count only — the reference's "• N online" is omitted because no
+            presence data exists yet (never fabricate); an online count can append
+            here later (P-24c/P-28). */}
+        <Text style={styles.meta} numberOfLines={1}>
+          {memberLabel(community.memberCount)}
         </Text>
         {community.description ? (
           <Text style={styles.description} numberOfLines={2}>
@@ -49,9 +78,14 @@ export function CommunityCard({ community, onPress }: CommunityCardProps) {
           </Text>
         ) : null}
       </View>
-      {community.membership ? (
-        <Text style={styles.joinedBadge}>{strings.communities.joined}</Text>
-      ) : null}
+
+      <View
+        style={[styles.pill, isMember ? styles.pillMember : styles.pillJoin]}
+      >
+        <Text style={styles.pillText}>
+          {isMember ? strings.communities.joined : strings.communities.join}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -61,40 +95,72 @@ function createStyles(colors: ThemeColors) {
     card: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: colors.surface,
-      borderRadius: radius.md,
+      gap: spacing.md,
+      backgroundColor: colors.card,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
       padding: spacing.md,
-      marginBottom: spacing.sm,
+      marginBottom: spacing.md,
+      ...shadow,
+      shadowOpacity: 0.06,
     },
     cardPressed: {
       opacity: 0.85,
     },
-    avatar: {
-      marginRight: spacing.md,
+    thumb: {
+      width: THUMB,
+      height: THUMB,
+      borderRadius: radius.md,
+      backgroundColor: colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+    },
+    thumbInitial: {
+      color: "#FFFFFF",
+      fontSize: Math.round(THUMB * 0.4),
+      fontWeight: "800",
     },
     body: {
       flex: 1,
     },
     name: {
       color: colors.text,
-      fontSize: 16,
+      fontSize: 17,
       fontWeight: "700",
+      letterSpacing: -0.2,
     },
     meta: {
       color: colors.textMuted,
       fontSize: 13,
+      fontWeight: "600",
       marginTop: 2,
     },
     description: {
       color: colors.textMuted,
       fontSize: 14,
+      lineHeight: 19,
       marginTop: spacing.xs,
     },
-    joinedBadge: {
-      color: colors.success,
+    pill: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs + 2,
+      borderRadius: radius.full,
+      borderWidth: 1,
+    },
+    pillJoin: {
+      borderColor: colors.primary,
+      backgroundColor: "transparent",
+    },
+    pillMember: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primary + "1A", // subtle brand tint for "joined"
+    },
+    pillText: {
+      color: colors.primary,
       fontSize: 13,
-      fontWeight: "600",
-      marginLeft: spacing.sm,
+      fontWeight: "700",
     },
   });
 }

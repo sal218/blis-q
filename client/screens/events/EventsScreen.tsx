@@ -70,7 +70,10 @@ export function EventsScreen({ navigation }: Props) {
             onOpenCommunity={(id) =>
               navigation.navigate("CommunityDetail", { id })
             }
-            onCreate={() => navigation.navigate("CreateCommunity")}
+            onCreateCommunity={() => navigation.navigate("CreateCommunity")}
+            onCreateEvent={(communityId) =>
+              navigation.navigate("CreateEvent", { communityId })
+            }
           />
         )}
       </View>

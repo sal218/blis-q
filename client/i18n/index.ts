@@ -50,3 +50,16 @@ export function goingLabel(count: number): string {
   }
   return format(s.goingMany, { count });
 }
+
+// Polish plural for the community member count ("1 członek" / "3 członkowie" /
+// "5 członków"), mirroring goingLabel's few/many rules.
+export function memberLabel(count: number): string {
+  const s = strings.communities;
+  if (count === 1) return s.memberOne;
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) {
+    return format(s.memberFew, { count });
+  }
+  return format(s.memberMany, { count });
+}

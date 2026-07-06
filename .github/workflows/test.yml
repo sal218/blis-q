@@ -96,7 +96,9 @@ jobs:
     # is ephemeral (a fresh container per run), so no data leaks between runs.
     services:
       postgres:
-        image: postgres:16-alpine
+        # Pinned to Postgres 17 to match the Supabase prod/test project's major
+        # version (17.6.x) — CI runs the same engine we deploy on.
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

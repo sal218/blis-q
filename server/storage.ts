@@ -32,6 +32,7 @@ import {
   eventSaves,
   safePlaces,
   safePlaceSaves,
+  resources,
   adCampaigns,
   blocks,
   reports,
@@ -261,6 +262,18 @@ export type SafePlaceRow = {
 // flag (an EXISTS subquery). Admin create/update paths keep the raw SafePlaceRow
 // (no caller context), so this stays separate from safePlaceColumns().
 export type SafePlaceReadRow = SafePlaceRow & { callerSaved: boolean };
+
+// A resource row as returned by resourceColumns() (P-37). `category` is a DB text
+// column; the route narrows it to the ResourceCategory union on the DTO.
+export type ResourceRow = {
+  id: string;
+  title: string;
+  category: string;
+  body: string;
+  url: string | null;
+  featured: boolean;
+  createdAt: Date;
+};
 
 // One row of the admin reports queue. `status`/`resourceType` are DB text
 // columns; the route narrows them to the DTO unions.
@@ -852,6 +865,10 @@ export class DatabaseStorage {
         .update(safePlaces)
         .set({ createdById: null })
         .where(eq(safePlaces.createdById, userId));
+      await tx
+        .update(resources)
+        .set({ createdById: null })
+        .where(eq(resources.createdById, userId));
       await tx
         .update(adCampaigns)
         .set({ createdById: null })
@@ -3123,6 +3140,162 @@ export class DatabaseStorage {
         actorId,
         action: "safe_place.deleted",
         resourceType: "safe_place",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return "deleted";
+    });
+  }
+
+  // ── Resources (admin-curated Support & Education content, P-37) ──────────────
+  // Admin-published content (never user data); audit rows for resource mutations
+  // carry IDs only — NEVER title/category/body/url.
+
+  private resourceColumns() {
+    return {
+      id: resources.id,
+      title: resources.title,
+      category: resources.category,
+      body: resources.body,
+      url: resources.url,
+      featured: resources.featured,
+      createdAt: resources.createdAt,
+    };
+  }
+
+  // One page of visible (non-deleted) resources + the total. Optional category
+  // filter (exact). Featured first, then newest, then id — a deterministic total
+  // order so offset pagination can't drift.
+  async listResources(input: {
+    page: number;
+    pageSize: number;
+    category?: string;
+  }): Promise<{ rows: ResourceRow[]; total: number }> {
+    const conditions: (SQL | undefined)[] = [isNull(resources.deletedAt)];
+    if (input.category) conditions.push(eq(resources.category, input.category));
+    const where = and(...conditions);
+
+    const rows = await db
+      .select(this.resourceColumns())
+      .from(resources)
+      .where(where)
+      .orderBy(
+        sql`${resources.featured} desc`,
+        sql`${resources.createdAt} desc`,
+        sql`${resources.id} asc`,
+      )
+      .limit(input.pageSize)
+      .offset((input.page - 1) * input.pageSize);
+
+    const [{ n }] = await db
+      .select({ n: count() })
+      .from(resources)
+      .where(where);
+
+    return { rows, total: Number(n) };
+  }
+
+  async getResource(id: string): Promise<ResourceRow | null> {
+    const [row] = await db
+      .select(this.resourceColumns())
+      .from(resources)
+      .where(and(eq(resources.id, id), isNull(resources.deletedAt)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  // Admin create. Insert + resource.created audit commit together (§7).
+  async createResource(
+    input: {
+      title: string;
+      category: string;
+      body: string;
+      url?: string;
+      featured?: boolean;
+    },
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<ResourceRow> {
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(resources)
+        .values({
+          title: input.title,
+          category: input.category,
+          body: input.body,
+          url: input.url ?? null,
+          featured: input.featured ?? false,
+          createdById: actorId,
+        })
+        .returning(this.resourceColumns());
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "resource.created",
+        resourceType: "resource",
+        resourceId: row.id,
+        ipAddress: ipAddress ?? null,
+      });
+      return row;
+    });
+  }
+
+  // Admin partial update (guarded to non-deleted). Only provided fields written
+  // (undefined = untouched; url null = remove). Returns null if missing/deleted.
+  async updateResource(
+    id: string,
+    input: {
+      title?: string;
+      category?: string;
+      body?: string;
+      url?: string | null;
+      featured?: boolean;
+    },
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<ResourceRow | null> {
+    const fields: Partial<typeof resources.$inferInsert> = {};
+    if (input.title !== undefined) fields.title = input.title;
+    if (input.category !== undefined) fields.category = input.category;
+    if (input.body !== undefined) fields.body = input.body;
+    if (input.url !== undefined) fields.url = input.url;
+    if (input.featured !== undefined) fields.featured = input.featured;
+
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(resources)
+        .set(fields)
+        .where(and(eq(resources.id, id), isNull(resources.deletedAt)))
+        .returning(this.resourceColumns());
+      if (!row) return null;
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "resource.updated",
+        resourceType: "resource",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return row;
+    });
+  }
+
+  // Admin soft-delete (guarded UPDATE ... WHERE deletedAt IS NULL). Idempotent-
+  // safe: "not_found" if missing/already deleted. Audited resource.deleted.
+  async softDeleteResource(
+    id: string,
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<"deleted" | "not_found"> {
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(resources)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(resources.id, id), isNull(resources.deletedAt)))
+        .returning({ id: resources.id });
+      if (!row) return "not_found";
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "resource.deleted",
+        resourceType: "resource",
         resourceId: id,
         ipAddress: ipAddress ?? null,
       });

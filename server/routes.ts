@@ -7,6 +7,7 @@ import { registerPostRoutes } from "./routes/posts";
 import { registerChatRoutes } from "./routes/chat";
 import { registerEventRoutes } from "./routes/events";
 import { registerSafePlaceRoutes } from "./routes/safePlaces";
+import { registerResourceRoutes } from "./routes/resources";
 import { registerSafetyRoutes } from "./routes/safety";
 import { registerAdminRoutes } from "./routes/admin";
 
@@ -28,6 +29,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerChatRoutes(app);
   registerEventRoutes(app);
   registerSafePlaceRoutes(app);
+  registerResourceRoutes(app);
   registerSafetyRoutes(app);
   registerAdminRoutes(app);
 

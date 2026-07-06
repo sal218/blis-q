@@ -344,6 +344,34 @@ export const safePlaceSaves = pgTable(
   }),
 );
 
+// ── resources ─────────────────────────────────────────────────────────────────
+// Admin-curated Support & Education content (P-37): guides/articles (body) and
+// curated org/link entries (an optional external `url`). ADMIN-PUBLISHED ONLY —
+// never user-generated (a "suggest a resource" moderation pipeline is a later
+// slice). `category` is plain text; the frozen RESOURCE_CATEGORIES tuple in
+// shared/types.ts is the source of truth, enforced by Zod (no pgEnum). This is
+// content, NOT user personal data. `createdById` is the curating admin (survives
+// erasure, anonymised). Soft-delete via `deletedAt`.
+export const resources = pgTable("resources", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: text("title").notNull(),
+  category: text("category").notNull(),
+  body: text("body").notNull(),
+  // Optional external link (e.g. an NGO / hotline org page). Null for a plain
+  // in-app article/guide.
+  url: text("url"),
+  // Whether this appears in the "Featured Resources" strip (design ref
+  // assets/profile-resources.png). Admin-set.
+  featured: boolean("featured").notNull().default(false),
+  createdById: uuid("created_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
 // ── reports ───────────────────────────────────────────────────────────────────
 // Moderation queue. Reports are RETAINED for moderation audit; on erasure the
 // reporter is anonymised (reporterId SET NULL — §5.2). resourceType + resourceId
@@ -566,6 +594,8 @@ export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type SafePlace = typeof safePlaces.$inferSelect;
 export type NewSafePlace = typeof safePlaces.$inferInsert;
+export type Resource = typeof resources.$inferSelect;
+export type NewResource = typeof resources.$inferInsert;
 export type SafePlaceSave = typeof safePlaceSaves.$inferSelect;
 export type Report = typeof reports.$inferSelect;
 export type Block = typeof blocks.$inferSelect;

@@ -47,9 +47,10 @@ async function renderScreen() {
 }
 
 describe("ProfileScreen", () => {
-  it("renders the sun/moon theme toggle + blocked-users entry", async () => {
+  it("renders the Konto + Wsparcie groups, theme toggle and rows", async () => {
     await renderScreen();
-    expect(screen.getByText(strings.profile.appearance)).toBeTruthy();
+    expect(screen.getByText(strings.profile.account)).toBeTruthy();
+    expect(screen.getByText(strings.profile.support)).toBeTruthy();
     // The ThemeToggle pill (same control as the login screen).
     expect(
       screen.getByRole("button", { name: strings.profile.themeLight }),
@@ -60,6 +61,14 @@ describe("ProfileScreen", () => {
     expect(
       screen.getByRole("button", { name: strings.profile.blockedUsers }),
     ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: strings.profile.about }),
+    ).toBeTruthy();
+  });
+
+  it("does not show fabricated stats (stats hidden until wired)", async () => {
+    await renderScreen();
+    expect(screen.queryByTestId("profile-stats")).toBeNull();
   });
 
   it("blocked-users entry navigates to the BlockedUsers screen", async () => {
@@ -70,10 +79,25 @@ describe("ProfileScreen", () => {
     expect(navigation.navigate).toHaveBeenCalledWith("BlockedUsers");
   });
 
+  it("About row navigates to the About screen", async () => {
+    const { navigation } = await renderScreen();
+    fireEvent.press(
+      screen.getByRole("button", { name: strings.profile.about }),
+    );
+    expect(navigation.navigate).toHaveBeenCalledWith("About");
+  });
+
+  it("omits Help & Support when no support email is configured", async () => {
+    // EXPO_PUBLIC_SUPPORT_EMAIL is unset in tests → SUPPORT_EMAIL_CONFIGURED is
+    // false → no dead mailto row.
+    await renderScreen();
+    expect(screen.queryByText(strings.profile.help)).toBeNull();
+  });
+
   it("sign out deregisters the push token BEFORE clearing the session", async () => {
     await renderScreen();
     fireEvent.press(
-      screen.getByRole("button", { name: strings.common.signOut }),
+      screen.getByRole("button", { name: strings.profile.logOut }),
     );
 
     await waitFor(() => expect(clearSessionMock).toHaveBeenCalled());

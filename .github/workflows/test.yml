@@ -86,6 +86,107 @@ jobs:
     runs-on: ubuntu-latest
     needs: fast-gate
     if: "github.actor != 'dependabot[bot]' && !contains(github.event.head_commit.message, '[skip integration]') && !contains(github.event.pull_request.title, '[skip integration]')"
+    # Runs against a LOCAL Postgres service container instead of the remote
+    # Supabase test project. Every query hits localhost, so the ~cross-region
+    # round-trip latency that made this job ~20 min is gone (it dominated the
+    # wall-clock — the tests seed/clean up thousands of rows). It's a REAL
+    # Postgres, so results stay real: identical SQL/constraint/RLS semantics, and
+    # the tests use the service role (which bypasses RLS) exactly as against
+    # Supabase. The schema is built fresh each run from shared/schema.ts. The DB
+    # is ephemeral (a fresh container per run), so no data leaks between runs.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: blisq_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/blisq_test
+      # Supabase is MOCKED in integration tests (jest.mock("../supabase")); these
+      # are non-empty placeholders only, so env validation passes (like fast-gate).
+      # No BLISQ_TEST_* secrets are needed anymore.
+      SUPABASE_URL: https://placeholder.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+      SUPABASE_ANON_KEY: placeholder-anon-key-not-used-in-tests
+      SESSION_SECRET: ci-test-session-secret-at-least-32-chars
+      RESEND_API_KEY: re_test_disabled
+      INVITE_LINK_BASE: http://localhost:5000
+      WEB_APP_URL: http://localhost:8081
+      EXPO_PUBLIC_API_URL: http://localhost:5000
+      FIREBASE_PROJECT_ID: test-project
+      FIREBASE_CLIENT_EMAIL: test@test-project.iam.gserviceaccount.com
+      FIREBASE_PRIVATE_KEY: "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA00000000000000000000000000000000000000000000000=\n-----END RSA PRIVATE KEY-----"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        # --legacy-peer-deps until `npx expo install --fix` pins the exact Expo
+        # SDK 54 RN peer set (version-range mismatches, not real incompatibilities).
+        run: npm ci --legacy-peer-deps
+
+      - name: Create .env.test
+        run: |
+          cat > .env.test << ENVEOF
+          DATABASE_URL=${DATABASE_URL}
+          SUPABASE_URL=${SUPABASE_URL}
+          SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+          SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+          SESSION_SECRET=${SESSION_SECRET}
+          RESEND_API_KEY=${RESEND_API_KEY}
+          INVITE_LINK_BASE=${INVITE_LINK_BASE}
+          WEB_APP_URL=${WEB_APP_URL}
+          EXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL}
+          FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+          FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL}
+          FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
+          ENVEOF
+
+      # Build the schema into the fresh local Postgres, then apply RLS.
+      # Uses drizzle.ci.config.ts (strict:false) so the push is non-interactive —
+      # against an empty DB it's a big additive CREATE-only diff and there's no
+      # TTY to confirm. NOT `drizzle-kit push --force` (which also emits DISABLE
+      # ROW LEVEL SECURITY — CLAUDE.md §2). Then db-rls.mjs re-asserts
+      # supabase/rls.sql and verifies zero-policy RLS. timeout = hang safety net.
+      - name: Build schema (fresh local Postgres)
+        timeout-minutes: 5
+        run: |
+          npx drizzle-kit push --config drizzle.ci.config.ts
+          node scripts/db-rls.mjs
+
+      # Everything EXCEPT realtime-auth (which needs Supabase's `authenticated`
+      # role + realtime/auth internals — it runs in the supabase-tests job below,
+      # against the real Supabase test project).
+      - name: Run integration tests
+        run: npm run test:integration -- --testPathIgnorePatterns realtime-auth
+
+  supabase-tests:
+    name: Supabase Realtime auth (real Supabase test DB)
+    runs-on: ubuntu-latest
+    needs: fast-gate
+    if: "github.actor != 'dependabot[bot]' && !contains(github.event.head_commit.message, '[skip integration]') && !contains(github.event.pull_request.title, '[skip integration]')"
+    # realtime-auth.integration.test.ts exercises supabase/realtime-auth.sql (the
+    # chat_topic_is_member predicate + the RLS policy on Supabase's internal
+    # `realtime.messages`) as the Supabase `authenticated` role. Those primitives
+    # (the auth/realtime schemas + roles) exist only on Supabase, so this ONE
+    # suite runs against the real Supabase TEST project — a handful of queries, so
+    # it's fast even over the network. No schema build here: the test DB is kept
+    # in sync out-of-band, and realtime-auth.sql is applied by a human per
+    # docs/DEPLOY.md (the test's own doc comment).
     env:
       DATABASE_URL: ${{ secrets.BLISQ_TEST_DATABASE_URL }}
       SUPABASE_URL: ${{ secrets.BLISQ_TEST_SUPABASE_URL }}
@@ -99,17 +200,13 @@ jobs:
       FIREBASE_PROJECT_ID: test-project
       FIREBASE_CLIENT_EMAIL: test@test-project.iam.gserviceaccount.com
       FIREBASE_PRIVATE_KEY: "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA00000000000000000000000000000000000000000000000=\n-----END RSA PRIVATE KEY-----"
-
     steps:
-      # Gate the whole job on the test-DB secret being present. Until a test
-      # Supabase project is provisioned and BLISQ_TEST_* secrets are set
-      # (Sprint 1), this job no-ops and PASSES rather than failing red on an
-      # unconfigured DB. Once the secret exists, the steps below run for real.
+      # No test-DB secret (e.g. on a fork PR) → skip + PASS rather than fail red.
       - name: Check test DB configured
         id: gate
         run: |
           if [ -z "$DATABASE_URL" ]; then
-            echo "::notice::BLISQ_TEST_* secrets not configured — skipping integration tests."
+            echo "::notice::BLISQ_TEST_* not set — skipping the Supabase realtime-auth suite."
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
@@ -127,9 +224,6 @@ jobs:
 
       - name: Install dependencies
         if: steps.gate.outputs.configured == 'true'
-        # --legacy-peer-deps until `npx expo install --fix` pins the exact Expo
-        # SDK 54 RN peer set in Sprint 1 (e.g. react-native-screens vs RN). The
-        # conflicts are version-range mismatches, not real incompatibilities.
         run: npm ci --legacy-peer-deps
 
       - name: Create .env.test
@@ -150,10 +244,6 @@ jobs:
           FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
           ENVEOF
 
-      - name: Push schema to test DB
+      - name: Run realtime-auth suite
         if: steps.gate.outputs.configured == 'true'
-        run: npm run db:push
-
-      - name: Run integration tests
-        if: steps.gate.outputs.configured == 'true'
-        run: npm run test:integration
+        run: npm run test:integration -- realtime-auth

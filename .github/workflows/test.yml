@@ -157,20 +157,15 @@ jobs:
           ENVEOF
 
       # Build the schema into the fresh local Postgres, then apply RLS.
-      # drizzle.config has `strict: true`, so `drizzle-kit push` asks "execute
-      # these statements?" — against an empty DB that's a big additive diff (all
-      # CREATE TABLEs, no rename menus), so we answer it with `yes`. We do NOT use
-      # `drizzle-kit push --force` (which also emits DISABLE ROW LEVEL SECURITY —
-      # CLAUDE.md §2); `yes | push` keeps the safe no-force path. `set +o pipefail`
-      # so `yes` getting SIGPIPE when push exits doesn't fail the pipeline (the
-      # pipeline then reports push's own exit code). Then db-rls.mjs re-asserts
+      # Uses drizzle.ci.config.ts (strict:false) so the push is non-interactive —
+      # against an empty DB it's a big additive CREATE-only diff and there's no
+      # TTY to confirm. NOT `drizzle-kit push --force` (which also emits DISABLE
+      # ROW LEVEL SECURITY — CLAUDE.md §2). Then db-rls.mjs re-asserts
       # supabase/rls.sql and verifies zero-policy RLS. timeout = hang safety net.
       - name: Build schema (fresh local Postgres)
         timeout-minutes: 5
         run: |
-          set +o pipefail
-          yes | npx drizzle-kit push
-          set -o pipefail
+          npx drizzle-kit push --config drizzle.ci.config.ts
           node scripts/db-rls.mjs
 
       - name: Run integration tests

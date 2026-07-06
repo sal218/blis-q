@@ -249,11 +249,32 @@ export type SafePlaceDTO = {
   saved: boolean;
 };
 
+// Predefined Support & Education resource categories (P-37, from
+// assets/profile-resources.png). Coarse CONTENT topics for browsing/filtering —
+// admin-curated, 🔒 deliberately never identity/orientation labels (a category
+// can't infer Article 9 data; mirrors SAFE_PLACE_CATEGORIES). The Zod validator
+// enums over this tuple. FROZEN — append, never rename.
+export const RESOURCE_CATEGORIES = [
+  "mental_health",
+  "legal_rights",
+  "community_orgs",
+  "education_careers",
+  "health_services",
+  "housing_support",
+] as const;
+
+export type ResourceCategory = (typeof RESOURCE_CATEGORIES)[number];
+
 export type ResourceDTO = {
   id: string;
   title: string;
-  category: string;
+  category: ResourceCategory;
   body: string;
+  // Optional external link (NGO / hotline / org page), or null for an in-app
+  // article/guide.
+  url: string | null;
+  // Whether it appears in the "Featured Resources" strip.
+  featured: boolean;
   createdAt: string;
 };
 

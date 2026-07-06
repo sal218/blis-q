@@ -24,6 +24,7 @@ import {
   Input,
   PageHeader,
   Pagination,
+  RequiredMark,
   Select,
   Textarea,
   useConfirm,
@@ -389,7 +390,7 @@ export function ResourcesPage() {
           onSubmit={onSubmit}
           style={{ display: "flex", flexDirection: "column", gap: 16 }}
         >
-          <Field label="Tytuł">
+          <Field label="Tytuł" required>
             <Input
               placeholder="np. Wsparcie w kryzysie psychicznym"
               value={title}
@@ -400,7 +401,10 @@ export function ResourcesPage() {
           </Field>
 
           <div className="bq-field">
-            <span className="bq-label">Kategoria</span>
+            <span className="bq-label">
+              Kategoria
+              <RequiredMark />
+            </span>
             <div className="bq-chip-row">
               {RESOURCE_CATEGORIES.map((c) => {
                 const meta = RESOURCE_CATEGORY_META[c];
@@ -425,7 +429,11 @@ export function ResourcesPage() {
             </div>
           </div>
 
-          <Field label="Treść" help="Poradnik, opis organizacji lub materiał.">
+          <Field
+            label="Treść"
+            required
+            help="Poradnik, opis organizacji lub materiał."
+          >
             <Textarea
               placeholder="Treść materiału widoczna w aplikacji"
               value={body}

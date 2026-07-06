@@ -28,6 +28,7 @@ import {
   Input,
   PageHeader,
   Pagination,
+  RequiredMark,
   SearchInput,
   Select,
   Textarea,
@@ -631,7 +632,7 @@ export function SafePlacesPage() {
           onSubmit={onSubmit}
           style={{ display: "flex", flexDirection: "column", gap: 16 }}
         >
-          <Field label="Nazwa">
+          <Field label="Nazwa" required>
             <Input
               placeholder="np. Tęczowa Kawiarnia"
               value={name}
@@ -641,7 +642,10 @@ export function SafePlacesPage() {
           </Field>
 
           <div className="bq-field">
-            <span className="bq-label">Kategoria</span>
+            <span className="bq-label">
+              Kategoria
+              <RequiredMark />
+            </span>
             <div className="bq-chip-row">
               {CATEGORY_KEYS.map((c) => {
                 const meta = SAFE_PLACE_CATEGORY_META[c];

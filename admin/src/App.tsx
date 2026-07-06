@@ -15,6 +15,7 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { ModerationPage } from "./pages/ModerationPage";
 import { UsersPage } from "./pages/UsersPage";
 import { SafePlacesPage } from "./pages/SafePlacesPage";
+import { ResourcesPage } from "./pages/ResourcesPage";
 import { EventsPage } from "./pages/EventsPage";
 import { AdCampaignsPage } from "./pages/AdCampaignsPage";
 
@@ -80,6 +81,12 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         label: "Bezpieczne miejsca",
         icon: "mapPin",
         element: <SafePlacesPage />,
+      },
+      {
+        path: "/resources",
+        label: "Materiały",
+        icon: "book",
+        element: <ResourcesPage />,
       },
     ],
   },

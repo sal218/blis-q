@@ -83,8 +83,12 @@ Repeat until `READY_FOR_PR`, capped at **4 rounds**:
 
 1. Invoke `codex:codex-rescue` with the brief + `REVIEW MODE B — WORKING-TREE
 REVIEW` + repo guard + the commit range, **opening with the synchronous-review
-   instruction** (see Loop rules). Codex reads the actual diff and **runs the
-   gates itself** — never accept "Claude said tests pass."
+   instruction** (see Loop rules). Codex reads the actual diff and does the
+   **static code review + `check:types`**. It does NOT re-run `lint`/`test:client`
+   (its sandbox blocks them and retrying wastes minutes) — **CI on a clean
+   checkout is the authoritative test/lint gate** (plus you ran the full battery
+   in Step 5 before handing off). A sandbox-only "couldn't run the gates" note is
+   not a real finding; don't re-loop on it.
 2. Read the verdict; relay a summary to the human.
    - `CHANGES_REQUESTED` → apply the P1/P2 fixes, re-run the battery, commit, then
      re-invoke.
@@ -132,7 +136,9 @@ need a follow-up pass.
 - **No subagent memory:** re-pass the brief + round recap each call (subagents
   don't see prior rounds or this conversation).
 - **Independent gate:** success = Codex APPROVED **and** CI green on a clean
-  checkout **and** the human's go. Codex must run tests itself, not trust claims.
+  checkout **and** the human's go. CI (not Codex) is the authoritative test/lint
+  gate; Codex's job is the independent code review + `check:types`. Don't gate on
+  Codex re-running tests it can't run in its sandbox.
 - **Caps over churn:** 4 rounds per loop, then escalate to the human.
 - **Pause on scope changes;** the human owns scope.
 - **Never auto-open a PR;** never run `db:push` or destructive DB commands inside

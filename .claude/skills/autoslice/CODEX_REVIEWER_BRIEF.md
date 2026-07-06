@@ -111,17 +111,28 @@ Check:
    - audit rows and audit privacy
    - transactional/atomic behavior where relevant
    - DTO shape and public-vs-admin leakage boundaries
-5. Run focused tests and standard gates when feasible:
-   - `npm run check:types`
-   - `npm run lint`
-   - `npm test`
-   - focused jest/integration suite for the slice
-   - `prettier --check` on changed files
-   - `git diff --check`
-   - `check:rls` only for DB/RLS process changes
+5. Gates — your job is the **static code review** plus the one gate you can run
+   cheaply:
+   - **Run `npm run check:types`** (fast, no sandbox friction) and report the
+     result.
+   - **Do NOT burn time trying to run `npm run lint` / `npm run test:client` /
+     `npm test` / jest.** If your sandbox declines them, do not retry every
+     invocation form — state once that you did not run them and move on. These
+     are the **authoritative responsibility of CI**, which runs lint + types +
+     unit + client + build + integration on a **clean checkout** for every PR
+     (the true independent out-of-sample gate), plus Claude runs the full local
+     battery before handing off. Re-running them inside your sandbox is
+     redundant, not a gate.
+   - Optionally eyeball `git diff --check` / `prettier` concerns as part of the
+     static read; `check:rls` matters only for DB/RLS process changes.
 
    Do not run destructive DB commands. Do not run `npm run db:push` unless
    explicitly instructed by the human and safe process is confirmed.
+
+   A verdict is NOT blocked by your inability to run lint/test in the sandbox —
+   base it on the code review + `check:types` + the knowledge that CI is the
+   authoritative gate. Do NOT emit a P1/P2 solely because you could not run
+   lint/test yourself.
 
 6. For backend-only slices, full integration can be left to CI only if focused
    tests and static gates are strong and the change is additive. Flag this
@@ -168,8 +179,11 @@ process.
 
 Be direct. Prefer "approve / do not approve" over soft opinions.
 Ground every finding in code, docs, schema, or tests.
-Do not accept "Claude said tests passed" unless you either run the relevant
-checks or state clearly that you did not.
+Your verification bar is the **static code review + `check:types`**; the test/lint
+run is CI's job on a clean checkout (the authoritative gate) — so if you cannot
+run lint/test in the sandbox, state that plainly and still give a real verdict.
+Never withhold APPROVED/READY_FOR_PR or raise a finding merely because you could
+not execute lint/test yourself.
 Do not request broad refactors unless needed for correctness, security, or
 established repo standards.
 Protect user/client trust: privacy, safety, GDPR, RLS, audit, and moderation

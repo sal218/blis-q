@@ -71,11 +71,36 @@ describe("searchOverpass", () => {
     expect(out.map((c) => c.name)).toEqual(["Keep"]);
   });
 
-  it("throws OverpassError on a non-2xx response", async () => {
-    mockFetch(async () => ({ ok: false, status: 429 }) as Response);
+  it("throws OverpassError only after every retry attempt is exhausted", async () => {
+    // A backend that always 429s — the client should retry across attempts and
+    // only then surface the error (never on the first failure alone).
+    let calls = 0;
+    mockFetch(async () => {
+      calls++;
+      return { ok: false, status: 429 } as Response;
+    });
     await expect(searchOverpass("Gdańsk", "club")).rejects.toBeInstanceOf(
       OverpassError,
     );
+    expect(calls).toBeGreaterThan(1); // retried, not a single-shot failure
+  });
+
+  it("retries a transient failure, then succeeds on the next attempt", async () => {
+    // First backend is busy (504); the retry lands on a healthy one — the admin
+    // gets results without having to click search again.
+    let calls = 0;
+    mockFetch(async () => {
+      calls++;
+      if (calls === 1) return { ok: false, status: 504 } as Response;
+      return okJson({
+        elements: [
+          { type: "node", id: 7, lat: 52, lon: 21, tags: { name: "Retry OK" } },
+        ],
+      });
+    });
+    const out = await searchOverpass("Warszawa", "cafe");
+    expect(out.map((c) => c.name)).toEqual(["Retry OK"]);
+    expect(calls).toBe(2);
   });
 
   it("throws OverpassError when fetch rejects (network/timeout)", async () => {

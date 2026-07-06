@@ -57,9 +57,11 @@ describe("searchOverpass", () => {
     expect(out[1].address).toBeNull();
   });
 
-  it("matches the city across native + English name tags, case-insensitively", async () => {
+  it("matches the city across native + English name tags via exact area lookup", async () => {
     // Capture the Overpass QL sent so we can assert the area lookup accepts an
-    // English name like "Warsaw" (OSM stores it as name:en, not name).
+    // English name like "Warsaw" (OSM stores it as name:en, not name). Exact `=`
+    // per tag keeps the query on the name index (fast) — a case-insensitive
+    // regex here would make a city-wide lookup time out.
     let sentBody = "";
     global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
       sentBody = String(init?.body ?? "");
@@ -67,23 +69,23 @@ describe("searchOverpass", () => {
     }) as unknown as typeof fetch;
 
     await searchOverpass("Warsaw", "cafe");
-    expect(sentBody).toContain('"name:en"'); // English name tag queried
-    expect(sentBody).toContain('"alt_name"'); // alternate spellings too
-    expect(sentBody).toContain("Warsaw"); // the admin's term, matched literally
-    expect(sentBody).toMatch(/,i\]/); // case-insensitive area match
+    expect(sentBody).toContain('"name"="Warsaw"'); // native tag, exact
+    expect(sentBody).toContain('"name:en"="Warsaw"'); // English tag, exact
+    expect(sentBody).toContain('"alt_name"="Warsaw"'); // alternate spellings too
+    expect(sentBody).not.toMatch(/,i\]/); // NOT the slow case-insensitive regex
   });
 
-  it("regex-escapes the city so metacharacters are matched literally", async () => {
+  it("QL-string-escapes the city so it can't break out of the query", async () => {
     let sentBody = "";
     global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
       sentBody = String(init?.body ?? "");
       return okJson({ elements: [] });
     }) as unknown as typeof fetch;
 
-    await searchOverpass("A.B (C)", "cafe");
-    // The dot/parens are regex-escaped (\. \( \)) so they match literally; each
-    // escape backslash is then doubled for the QL string literal → "\\." etc.
-    expect(sentBody).toContain("A\\\\.B \\\\(C\\\\)");
+    // A double quote in the city must be escaped so it can't terminate the QL
+    // string literal / inject Overpass QL.
+    await searchOverpass('War"saw', "cafe");
+    expect(sentBody).toContain('War\\"saw');
   });
 
   it("drops elements without a name or without coordinates", async () => {

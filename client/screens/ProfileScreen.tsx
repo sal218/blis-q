@@ -1,5 +1,12 @@
 import { useMemo } from "react";
-import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  Linking,
+  StyleSheet,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { ProfileStackParamList } from "@/navigation/AppTabs";
@@ -7,12 +14,28 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { signOutGoogle } from "@/lib/googleAuth";
 import { deregisterPushToken } from "@/notifications/usePushNotifications";
-import { PrimaryButton } from "@/components/forms/PrimaryButton";
+import { Avatar } from "@/components/Avatar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { SettingsRow } from "@/components/SettingsRow";
+import { ProfileStats } from "@/components/ProfileStats";
+import {
+  Faders,
+  Prohibit,
+  Info,
+  Question,
+  SignOut,
+} from "@/components/icons/PhosphorIcons";
+import { SUPPORT_EMAIL, SUPPORT_EMAIL_CONFIGURED } from "@/constants/support";
 import { strings } from "@/i18n";
-import { spacing, radius, type ThemeColors } from "@/constants/theme";
+import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
 
 type Props = NativeStackScreenProps<ProfileStackParamList, "ProfileHome">;
+
+// The profile stats row (Communities / Events) is intentionally hidden until the
+// real counts are wired — we never show fabricated numbers. Flip to true once a
+// counts source exists (Communities + Events only; Blis-Q has no friend graph so
+// there is no "Connections").
+const SHOW_STATS = false;
 
 export function ProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -29,6 +52,10 @@ export function ProfileScreen({ navigation }: Props) {
     await signOut();
   }
 
+  const openSupportEmail = () => {
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}`);
+  };
+
   return (
     <ScrollView
       style={styles.root}
@@ -41,34 +68,83 @@ export function ProfileScreen({ navigation }: Props) {
     >
       <Text style={styles.title}>{strings.profile.title}</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.name}>{user?.displayName ?? ""}</Text>
-        {!!user?.email && <Text style={styles.muted}>{user.email}</Text>}
+      {/* Profile header — display-only for now. TODO: profile photos are a
+          privacy decision (deferred); the plan is curated selectable avatars in
+          onboarding, not uploads. Until then this shows the initial placeholder.
+          Edit-profile is a future slice (P-33), so the header isn't tappable. */}
+      <View style={styles.identity}>
+        <Avatar
+          uri={null}
+          name={user?.displayName ?? "?"}
+          size={64}
+          borderRadius={radius.full}
+        />
+        <View style={styles.identityText}>
+          <Text style={styles.name} numberOfLines={1}>
+            {user?.displayName ?? ""}
+          </Text>
+          {!!user?.email && (
+            <Text style={styles.email} numberOfLines={1}>
+              {user.email}
+            </Text>
+          )}
+        </View>
       </View>
 
-      <Text style={styles.section}>{strings.profile.appearance}</Text>
-      <View style={styles.row}>
-        <Text style={styles.rowLabel}>{strings.profile.theme}</Text>
-        <ThemeToggle />
+      {SHOW_STATS ? (
+        <View style={styles.statsCard}>
+          <ProfileStats stats={[]} />
+        </View>
+      ) : null}
+
+      <Text style={styles.section}>{strings.profile.account}</Text>
+      <View style={styles.card}>
+        <SettingsRow
+          icon={<Faders size={22} color={colors.primary} />}
+          label={strings.profile.theme}
+          right={<ThemeToggle />}
+        />
+        <View style={styles.divider} />
+        <SettingsRow
+          icon={<Prohibit size={22} color={colors.primary} />}
+          label={strings.profile.blockedUsers}
+          onPress={() => navigation.navigate("BlockedUsers")}
+        />
+      </View>
+
+      <Text style={styles.section}>{strings.profile.support}</Text>
+      <View style={styles.card}>
+        <SettingsRow
+          icon={<Info size={22} color={colors.primary} />}
+          label={strings.profile.about}
+          onPress={() => navigation.navigate("About")}
+        />
+        {/* Help & Support only appears once a real support address is configured
+            (EXPO_PUBLIC_SUPPORT_EMAIL) — no placeholder/dead mailto. */}
+        {SUPPORT_EMAIL_CONFIGURED ? (
+          <>
+            <View style={styles.divider} />
+            <SettingsRow
+              icon={<Question size={22} color={colors.primary} />}
+              label={strings.profile.help}
+              onPress={openSupportEmail}
+            />
+          </>
+        ) : null}
       </View>
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={strings.profile.blockedUsers}
-        style={styles.row}
-        onPress={() => navigation.navigate("BlockedUsers")}
+        accessibilityLabel={strings.profile.logOut}
+        onPress={onSignOut}
+        style={({ pressed }) => [
+          styles.logout,
+          pressed && styles.logoutPressed,
+        ]}
       >
-        <Text style={styles.rowLabel}>{strings.profile.blockedUsers}</Text>
-        <Text style={styles.chevron}>›</Text>
+        <SignOut size={20} color={colors.primary} />
+        <Text style={styles.logoutLabel}>{strings.profile.logOut}</Text>
       </Pressable>
-
-      <View style={styles.signOut}>
-        <PrimaryButton
-          label={strings.common.signOut}
-          variant="secondary"
-          onPress={onSignOut}
-        />
-      </View>
     </ScrollView>
   );
 }
@@ -82,58 +158,86 @@ function createStyles(colors: ThemeColors) {
     },
     title: {
       color: colors.text,
-      fontSize: 28,
+      fontSize: 32,
       fontWeight: "800",
+      letterSpacing: -0.5,
       marginBottom: spacing.lg,
     },
-    card: {
-      backgroundColor: colors.surface,
-      borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: spacing.md,
+    identity: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
       marginBottom: spacing.lg,
+    },
+    identityText: {
+      flex: 1,
     },
     name: {
       color: colors.text,
-      fontSize: 18,
-      fontWeight: "700",
+      fontSize: 22,
+      fontWeight: "800",
+      letterSpacing: -0.3,
     },
-    muted: {
+    email: {
       color: colors.textMuted,
-      fontSize: 14,
-      marginTop: spacing.xs,
+      fontSize: 15,
+      marginTop: 2,
+    },
+    statsCard: {
+      backgroundColor: colors.card,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: spacing.md,
+      marginBottom: spacing.lg,
+      ...shadow,
+      shadowOpacity: 0.05,
     },
     section: {
       color: colors.textMuted,
       fontSize: 13,
-      fontWeight: "600",
+      fontWeight: "700",
       textTransform: "uppercase",
-      letterSpacing: 0.5,
+      letterSpacing: 0.6,
       marginBottom: spacing.sm,
+      marginLeft: spacing.xs,
     },
-    row: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      backgroundColor: colors.surface,
-      borderRadius: radius.md,
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: radius.lg,
       borderWidth: 1,
       borderColor: colors.border,
-      paddingHorizontal: spacing.md,
+      overflow: "hidden",
+      marginBottom: spacing.lg,
+      ...shadow,
+      shadowOpacity: 0.05,
+    },
+    divider: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: colors.border,
+      marginLeft: spacing.md + 24 + spacing.md, // align under the label, past the icon
+    },
+    logout: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: spacing.sm,
+      backgroundColor: colors.card,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
       paddingVertical: spacing.md,
-      marginBottom: spacing.sm,
+      marginTop: spacing.sm,
+      ...shadow,
+      shadowOpacity: 0.05,
     },
-    rowLabel: {
-      color: colors.text,
+    logoutPressed: {
+      opacity: 0.7,
+    },
+    logoutLabel: {
+      color: colors.primary,
       fontSize: 16,
-    },
-    chevron: {
-      color: colors.textMuted,
-      fontSize: 22,
-    },
-    signOut: {
-      marginTop: spacing.xl,
+      fontWeight: "700",
     },
   });
 }

@@ -97,6 +97,47 @@ export type OsmCandidate = {
   longitude: number;
 };
 
+// Resources (docs/API.md §11/§14 — P-37 Support & Education). Mirrors
+// shared/types.ts RESOURCE_CATEGORIES + ResourceDTO (the admin app has no
+// @shared alias). Category is a frozen predefined CONTENT topic — coarse,
+// Article-9-safe, never an identity/orientation label.
+export const RESOURCE_CATEGORIES = [
+  "mental_health",
+  "legal_rights",
+  "community_orgs",
+  "education_careers",
+  "health_services",
+  "housing_support",
+] as const;
+
+export type ResourceCategory = (typeof RESOURCE_CATEGORIES)[number];
+
+// Polish label + a distinct chip colour per category (admin display + picker).
+export const RESOURCE_CATEGORY_META: Record<
+  ResourceCategory,
+  { label: string; color: string }
+> = {
+  mental_health: { label: "Zdrowie psychiczne", color: "#7C3AED" },
+  legal_rights: { label: "Prawa i pomoc prawna", color: "#2563EB" },
+  community_orgs: { label: "Organizacje społeczne", color: "#059669" },
+  education_careers: { label: "Edukacja i kariera", color: "#0891B2" },
+  health_services: { label: "Usługi zdrowotne", color: "#DC2626" },
+  housing_support: { label: "Wsparcie mieszkaniowe", color: "#B45309" },
+};
+
+export type ResourceDTO = {
+  id: string;
+  title: string;
+  category: ResourceCategory;
+  body: string;
+  // Optional external link (NGO / hotline / org page), or null for an in-app
+  // article/guide.
+  url: string | null;
+  // Whether it appears in the app's "Featured Resources" strip.
+  featured: boolean;
+  createdAt: string;
+};
+
 export type ReportStatus = "pending" | "reviewing" | "resolved" | "dismissed";
 
 export type ReportDTO = {

@@ -71,6 +71,25 @@ beforeEach(() => {
 });
 
 describe("ChatThreadScreen", () => {
+  it("shows the thread skeleton on the first load and not once messages arrive", () => {
+    chatMock.mockReturnValue(hookState({ status: "loading", messages: [] }));
+    const { rerender } = renderThread();
+    expect(screen.getByTestId("chat-thread-skeleton")).toBeTruthy();
+
+    chatMock.mockReturnValue(hookState({ messages: [msg("m1", "Cześć")] }));
+    const navigation = { setOptions: jest.fn() } as unknown as never;
+    const route = {
+      params: {
+        communityId: "c1",
+        communityName: "Queer Creatives",
+        canModerate: false,
+      },
+    } as unknown as never;
+    rerender(<ChatThreadScreen navigation={navigation} route={route} />);
+    expect(screen.queryByTestId("chat-thread-skeleton")).toBeNull();
+    expect(screen.getByText("Cześć")).toBeTruthy();
+  });
+
   it("renders message content and masks deleted messages", () => {
     chatMock.mockReturnValue(
       hookState({

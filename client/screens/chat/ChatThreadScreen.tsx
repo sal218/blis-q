@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
+import { ChatThreadSkeleton } from "@/components/skeleton/ChatThreadSkeleton";
 import { ReportPostModal } from "@/components/ReportPostModal";
 import {
   useCommunityChat,
@@ -185,11 +186,7 @@ export function ChatThreadScreen({ route, navigation }: Props) {
   );
 
   if (status === "loading" && messages.length === 0) {
-    return (
-      <View style={[styles.root, styles.centered]}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
+    return <ChatThreadSkeleton />;
   }
 
   if (status === "error" && messages.length === 0) {

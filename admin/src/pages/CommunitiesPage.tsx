@@ -13,6 +13,7 @@ import {
   SearchInput,
   Textarea,
   useConfirm,
+  useDebouncedValue,
 } from "../components/ui";
 
 // Admin communities CRUD (docs/API.md §14). Read-list with search + a single
@@ -25,6 +26,8 @@ export function CommunitiesPage() {
   const [page, setPage] = useState<OffsetPage<CommunityDTO> | null>(null);
   const [pageNum, setPageNum] = useState(1);
   const [search, setSearch] = useState("");
+  // Trails `search` so the list filters as you type — no Enter required.
+  const debouncedSearch = useDebouncedValue(search);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,9 +58,10 @@ export function CommunitiesPage() {
     }
   }, []);
 
+  // Initial load + live reload as the debounced search term changes.
   useEffect(() => {
-    load(1, "");
-  }, [load]);
+    load(1, debouncedSearch);
+  }, [load, debouncedSearch]);
 
   function closeForm() {
     setFormOpen(false);

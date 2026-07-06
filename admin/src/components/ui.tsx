@@ -17,6 +17,22 @@ import {
 } from "react";
 import { Icon, type IconName } from "./Icon";
 
+/* ---------------- Hooks ---------------- */
+
+/**
+ * Debounced mirror of a fast-changing value (search-as-you-type). The returned
+ * value trails `value` by `delayMs`, so an effect keyed on it fires once per
+ * pause in typing instead of per keystroke. Initial render is not delayed.
+ */
+export function useDebouncedValue<T>(value: T, delayMs = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 /* ---------------- Button ---------------- */
 
 type ButtonVariant =

@@ -11,6 +11,7 @@ import {
   SearchInput,
   Segmented,
   useConfirm,
+  useDebouncedValue,
 } from "../components/ui";
 
 // Admin users directory + ban/unban (docs/API.md §14, backend #23). List with
@@ -73,6 +74,9 @@ export function UsersPage() {
   const [page, setPage] = useState<OffsetPage<AdminUserDTO> | null>(null);
   const [pageNum, setPageNum] = useState(1);
   const [search, setSearch] = useState("");
+  // Trails `search` so the list filters as you type (one request per typing
+  // pause), without needing to press Enter.
+  const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = useState<StatusFilter>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,12 +120,14 @@ export function UsersPage() {
     [],
   );
 
-  // Initial load + reload whenever the status filter changes.
+  // Initial load + live reload whenever the debounced search or the status
+  // filter changes. Always resets to page 1 (the result set changed).
   useEffect(() => {
-    load(1, search, status);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [load, status]);
+    load(1, debouncedSearch, status);
+  }, [load, debouncedSearch, status]);
 
+  // Enter is a no-op beyond blurring — the debounced effect already loads. We
+  // still handle submit so pressing Enter doesn't reload the page.
   function onSearchSubmit(e: FormEvent) {
     e.preventDefault();
     load(1, search, status);

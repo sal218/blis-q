@@ -31,6 +31,7 @@ import {
   Select,
   Textarea,
   useConfirm,
+  useDebouncedValue,
 } from "../components/ui";
 
 // Admin safe-places CRUD (docs/API.md §11/§14; epic P-40 slices SP-1/SP-2/SP-6a).
@@ -91,6 +92,8 @@ export function SafePlacesPage() {
     "",
   );
   const [filterCity, setFilterCity] = useState("");
+  // Trails `filterCity` so the list filters as you type — no Enter required.
+  const debouncedCity = useDebouncedValue(filterCity);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -162,9 +165,11 @@ export function SafePlacesPage() {
     [],
   );
 
+  // Initial load + live reload as the category filter or debounced city term
+  // changes. Always resets to page 1 (the result set changed).
   useEffect(() => {
-    load(1, "", "");
-  }, [load]);
+    load(1, filterCategory, debouncedCity);
+  }, [load, filterCategory, debouncedCity]);
 
   function resetFormState() {
     setEditingId(null);
@@ -529,11 +534,9 @@ export function SafePlacesPage() {
         <div className="bq-toolbar-group">
           <Select
             value={filterCategory}
-            onChange={(e) => {
-              const v = e.target.value as "" | SafePlaceCategory;
-              setFilterCategory(v);
-              load(1, v, filterCity);
-            }}
+            onChange={(e) =>
+              setFilterCategory(e.target.value as "" | SafePlaceCategory)
+            }
             aria-label="Filtr kategorii"
             style={{ width: 200 }}
           >

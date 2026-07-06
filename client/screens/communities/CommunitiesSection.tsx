@@ -17,6 +17,7 @@ import {
   UsersThree,
 } from "@/components/icons/PhosphorIcons";
 import { CommunityCard } from "@/components/CommunityCard";
+import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
 import { CommunitiesCreateFab } from "@/components/CommunitiesCreateFab";
 import { CommunityPickerSheet } from "@/components/CommunityPickerSheet";
 import { useCommunitiesList } from "@/hooks/useCommunitiesList";
@@ -91,9 +92,7 @@ export function CommunitiesSection({
       </View>
 
       {showFullSpinner ? (
-        <View style={styles.centered}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <CardListSkeleton count={6} padded={false} />
       ) : showErrorState ? (
         <View style={styles.centered}>
           <Text style={styles.errorText}>{errorMessage}</Text>

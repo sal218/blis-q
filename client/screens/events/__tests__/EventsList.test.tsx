@@ -49,6 +49,17 @@ function state(over: Partial<ReturnType<typeof useEvents>> = {}) {
 beforeEach(() => eventsMock.mockReset());
 
 describe("EventsList", () => {
+  it("shows the skeleton on the first load and not once events arrive", () => {
+    eventsMock.mockReturnValue(state({ status: "loading", events: [] }));
+    const { rerender } = render(<EventsList onOpenEvent={jest.fn()} />);
+    expect(screen.getByTestId("card-list-skeleton")).toBeTruthy();
+
+    eventsMock.mockReturnValue(state({ events: [ev("e1", "Event", null)] }));
+    rerender(<EventsList onOpenEvent={jest.fn()} />);
+    expect(screen.queryByTestId("card-list-skeleton")).toBeNull();
+    expect(screen.getByText("Event")).toBeTruthy();
+  });
+
   it("renders cards and opens one on press", () => {
     eventsMock.mockReturnValue(
       state({ events: [ev("e1", "Pride Meetup", "Warszawa")] }),

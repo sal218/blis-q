@@ -14,6 +14,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { MagnifyingGlass, X, MapPin } from "@/components/icons/PhosphorIcons";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { SafePlaceCard } from "@/components/SafePlaceCard";
+import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
 import { useSafePlaces } from "@/hooks/useSafePlaces";
 import { strings } from "@/i18n";
 import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
@@ -70,11 +71,7 @@ export function SafePlacesList({ onOpenPlace }: Props = {}) {
       : strings.safePlaces.empty;
 
   if (status === "loading" && items.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
+    return <CardListSkeleton showSearch count={6} />;
   }
 
   if (status === "error" && items.length === 0) {

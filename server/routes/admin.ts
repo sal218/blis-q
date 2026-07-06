@@ -786,6 +786,10 @@ async function handleListSafePlaces(
       pageSize: q.pageSize,
       category: q.category,
       city: q.city,
+      // Free-text substring over name+city+address (already validated in the
+      // shared list query schema). The admin filter box sends this so a partial
+      // term like "War" matches "Warszawa"; `city` remains an exact filter.
+      search: q.search,
       near: q.near,
     });
     const body: OffsetPage<SafePlaceDTO> = {

@@ -57,6 +57,35 @@ describe("searchOverpass", () => {
     expect(out[1].address).toBeNull();
   });
 
+  it("matches the city across native + English name tags, case-insensitively", async () => {
+    // Capture the Overpass QL sent so we can assert the area lookup accepts an
+    // English name like "Warsaw" (OSM stores it as name:en, not name).
+    let sentBody = "";
+    global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
+      sentBody = String(init?.body ?? "");
+      return okJson({ elements: [] });
+    }) as unknown as typeof fetch;
+
+    await searchOverpass("Warsaw", "cafe");
+    expect(sentBody).toContain('"name:en"'); // English name tag queried
+    expect(sentBody).toContain('"alt_name"'); // alternate spellings too
+    expect(sentBody).toContain("Warsaw"); // the admin's term, matched literally
+    expect(sentBody).toMatch(/,i\]/); // case-insensitive area match
+  });
+
+  it("regex-escapes the city so metacharacters are matched literally", async () => {
+    let sentBody = "";
+    global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
+      sentBody = String(init?.body ?? "");
+      return okJson({ elements: [] });
+    }) as unknown as typeof fetch;
+
+    await searchOverpass("A.B (C)", "cafe");
+    // The dot/parens are regex-escaped (\. \( \)) so they match literally; each
+    // escape backslash is then doubled for the QL string literal → "\\." etc.
+    expect(sentBody).toContain("A\\\\.B \\\\(C\\\\)");
+  });
+
   it("drops elements without a name or without coordinates", async () => {
     mockFetch(async () =>
       okJson({
@@ -71,11 +100,36 @@ describe("searchOverpass", () => {
     expect(out.map((c) => c.name)).toEqual(["Keep"]);
   });
 
-  it("throws OverpassError on a non-2xx response", async () => {
-    mockFetch(async () => ({ ok: false, status: 429 }) as Response);
+  it("throws OverpassError only after every retry attempt is exhausted", async () => {
+    // A backend that always 429s — the client should retry across attempts and
+    // only then surface the error (never on the first failure alone).
+    let calls = 0;
+    mockFetch(async () => {
+      calls++;
+      return { ok: false, status: 429 } as Response;
+    });
     await expect(searchOverpass("Gdańsk", "club")).rejects.toBeInstanceOf(
       OverpassError,
     );
+    expect(calls).toBeGreaterThan(1); // retried, not a single-shot failure
+  });
+
+  it("retries a transient failure, then succeeds on the next attempt", async () => {
+    // First backend is busy (504); the retry lands on a healthy one — the admin
+    // gets results without having to click search again.
+    let calls = 0;
+    mockFetch(async () => {
+      calls++;
+      if (calls === 1) return { ok: false, status: 504 } as Response;
+      return okJson({
+        elements: [
+          { type: "node", id: 7, lat: 52, lon: 21, tags: { name: "Retry OK" } },
+        ],
+      });
+    });
+    const out = await searchOverpass("Warszawa", "cafe");
+    expect(out.map((c) => c.name)).toEqual(["Retry OK"]);
+    expect(calls).toBe(2);
   });
 
   it("throws OverpassError when fetch rejects (network/timeout)", async () => {

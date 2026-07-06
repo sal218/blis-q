@@ -1,25 +1,47 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
-  type CSSProperties,
   type FormEvent,
 } from "react";
 import { adminFetch } from "../lib/api";
 import type { CommunityDTO, OffsetPage } from "../lib/types";
 import { DataTable, type Column } from "../components/DataTable";
+import {
+  Alert,
+  Button,
+  Drawer,
+  Field,
+  Input,
+  PageHeader,
+  Pagination,
+  SearchInput,
+  Textarea,
+  useConfirm,
+  useDebouncedValue,
+} from "../components/ui";
 
 // Admin communities CRUD (docs/API.md §14). Read-list with search + a single
-// create/edit form + soft delete. All calls go through adminFetch (server gates
-// with isAuthenticated + requireAdmin); the dashboard is a view layer.
+// create/edit form (in a slide-over drawer) + soft delete. All calls go through
+// adminFetch (server gates with isAuthenticated + requireAdmin); the dashboard
+// is a view layer.
 
 export function CommunitiesPage() {
+  const confirm = useConfirm();
   const [page, setPage] = useState<OffsetPage<CommunityDTO> | null>(null);
   const [pageNum, setPageNum] = useState(1);
   const [search, setSearch] = useState("");
+  // Trails `search` so the list filters as you type — no Enter required.
+  const debouncedSearch = useDebouncedValue(search);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Monotonic request id — with debounced search several loads can be in
+  // flight; only the latest response is allowed to commit.
+  const reqSeq = useRef(0);
 
+  // Form drawer state. formOpen + editingId: null = create, id = edit.
+  const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -27,6 +49,7 @@ export function CommunitiesPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const load = useCallback(async (targetPage: number, searchTerm: string) => {
+    const seq = ++reqSeq.current;
     setLoading(true);
     setError(null);
     try {
@@ -36,24 +59,36 @@ export function CommunitiesPage() {
         "GET",
         `/api/admin/communities?${query.toString()}`,
       );
+      if (seq !== reqSeq.current) return; // a newer load superseded this one
       setPage(data);
       setPageNum(data.page);
     } catch {
+      if (seq !== reqSeq.current) return;
       setError("Nie udało się załadować społeczności.");
     } finally {
-      setLoading(false);
+      if (seq === reqSeq.current) setLoading(false);
     }
   }, []);
 
+  // Initial load + live reload as the debounced search term changes.
   useEffect(() => {
-    load(1, "");
-  }, [load]);
+    load(1, debouncedSearch);
+  }, [load, debouncedSearch]);
 
-  function resetForm() {
+  function closeForm() {
+    setFormOpen(false);
     setEditingId(null);
     setName("");
     setDescription("");
     setFormError(null);
+  }
+
+  function startCreate() {
+    setEditingId(null);
+    setName("");
+    setDescription("");
+    setFormError(null);
+    setFormOpen(true);
   }
 
   function startEdit(community: CommunityDTO) {
@@ -61,6 +96,7 @@ export function CommunitiesPage() {
     setName(community.name);
     setDescription(community.description ?? "");
     setFormError(null);
+    setFormOpen(true);
   }
 
   async function onSubmit(e: FormEvent) {
@@ -81,8 +117,9 @@ export function CommunitiesPage() {
           ...(description.trim() ? { description } : {}),
         });
       }
-      resetForm();
-      await load(editingId ? pageNum : 1, search);
+      const wasEditing = Boolean(editingId);
+      closeForm();
+      await load(wasEditing ? pageNum : 1, search);
     } catch {
       setFormError("Nie udało się zapisać. Spróbuj ponownie.");
     } finally {
@@ -91,10 +128,16 @@ export function CommunitiesPage() {
   }
 
   async function onDelete(community: CommunityDTO) {
-    if (!window.confirm(`Usunąć społeczność „${community.name}”?`)) return;
+    const ok = await confirm({
+      title: `Usunąć społeczność „${community.name}”?`,
+      body: "Społeczność zniknie z aplikacji dla wszystkich użytkowników.",
+      confirmLabel: "Usuń",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await adminFetch("DELETE", `/api/admin/communities/${community.id}`);
-      if (editingId === community.id) resetForm();
+      if (editingId === community.id) closeForm();
       await load(pageNum, search);
     } catch {
       setError("Nie udało się usunąć społeczności.");
@@ -102,31 +145,64 @@ export function CommunitiesPage() {
   }
 
   const columns: Column<CommunityDTO>[] = [
-    { key: "name", header: "Nazwa", render: (c) => c.name },
+    {
+      key: "name",
+      header: "Nazwa",
+      render: (c) => (
+        <span>
+          <span className="bq-td-strong">{c.name}</span>
+          {c.description ? (
+            <span
+              style={{
+                display: "block",
+                fontSize: 12.5,
+                color: "var(--gray-500)",
+                maxWidth: 420,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {c.description}
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
     {
       key: "members",
       header: "Członkowie",
-      render: (c) => String(c.memberCount),
+      width: 120,
+      render: (c) => <span className="bq-td-num">{c.memberCount}</span>,
     },
     {
       key: "created",
       header: "Utworzono",
-      render: (c) => new Date(c.createdAt).toLocaleDateString("pl-PL"),
+      width: 130,
+      render: (c) => (
+        <span className="bq-td-num">
+          {new Date(c.createdAt).toLocaleDateString("pl-PL")}
+        </span>
+      ),
     },
     {
       key: "actions",
       header: "",
+      width: 170,
+      align: "right",
       render: (c) => (
-        <span style={styles.actions}>
-          <button style={styles.linkButton} onClick={() => startEdit(c)}>
+        <span className="bq-row-actions" style={{ justifyContent: "flex-end" }}>
+          <Button size="sm" icon="pencil" onClick={() => startEdit(c)}>
             Edytuj
-          </button>
-          <button
-            style={{ ...styles.linkButton, color: "#DC2626" }}
+          </Button>
+          <Button
+            size="sm"
+            variant="dangerOutline"
+            icon="trash"
             onClick={() => onDelete(c)}
           >
             Usuń
-          </button>
+          </Button>
         </span>
       ),
     },
@@ -134,155 +210,110 @@ export function CommunitiesPage() {
 
   return (
     <section>
-      <h1 style={styles.h1}>Społeczności</h1>
+      <PageHeader
+        title="Społeczności"
+        description="Grupy społeczności widoczne w aplikacji — twórz, edytuj i usuwaj."
+        actions={
+          <Button variant="primary" icon="plus" onClick={startCreate}>
+            Nowa społeczność
+          </Button>
+        }
+      />
 
-      <form style={styles.card} onSubmit={onSubmit}>
-        <h2 style={styles.h2}>
-          {editingId ? "Edytuj społeczność" : "Nowa społeczność"}
-        </h2>
-        <input
-          style={styles.input}
-          placeholder="Nazwa"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <textarea
-          style={{ ...styles.input, height: 72, resize: "vertical" }}
-          placeholder="Opis (opcjonalnie)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        {formError && <p style={styles.error}>{formError}</p>}
-        <div style={styles.formActions}>
-          <button type="submit" style={styles.primaryButton} disabled={busy}>
-            {busy ? "Zapisywanie…" : editingId ? "Zapisz" : "Załóż"}
-          </button>
-          {editingId && (
-            <button
-              type="button"
-              style={styles.ghostButton}
-              onClick={resetForm}
-            >
-              Anuluj
-            </button>
-          )}
-        </div>
-      </form>
-
-      <form
-        style={styles.searchRow}
-        onSubmit={(e) => {
-          e.preventDefault();
-          load(1, search);
-        }}
-      >
-        <input
-          style={styles.input}
-          placeholder="Szukaj społeczności"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <button type="submit" style={styles.ghostButton}>
-          Szukaj
-        </button>
-      </form>
-
-      {error && <p style={styles.error}>{error}</p>}
-      {loading ? (
-        <p style={styles.muted}>Ładowanie…</p>
-      ) : (
-        <>
-          <DataTable
-            columns={columns}
-            rows={page?.data ?? []}
-            keyOf={(c) => c.id}
-            emptyLabel="Brak społeczności."
+      <div className="bq-toolbar">
+        <form
+          className="bq-toolbar-group"
+          onSubmit={(e) => {
+            e.preventDefault();
+            load(1, search);
+          }}
+        >
+          <SearchInput
+            placeholder="Szukaj społeczności"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ minWidth: 280 }}
+            aria-label="Szukaj społeczności"
           />
-          {page && page.totalPages > 1 && (
-            <div style={styles.pager}>
-              <button
-                style={styles.ghostButton}
-                disabled={pageNum <= 1}
-                onClick={() => load(pageNum - 1, search)}
-              >
-                Poprzednia
-              </button>
-              <span style={styles.muted}>
-                {page.page} / {page.totalPages}
-              </span>
-              <button
-                style={styles.ghostButton}
-                disabled={pageNum >= page.totalPages}
-                onClick={() => load(pageNum + 1, search)}
-              >
-                Następna
-              </button>
-            </div>
-          )}
-        </>
+          <Button type="submit">Szukaj</Button>
+        </form>
+      </div>
+
+      {error && <Alert tone="error">{error}</Alert>}
+
+      <DataTable
+        columns={columns}
+        rows={page?.data ?? []}
+        keyOf={(c) => c.id}
+        loading={loading}
+        emptyLabel="Brak społeczności"
+        emptyIcon="usersThree"
+        emptyDescription="Utwórz pierwszą społeczność, aby pojawiła się w aplikacji."
+        emptyAction={
+          <Button variant="primary" icon="plus" onClick={startCreate}>
+            Nowa społeczność
+          </Button>
+        }
+      />
+      {page && (
+        <Pagination
+          page={page.page}
+          totalPages={page.totalPages}
+          total={page.total}
+          disabled={loading}
+          onPage={(p) => load(p, search)}
+        />
       )}
+
+      <Drawer
+        open={formOpen}
+        onClose={closeForm}
+        title={editingId ? "Edytuj społeczność" : "Nowa społeczność"}
+        subtitle={
+          editingId
+            ? "Zmiany są widoczne w aplikacji od razu po zapisaniu."
+            : "Nowa społeczność będzie od razu widoczna w aplikacji."
+        }
+        footer={
+          <>
+            <Button onClick={closeForm}>Anuluj</Button>
+            <Button
+              type="submit"
+              form="community-form"
+              variant="primary"
+              loading={busy}
+            >
+              {busy ? "Zapisywanie…" : editingId ? "Zapisz zmiany" : "Załóż"}
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="community-form"
+          onSubmit={onSubmit}
+          style={{ display: "flex", flexDirection: "column", gap: 16 }}
+        >
+          <Field label="Nazwa">
+            <Input
+              placeholder="np. Tęczowa Warszawa"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+            />
+          </Field>
+          <Field
+            label="Opis (opcjonalnie)"
+            help="Krótki opis widoczny na karcie społeczności w aplikacji."
+          >
+            <Textarea
+              placeholder="Czym zajmuje się ta społeczność?"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </Field>
+          {formError && <Alert tone="error">{formError}</Alert>}
+        </form>
+      </Drawer>
     </section>
   );
 }
-
-const INDIGO = "#4F46E5";
-
-const styles: Record<string, CSSProperties> = {
-  h1: { fontSize: 24, marginBottom: 16 },
-  h2: { fontSize: 16, margin: "0 0 4px" },
-  card: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-    background: "#FFFFFF",
-    padding: 20,
-    borderRadius: 12,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-    marginBottom: 20,
-    maxWidth: 520,
-  },
-  searchRow: { display: "flex", gap: 8, marginBottom: 16, maxWidth: 520 },
-  input: {
-    padding: "10px 12px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    fontSize: 14,
-    fontFamily: "inherit",
-    flex: 1,
-  },
-  formActions: { display: "flex", gap: 8 },
-  primaryButton: {
-    padding: "10px 16px",
-    borderRadius: 8,
-    border: "none",
-    background: INDIGO,
-    color: "#FFFFFF",
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  ghostButton: {
-    padding: "10px 16px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    background: "#FFFFFF",
-    color: "#111827",
-    cursor: "pointer",
-  },
-  linkButton: {
-    background: "transparent",
-    border: "none",
-    color: INDIGO,
-    cursor: "pointer",
-    fontSize: 14,
-    padding: 0,
-  },
-  actions: { display: "flex", gap: 12 },
-  pager: {
-    display: "flex",
-    gap: 12,
-    alignItems: "center",
-    marginTop: 16,
-  },
-  muted: { color: "#6B7280", fontSize: 14 },
-  error: { color: "#DC2626", fontSize: 14, margin: 0 },
-};

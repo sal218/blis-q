@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { adminFetch } from "../lib/api";
 import type { OffsetPage, AdminReportDTO, ReportStatus } from "../lib/types";
 import { DataTable, type Column } from "../components/DataTable";
 import { StatusBadge } from "../components/StatusBadge";
+import {
+  Alert,
+  Badge,
+  Button,
+  PageHeader,
+  Pagination,
+  Segmented,
+  useConfirm,
+} from "../components/ui";
 
 // Reports moderation queue + actions (docs/API.md §14). Resolve / dismiss a
 // report (PATCH /admin/reports/:id) and remove reported content (POST
@@ -18,7 +27,18 @@ const STATUSES: { value: "" | ReportStatus; label: string }[] = [
   { value: "dismissed", label: "Odrzucone" },
 ];
 
+// Polish label per reported resource type — scannable at queue speed.
+const TYPE_LABELS: Record<string, string> = {
+  post: "Wpis",
+  event: "Wydarzenie",
+  message: "Wiadomość",
+  user: "Użytkownik",
+  community: "Społeczność",
+  safe_place: "Bezpieczne miejsce",
+};
+
 export function ReportsPage() {
+  const confirm = useConfirm();
   const [page, setPage] = useState<OffsetPage<AdminReportDTO> | null>(null);
   const [pageNum, setPageNum] = useState(1);
   const [status, setStatus] = useState<"" | ReportStatus>("");
@@ -83,13 +103,16 @@ export function ReportsPage() {
   // Remove reported content (posts + events — the backend accepts both).
   // Destructive → type-aware confirm first.
   async function removeContent(report: AdminReportDTO) {
-    const confirmMsg =
-      report.resourceType === "event"
-        ? "Usunąć to wydarzenie? Tej operacji nie można cofnąć."
-        : "Usunąć treść tego wpisu? Tej operacji nie można cofnąć.";
-    if (!window.confirm(confirmMsg)) {
-      return;
-    }
+    const isEvent = report.resourceType === "event";
+    const ok = await confirm({
+      title: isEvent ? "Usunąć wydarzenie?" : "Usunąć treść wpisu?",
+      body: isEvent
+        ? "Wydarzenie zostanie usunięte dla wszystkich użytkowników. Tej operacji nie można cofnąć."
+        : "Treść wpisu zostanie usunięta dla wszystkich użytkowników. Tej operacji nie można cofnąć.",
+      confirmLabel: isEvent ? "Usuń wydarzenie" : "Usuń treść",
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(report.id, true);
     setActionError(null);
     try {
@@ -106,60 +129,81 @@ export function ReportsPage() {
   }
 
   const columns: Column<AdminReportDTO>[] = [
-    { key: "type", header: "Typ", render: (r) => r.resourceType },
+    {
+      key: "type",
+      header: "Typ",
+      width: 140,
+      render: (r) => (
+        <Badge tone="neutral">
+          {TYPE_LABELS[r.resourceType] ?? r.resourceType}
+        </Badge>
+      ),
+    },
     {
       key: "resource",
       header: "Zasób",
-      render: (r) => <code style={styles.code}>{r.resourceId}</code>,
+      width: 120,
+      render: (r) => <code className="bq-td-mono">{r.resourceId}</code>,
     },
     { key: "reason", header: "Powód", render: (r) => r.reason },
     {
       key: "status",
       header: "Status",
+      width: 130,
       render: (r) => <StatusBadge status={r.status} />,
     },
     {
       key: "created",
       header: "Data",
-      render: (r) => new Date(r.createdAt).toLocaleString("pl-PL"),
+      width: 170,
+      render: (r) => (
+        <span className="bq-td-num">
+          {new Date(r.createdAt).toLocaleString("pl-PL")}
+        </span>
+      ),
     },
     {
       key: "actions",
       header: "Akcje",
+      width: 300,
       render: (r) => {
         const open = r.status === "pending" || r.status === "reviewing";
         if (!open) {
           return (
-            <span style={styles.muted}>
+            <span className="bq-td-muted">
               {r.resolution ? r.resolution : "—"}
             </span>
           );
         }
         const busy = busyIds.has(r.id);
         return (
-          <div style={styles.actions}>
-            <button
-              style={styles.smallButton}
+          <div className="bq-row-actions">
+            <Button
+              size="sm"
+              icon="check"
               disabled={busy}
               onClick={() => resolveReport(r.id, "resolved")}
             >
               Rozwiąż
-            </button>
-            <button
-              style={styles.smallButton}
+            </Button>
+            <Button
+              size="sm"
+              icon="x"
               disabled={busy}
               onClick={() => resolveReport(r.id, "dismissed")}
             >
               Odrzuć
-            </button>
+            </Button>
             {(r.resourceType === "post" || r.resourceType === "event") && (
-              <button
-                style={styles.dangerButton}
+              <Button
+                size="sm"
+                variant="dangerOutline"
+                icon="trash"
                 disabled={busy}
                 onClick={() => removeContent(r)}
               >
                 {r.resourceType === "event" ? "Usuń wydarzenie" : "Usuń treść"}
-              </button>
+              </Button>
             )}
           </div>
         );
@@ -169,106 +213,45 @@ export function ReportsPage() {
 
   return (
     <section>
-      <h1 style={styles.h1}>Zgłoszenia</h1>
+      <PageHeader
+        title="Zgłoszenia"
+        description="Kolejka moderacji — zgłoszenia treści od użytkowników. Rozwiąż, odrzuć lub usuń zgłoszoną treść."
+      />
 
-      <div style={styles.filterRow}>
-        <label style={styles.muted}>Status:</label>
-        <select
-          style={styles.select}
+      <div className="bq-toolbar">
+        <Segmented
+          ariaLabel="Filtr statusu zgłoszeń"
+          options={STATUSES}
           value={status}
-          onChange={(e) => setStatus(e.target.value as "" | ReportStatus)}
-        >
-          {STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+          onChange={setStatus}
+        />
       </div>
 
-      {error && <p style={styles.error}>{error}</p>}
-      {actionError && <p style={styles.error}>{actionError}</p>}
-      {loading ? (
-        <p style={styles.muted}>Ładowanie…</p>
-      ) : (
-        <>
-          <DataTable
-            columns={columns}
-            rows={page?.data ?? []}
-            keyOf={(r) => r.id}
-            emptyLabel="Brak zgłoszeń."
-          />
-          {page && page.totalPages > 1 && (
-            <div style={styles.pager}>
-              <button
-                style={styles.ghostButton}
-                disabled={pageNum <= 1}
-                onClick={() => load(pageNum - 1, status)}
-              >
-                Poprzednia
-              </button>
-              <span style={styles.muted}>
-                {page.page} / {page.totalPages}
-              </span>
-              <button
-                style={styles.ghostButton}
-                disabled={pageNum >= page.totalPages}
-                onClick={() => load(pageNum + 1, status)}
-              >
-                Następna
-              </button>
-            </div>
-          )}
-        </>
+      {error && <Alert tone="error">{error}</Alert>}
+      {actionError && <Alert tone="error">{actionError}</Alert>}
+
+      <DataTable
+        columns={columns}
+        rows={page?.data ?? []}
+        keyOf={(r) => r.id}
+        loading={loading}
+        emptyLabel="Brak zgłoszeń"
+        emptyIcon="flag"
+        emptyDescription={
+          status
+            ? "Żadne zgłoszenia nie pasują do wybranego filtra."
+            : "Kolejka moderacji jest pusta — nowe zgłoszenia pojawią się tutaj."
+        }
+      />
+      {page && (
+        <Pagination
+          page={page.page}
+          totalPages={page.totalPages}
+          total={page.total}
+          disabled={loading}
+          onPage={(p) => load(p, status)}
+        />
       )}
     </section>
   );
 }
-
-const styles: Record<string, CSSProperties> = {
-  h1: { fontSize: 24, marginBottom: 16 },
-  filterRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 16,
-  },
-  select: {
-    padding: "8px 12px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    fontSize: 14,
-    fontFamily: "inherit",
-  },
-  code: { fontSize: 12, color: "#6B7280" },
-  actions: { display: "flex", gap: 8, flexWrap: "wrap" },
-  smallButton: {
-    padding: "6px 12px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    background: "#FFFFFF",
-    color: "#111827",
-    cursor: "pointer",
-    fontSize: 13,
-  },
-  dangerButton: {
-    padding: "6px 12px",
-    borderRadius: 8,
-    border: "1px solid #DC2626",
-    background: "#FFFFFF",
-    color: "#DC2626",
-    cursor: "pointer",
-    fontSize: 13,
-  },
-  pager: { display: "flex", gap: 12, alignItems: "center", marginTop: 16 },
-  ghostButton: {
-    padding: "10px 16px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    background: "#FFFFFF",
-    color: "#111827",
-    cursor: "pointer",
-  },
-  muted: { color: "#6B7280", fontSize: 14 },
-  error: { color: "#DC2626", fontSize: 14, margin: 0 },
-};

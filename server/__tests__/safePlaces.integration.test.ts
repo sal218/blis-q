@@ -900,6 +900,36 @@ describe("Safe-place images (SP-6a)", () => {
   });
 });
 
+describe("GET /api/admin/safe-places", () => {
+  it("search → case-insensitive substring over name + city (partial term)", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+    // A partial term like "War" must match "Warszawa" (substring, not exact).
+    const byCity = await seedPlace(admin, { name: "Alpha", city: "Warszawa" });
+    const byName = await seedPlace(admin, {
+      name: "Warsztat Kultury",
+      city: "Kraków",
+    });
+    const other = await seedPlace(admin, { name: "Zeta", city: "Gdańsk" });
+
+    const res = await request(app).get(
+      "/api/admin/safe-places?search=war&pageSize=50", // lowercase "war"
+    );
+    expect(res.status).toBe(200);
+    const ids = res.body.data.map((p: { id: string }) => p.id);
+    expect(ids).toContain(byCity); // matched on city "Warszawa"
+    expect(ids).toContain(byName); // matched on name "Warsztat"
+    expect(ids).not.toContain(other);
+  });
+
+  it("non-admin → 403", async () => {
+    const user = await seedUser();
+    mockUser = { id: user, isAdmin: false };
+    const res = await request(app).get("/api/admin/safe-places");
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("POST /api/admin/safe-places", () => {
   const body = {
     name: "  Klub Tolerancja  ",

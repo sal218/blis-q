@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
 import {
   adminFetch,
@@ -7,6 +7,9 @@ import {
   adminLogin,
   type AdminUser,
 } from "./lib/api";
+import { Icon, type IconName } from "./components/Icon";
+import { Alert, Button, ConfirmProvider, Field, Input } from "./components/ui";
+import { DashboardPage } from "./pages/DashboardPage";
 import { CommunitiesPage } from "./pages/CommunitiesPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ModerationPage } from "./pages/ModerationPage";
@@ -15,23 +18,85 @@ import { SafePlacesPage } from "./pages/SafePlacesPage";
 import { EventsPage } from "./pages/EventsPage";
 import { AdCampaignsPage } from "./pages/AdCampaignsPage";
 
-const NAV_ITEMS = [
-  { path: "/communities", label: "Społeczności", element: <CommunitiesPage /> },
-  { path: "/reports", label: "Zgłoszenia", element: <ReportsPage /> },
-  { path: "/moderation", label: "Moderacja", element: <ModerationPage /> },
-  { path: "/users", label: "Użytkownicy", element: <UsersPage /> },
+// Sidebar navigation, grouped by workflow: moderation queue first (the daily
+// job), then content management, then business tools. Routes are unchanged.
+type NavItem = {
+  path: string;
+  label: string;
+  icon: IconName;
+  element: JSX.Element;
+};
+
+// Overview landing page — the portal's home. Rendered as a standalone link
+// above the grouped sections; `/` is its route.
+const DASHBOARD_ITEM: NavItem = {
+  path: "/",
+  label: "Pulpit",
+  icon: "squaresFour",
+  element: <DashboardPage />,
+};
+
+const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
-    path: "/safe-places",
-    label: "Bezpieczne miejsca",
-    element: <SafePlacesPage />,
+    title: "Moderacja",
+    items: [
+      {
+        path: "/reports",
+        label: "Zgłoszenia",
+        icon: "flag",
+        element: <ReportsPage />,
+      },
+      {
+        path: "/moderation",
+        label: "Moderacja",
+        icon: "shieldCheck",
+        element: <ModerationPage />,
+      },
+      {
+        path: "/users",
+        label: "Użytkownicy",
+        icon: "user",
+        element: <UsersPage />,
+      },
+    ],
   },
-  { path: "/events", label: "Wydarzenia", element: <EventsPage /> },
   {
-    path: "/ad-campaigns",
-    label: "Kampanie reklamowe",
-    element: <AdCampaignsPage />,
+    title: "Treści",
+    items: [
+      {
+        path: "/communities",
+        label: "Społeczności",
+        icon: "usersThree",
+        element: <CommunitiesPage />,
+      },
+      {
+        path: "/events",
+        label: "Wydarzenia",
+        icon: "calendar",
+        element: <EventsPage />,
+      },
+      {
+        path: "/safe-places",
+        label: "Bezpieczne miejsca",
+        icon: "mapPin",
+        element: <SafePlacesPage />,
+      },
+    ],
   },
-] as const;
+  {
+    title: "Rozwój",
+    items: [
+      {
+        path: "/ad-campaigns",
+        label: "Kampanie reklamowe",
+        icon: "megaphone",
+        element: <AdCampaignsPage />,
+      },
+    ],
+  },
+];
+
+const ALL_NAV_ITEMS = [DASHBOARD_ITEM, ...NAV_GROUPS.flatMap((g) => g.items)];
 
 export function App() {
   const [admin, setAdmin] = useState<AdminUser | null>(null);
@@ -50,52 +115,92 @@ export function App() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  if (isLoading) return <p style={styles.centered}>Ładowanie…</p>;
+  if (isLoading) {
+    return (
+      <div className="bq-centered">
+        <Icon name="spinner" size={24} className="bq-spin" label="Ładowanie" />
+      </div>
+    );
+  }
   if (!admin) return <LoginScreen onAuthenticated={setAdmin} />;
 
   return (
-    <div style={styles.layout}>
-      <aside style={styles.sidebar}>
-        <h2 style={styles.brand}>Blis-Q</h2>
-        <nav style={styles.nav}>
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              style={({ isActive }) => ({
-                ...styles.navLink,
-                ...(isActive ? styles.navLinkActive : {}),
-              })}
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-        <div style={styles.sidebarFooter}>
-          <span style={styles.adminName}>{admin.displayName}</span>
-          <button
-            type="button"
-            style={styles.signOut}
-            onClick={() => {
-              clearToken();
-              setAdmin(null);
-            }}
-          >
-            Wyloguj
-          </button>
-        </div>
-      </aside>
+    <ConfirmProvider>
+      <div className="bq-layout">
+        <aside className="bq-sidebar">
+          <div className="bq-sidebar-brand">
+            <span className="bq-logo-mark">B</span>
+            <span>
+              <span className="bq-sidebar-brand-name">Blis-Q</span>
+              <span className="bq-sidebar-brand-sub">
+                Panel administracyjny
+              </span>
+            </span>
+          </div>
 
-      <main style={styles.main}>
-        <Routes>
-          <Route path="/" element={<Navigate to="/reports" replace />} />
-          {NAV_ITEMS.map((item) => (
-            <Route key={item.path} path={item.path} element={item.element} />
-          ))}
-          <Route path="*" element={<Navigate to="/reports" replace />} />
-        </Routes>
-      </main>
-    </div>
+          <nav className="bq-nav" aria-label="Nawigacja główna">
+            {/* Dashboard is the home route ("/"), so `end` keeps it from
+                matching every path as active. */}
+            <NavLink to={DASHBOARD_ITEM.path} end className="bq-nav-link">
+              <Icon name={DASHBOARD_ITEM.icon} size={17} />
+              <span className="bq-nav-label">{DASHBOARD_ITEM.label}</span>
+            </NavLink>
+            {NAV_GROUPS.map((group) => (
+              <div key={group.title} style={{ display: "contents" }}>
+                <span className="bq-nav-section">{group.title}</span>
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    className="bq-nav-link"
+                  >
+                    <Icon name={item.icon} size={17} />
+                    <span className="bq-nav-label">{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ))}
+          </nav>
+
+          <div className="bq-sidebar-footer">
+            <span className="bq-avatar" aria-hidden>
+              {admin.displayName.trim().charAt(0).toUpperCase() || "A"}
+            </span>
+            <span className="bq-sidebar-user">
+              <span className="bq-sidebar-user-name">{admin.displayName}</span>
+              <span className="bq-sidebar-user-role">Administrator</span>
+            </span>
+            <button
+              type="button"
+              className="bq-signout"
+              title="Wyloguj"
+              aria-label="Wyloguj"
+              onClick={() => {
+                clearToken();
+                setAdmin(null);
+              }}
+            >
+              <Icon name="signOut" size={16} />
+            </button>
+          </div>
+        </aside>
+
+        <main className="bq-main">
+          <div className="bq-page">
+            <Routes>
+              {ALL_NAV_ITEMS.map((item) => (
+                <Route
+                  key={item.path}
+                  path={item.path}
+                  element={item.element}
+                />
+              ))}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </main>
+      </div>
+    </ConfirmProvider>
   );
 }
 
@@ -128,113 +233,50 @@ function LoginScreen({
   }
 
   return (
-    <div style={styles.centered}>
-      <form style={styles.loginCard} onSubmit={handleSubmit}>
-        <h1 style={styles.brand}>Blis-Q</h1>
-        <p style={styles.loginHint}>Panel administracyjny</p>
-        <input
-          style={styles.input}
-          type="email"
-          placeholder="E-mail"
-          autoComplete="username"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          style={styles.input}
-          type="password"
-          placeholder="Hasło"
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        {error && <p style={styles.error}>{error}</p>}
-        <button
-          type="submit"
-          style={styles.primaryButton}
-          disabled={submitting}
-        >
+    <div className="bq-login">
+      <form className="bq-login-card" onSubmit={handleSubmit}>
+        <div className="bq-login-head">
+          <span className="bq-logo-mark" style={{ width: 44, height: 44 }}>
+            B
+          </span>
+          <div>
+            <h1 className="bq-login-title">Blis-Q</h1>
+            <p className="bq-login-sub">
+              Zaloguj się do panelu administracyjnego
+            </p>
+          </div>
+        </div>
+
+        <Field label="E-mail">
+          <Input
+            type="email"
+            placeholder="ty@blis-q.app"
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </Field>
+        <Field label="Hasło">
+          <Input
+            type="password"
+            placeholder="••••••••"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </Field>
+
+        {error && <Alert tone="error">{error}</Alert>}
+
+        <Button type="submit" variant="primary" loading={submitting}>
           {submitting ? "Logowanie…" : "Zaloguj się"}
-        </button>
+        </Button>
+
+        <p className="bq-login-foot">
+          <Icon name="lock" size={11} label="Połączenie zabezpieczone" /> Dostęp
+          wyłącznie dla zespołu Blis-Q
+        </p>
       </form>
     </div>
   );
 }
-
-const INDIGO = "#4F46E5";
-
-const styles: Record<string, CSSProperties> = {
-  centered: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-  },
-  layout: {
-    display: "flex",
-    minHeight: "100vh",
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-  },
-  sidebar: {
-    width: 240,
-    background: "#0B1021",
-    color: "#F5F5F7",
-    display: "flex",
-    flexDirection: "column",
-    padding: 16,
-  },
-  brand: { color: INDIGO, margin: "8px 0 24px", fontSize: 24 },
-  nav: { display: "flex", flexDirection: "column", gap: 4, flex: 1 },
-  navLink: {
-    color: "#9CA3AF",
-    textDecoration: "none",
-    padding: "10px 12px",
-    borderRadius: 8,
-  },
-  navLinkActive: { color: "#FFFFFF", background: "#161B2E" },
-  sidebarFooter: {
-    borderTop: "1px solid #262C40",
-    paddingTop: 12,
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-  },
-  adminName: { fontSize: 14, color: "#9CA3AF" },
-  signOut: {
-    background: "transparent",
-    color: "#F5F5F7",
-    border: "1px solid #262C40",
-    borderRadius: 8,
-    padding: "8px 12px",
-    cursor: "pointer",
-  },
-  main: { flex: 1, padding: 32, background: "#F5F5F7" },
-  loginCard: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    width: 320,
-    padding: 32,
-    borderRadius: 16,
-    boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
-    background: "#FFFFFF",
-  },
-  loginHint: { margin: 0, color: "#6B7280" },
-  input: {
-    padding: "12px 14px",
-    borderRadius: 10,
-    border: "1px solid #D1D5DB",
-    fontSize: 14,
-  },
-  primaryButton: {
-    padding: "12px 14px",
-    borderRadius: 10,
-    border: "none",
-    background: INDIGO,
-    color: "#FFFFFF",
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  error: { color: "#DC2626", margin: 0, fontSize: 14 },
-};

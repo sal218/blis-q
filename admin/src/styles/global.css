@@ -560,6 +560,13 @@ code {
   color: var(--gray-700);
 }
 
+/* Red "*" appended to a mandatory field's label (see RequiredMark in ui.tsx). */
+.bq-required {
+  color: var(--danger);
+  margin-left: 3px;
+  font-weight: 700;
+}
+
 .bq-help {
   font-size: 12px;
   color: var(--gray-500);

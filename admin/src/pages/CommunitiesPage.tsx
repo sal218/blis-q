@@ -293,7 +293,7 @@ export function CommunitiesPage() {
           onSubmit={onSubmit}
           style={{ display: "flex", flexDirection: "column", gap: 16 }}
         >
-          <Field label="Nazwa">
+          <Field label="Nazwa" required>
             <Input
               placeholder="np. Tęczowa Warszawa"
               value={name}

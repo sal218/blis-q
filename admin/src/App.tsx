@@ -254,7 +254,7 @@ function LoginScreen({
           </div>
         </div>
 
-        <Field label="E-mail">
+        <Field label="E-mail" required>
           <Input
             type="email"
             placeholder="ty@blis-q.app"
@@ -263,7 +263,7 @@ function LoginScreen({
             onChange={(e) => setEmail(e.target.value)}
           />
         </Field>
-        <Field label="Hasło">
+        <Field label="Hasło" required>
           <Input
             type="password"
             placeholder="••••••••"

@@ -101,16 +101,34 @@ export function Button({
 
 /* ---------------- Form fields ---------------- */
 
+/**
+ * Red "*" marking a mandatory field. Decorative (aria-hidden) with a hover
+ * tooltip — the requiredness is conveyed visually, matching the portal-wide
+ * convention. Used by <Field required> and by pages with a raw `bq-label`
+ * (e.g. the category chip pickers) so the markup never drifts.
+ */
+export function RequiredMark() {
+  return (
+    <span className="bq-required" aria-hidden="true" title="Pole wymagane">
+      *
+    </span>
+  );
+}
+
 type FieldProps = {
   label: string;
   help?: string;
+  required?: boolean;
   children: ReactNode;
 };
 
-export function Field({ label, help, children }: FieldProps) {
+export function Field({ label, help, required, children }: FieldProps) {
   return (
     <label className="bq-field">
-      <span className="bq-label">{label}</span>
+      <span className="bq-label">
+        {label}
+        {required ? <RequiredMark /> : null}
+      </span>
       {children}
       {help ? <span className="bq-help">{help}</span> : null}
     </label>

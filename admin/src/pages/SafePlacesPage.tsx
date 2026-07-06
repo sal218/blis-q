@@ -901,7 +901,10 @@ export function SafePlacesPage() {
                 flexDirection: "column",
                 border: "1px solid var(--gray-200)",
                 borderRadius: 12,
-                overflow: "hidden",
+                // Cap the height so a large result set (e.g. 99 venues) scrolls
+                // inside its own area instead of pushing the drawer footer off.
+                maxHeight: 420,
+                overflowY: "auto",
               }}
             >
               {candidates.map((c, i) => (

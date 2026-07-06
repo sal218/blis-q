@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminFetch } from "../lib/api";
 import type { OffsetPage, AdminReportDTO, ReportStatus } from "../lib/types";
 import { DataTable, type Column } from "../components/DataTable";
@@ -48,6 +48,10 @@ export function ReportsPage() {
   // Per-row in-flight set — a Set (not a single id) so concurrent actions on
   // different rows don't overwrite each other's disabled state.
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  // Monotonic request id — rapidly toggling the status filter can leave several
+  // loads in flight; only the latest response is allowed to commit, so a slow
+  // older request can't render results for a status you've moved past.
+  const reqSeq = useRef(0);
 
   const setBusy = (id: string, busy: boolean) =>
     setBusyIds((prev) => {
@@ -59,6 +63,7 @@ export function ReportsPage() {
 
   const load = useCallback(
     async (targetPage: number, statusFilter: "" | ReportStatus) => {
+      const seq = ++reqSeq.current;
       setLoading(true);
       setError(null);
       try {
@@ -68,12 +73,14 @@ export function ReportsPage() {
           "GET",
           `/api/admin/reports?${query.toString()}`,
         );
+        if (seq !== reqSeq.current) return; // a newer load superseded this one
         setPage(data);
         setPageNum(data.page);
       } catch {
+        if (seq !== reqSeq.current) return;
         setError("Nie udało się załadować zgłoszeń.");
       } finally {
-        setLoading(false);
+        if (seq === reqSeq.current) setLoading(false);
       }
     },
     [],

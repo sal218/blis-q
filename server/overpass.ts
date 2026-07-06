@@ -74,12 +74,6 @@ function esc(v: string): string {
   return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-// Escape regex metacharacters so an admin-typed city is matched literally (not
-// as a pattern) when used inside an Overpass `~` regex filter.
-function escRegex(v: string): string {
-  return v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 // City name tags to match the administrative area against. OSM stores the
 // LOCAL/native name in `name` (Warsaw → "Warszawa"); English and alternate
 // spellings live in these companions, so matching all of them lets an admin
@@ -93,11 +87,15 @@ const CITY_NAME_TAGS = [
 ] as const;
 
 function buildQuery(city: string, category: SafePlaceCategory): string {
-  // Regex-escaped for the `~` match, then string-escaped for the QL literal, so
-  // the city is matched literally + case-insensitively across the name tags.
-  const cityRe = esc(escRegex(city.trim()));
+  // EXACT (`=`) match per name tag — this uses Overpass's name index and returns
+  // in seconds. A case-insensitive regex (`~"^…$",i`) here disables that index
+  // and makes a city-wide area lookup take 40s+, blowing the client timeout
+  // ("overpass_unreachable"). Exact is case-sensitive, but OSM city names are
+  // canonically capitalised and admins type them that way; the multi-tag union
+  // still resolves both native ("Warszawa") and English ("Warsaw") spellings.
+  const c = esc(city.trim());
   const areaUnion = CITY_NAME_TAGS.map(
-    (tag) => `area["${tag}"~"^${cityRe}$",i]["boundary"="administrative"];`,
+    (tag) => `area["${tag}"="${c}"]["boundary"="administrative"];`,
   ).join("");
   const stmts: string[] = [];
   for (const f of CATEGORY_TAGS[category]) {

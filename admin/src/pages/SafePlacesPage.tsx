@@ -901,7 +901,12 @@ export function SafePlacesPage() {
                 flexDirection: "column",
                 border: "1px solid var(--gray-200)",
                 borderRadius: 12,
-                overflow: "hidden",
+                // Grow to fill the remaining drawer height (min-height:0 lets a
+                // flex child shrink) so a large result set uses the whole window
+                // and only scrolls inside its own area when it runs out of room.
+                flex: 1,
+                minHeight: 0,
+                overflowY: "auto",
               }}
             >
               {candidates.map((c, i) => (

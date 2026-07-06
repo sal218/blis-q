@@ -269,6 +269,22 @@ export const pl = {
     blockedLoadError: "Nie udało się załadować listy. Spróbuj ponownie.",
     unblock: "Odblokuj",
     unblockError: "Nie udało się odblokować użytkownika. Spróbuj ponownie.",
+    // Redesigned Profile: grouped setting cards + a premium log-out.
+    account: "Konto", // "Account" section header
+    support: "Wsparcie", // "Support" section header
+    about: "O aplikacji Blis-Q", // "About Blis-Q" row
+    help: "Pomoc i wsparcie", // "Help & support" row (opens a mailto when configured)
+    logOut: "Wyloguj się", // premium log-out button label
+    // Stat cells (shown only once real counts are wired — see ProfileStats).
+    statCommunities: "Społeczności", // "Communities"
+    statEvents: "Wydarzenia", // "Events"
+  },
+
+  // Static "About Blis-Q" screen (Profile → Wsparcie → O aplikacji).
+  about: {
+    title: "O aplikacji", // nav header title
+    version: "Wersja {version}", // "Version {version}"
+    body: "Blis-Q to bezpieczna przestrzeń dla społeczności LGBT+ w Polsce — miejsce, w którym możesz nawiązywać kontakty, odkrywać wydarzenia i przyjazne miejsca oraz znaleźć wsparcie.", // "Blis-Q is a safe space for Poland's LGBT+ community — connect, discover events and friendly places, and find support."
   },
 
   communities: {

@@ -49,21 +49,27 @@ function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     pill: {
       flexDirection: "row",
-      backgroundColor: colors.surface,
+      backgroundColor: colors.background,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: radius.full,
-      padding: 3,
+      padding: 4,
+      gap: 2,
     },
     segment: {
-      width: 36,
-      height: 30,
+      width: 42,
+      height: 34,
       alignItems: "center",
       justifyContent: "center",
       borderRadius: radius.full,
     },
     segmentActive: {
       backgroundColor: colors.primary,
+      shadowColor: colors.primary,
+      shadowOpacity: 0.35,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
     },
   });
 }

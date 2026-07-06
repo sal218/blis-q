@@ -48,6 +48,46 @@ export function User({ size = 24, color = "#000" }: IconProps) {
   );
 }
 
+export function Prohibit({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm88,104a87.56,87.56,0,0,1-20.41,56.28L71.72,60.4A88,88,0,0,1,216,128ZM40,128A87.56,87.56,0,0,1,60.41,71.72L184.28,195.6A88,88,0,0,1,40,128Z" />
+    </Svg>
+  );
+}
+
+export function Info({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM112,84a12,12,0,1,1,12,12A12,12,0,0,1,112,84Z" />
+    </Svg>
+  );
+}
+
+export function Question({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d="M140,180a12,12,0,1,1-12-12A12,12,0,0,1,140,180ZM128,72c-22.06,0-40,16.15-40,36v4a8,8,0,0,0,16,0v-4c0-11,10.77-20,24-20s24,9,24,20-10.77,20-24,20a8,8,0,0,0-8,8v8a8,8,0,0,0,16,0v-.72c18.24-3.35,32-17.9,32-35.28C168,88.15,150.06,72,128,72Zm104,56A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z" />
+    </Svg>
+  );
+}
+
+export function SignOut({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d="M120,216a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V40a8,8,0,0,1,8-8h64a8,8,0,0,1,0,16H56V208h56A8,8,0,0,1,120,216Zm109.66-93.66-40-40a8,8,0,0,0-11.32,11.32L204.69,120H112a8,8,0,0,0,0,16h92.69l-26.35,26.34a8,8,0,0,0,11.32,11.32l40-40A8,8,0,0,0,229.66,122.34Z" />
+    </Svg>
+  );
+}
+
+export function CaretRight({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d="M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z" />
+    </Svg>
+  );
+}
+
 export function MagnifyingGlass({ size = 24, color = "#000" }: IconProps) {
   return (
     <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>

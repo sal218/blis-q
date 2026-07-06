@@ -21,6 +21,7 @@ import { ChatInboxScreen } from "@/screens/chat/ChatInboxScreen";
 import { ChatThreadScreen } from "@/screens/chat/ChatThreadScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { BlockedUsersScreen } from "@/screens/BlockedUsersScreen";
+import { AboutScreen } from "@/screens/AboutScreen";
 import { strings } from "@/i18n";
 
 // Authenticated app shell. Post-login IA: bottom tabs Home · Events · Chat ·
@@ -68,6 +69,7 @@ export type ChatStackParamList = {
 export type ProfileStackParamList = {
   ProfileHome: undefined;
   BlockedUsers: undefined;
+  About: undefined;
 };
 
 const Tabs = createBottomTabNavigator<AppTabsParamList>();
@@ -185,6 +187,11 @@ function ProfileStack() {
         name="BlockedUsers"
         component={BlockedUsersScreen}
         options={{ title: strings.profile.blockedUsers }}
+      />
+      <ProfileStackNav.Screen
+        name="About"
+        component={AboutScreen}
+        options={{ title: strings.about.title }}
       />
     </ProfileStackNav.Navigator>
   );

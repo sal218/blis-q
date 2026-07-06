@@ -42,6 +42,19 @@ const MAX_TITLE = 200;
 const MAX_BODY = 5000;
 const MAX_URL = 2048;
 
+// A link must be a real http(s) URL. We validate in JS (not <input type="url">,
+// whose native popup is browser-locale English, not our Polish copy) and only
+// ever render http(s) links — this also blocks a javascript:/data: href from
+// ever becoming a clickable anchor in the list.
+function isHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function CategoryChip({ category }: { category: ResourceCategory }) {
   const meta = RESOURCE_CATEGORY_META[category];
   return (
@@ -157,6 +170,12 @@ export function ResourcesPage() {
       setFormError("Podaj treść materiału.");
       return;
     }
+    if (url.trim() && !isHttpUrl(url.trim())) {
+      setFormError(
+        "Podaj poprawny link zaczynający się od http:// lub https://.",
+      );
+      return;
+    }
 
     setBusy(true);
     setFormError(null);
@@ -241,7 +260,7 @@ export function ResourcesPage() {
       header: "Link",
       width: 80,
       render: (r) =>
-        r.url ? (
+        r.url && isHttpUrl(r.url) ? (
           <a
             href={r.url}
             target="_blank"
@@ -421,7 +440,7 @@ export function ResourcesPage() {
             help="Zewnętrzny adres — strona organizacji, infolinia. Zostaw pusty dla materiału w aplikacji."
           >
             <Input
-              type="url"
+              type="text"
               inputMode="url"
               placeholder="https://…"
               value={url}

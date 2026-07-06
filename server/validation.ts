@@ -3,6 +3,7 @@ import {
   EVENT_CATEGORIES,
   SAFE_PLACE_CATEGORIES,
   ACCESSIBILITY_FEATURES,
+  RESOURCE_CATEGORIES,
 } from "@shared/types";
 import { ALLOWED_IMAGE_CONTENT_TYPES } from "./objectStorage";
 
@@ -283,6 +284,41 @@ export const updateSafePlaceSchema = z
   })
   // Same one-sided-coordinate guard as create (a PATCH can still touch no coords).
   .refine(bothOrNeitherCoords, COORDS_REFINE);
+
+// ── Resources (admin-curated Support & Education content, P-37) ───────────────
+// Admin-published guides/articles (body) + curated org/link entries (url).
+// category is a frozen predefined content topic (never identity — Article-9-safe).
+const MAX_RESOURCE_TITLE_LENGTH = 200;
+const MAX_RESOURCE_BODY_LENGTH = 5000;
+const MAX_URL_LENGTH = 2048;
+
+export const resourceCategorySchema = z.enum(RESOURCE_CATEGORIES);
+
+export const createResourceSchema = z
+  .object({
+    title: z.string().trim().min(1).max(MAX_RESOURCE_TITLE_LENGTH),
+    category: resourceCategorySchema,
+    body: z.string().trim().min(1).max(MAX_RESOURCE_BODY_LENGTH),
+    // Optional external link. Omitted = a plain in-app article/guide.
+    url: z.string().trim().url().max(MAX_URL_LENGTH).optional(),
+    featured: z.boolean().optional(),
+  })
+  .strict();
+
+export const updateResourceSchema = z
+  .object({
+    title: z.string().trim().min(1).max(MAX_RESOURCE_TITLE_LENGTH).optional(),
+    category: resourceCategorySchema.optional(),
+    body: z.string().trim().min(1).max(MAX_RESOURCE_BODY_LENGTH).optional(),
+    // undefined = unchanged · null = REMOVE the link · string = set/replace.
+    url: z.string().trim().url().max(MAX_URL_LENGTH).nullable().optional(),
+    featured: z.boolean().optional(),
+  })
+  .strict()
+  // PATCH must change something — an empty body is a 400, not a silent no-op.
+  .refine((d) => Object.values(d).some((v) => v !== undefined), {
+    message: "At least one field is required",
+  });
 
 // OSM import (slice SP-2). osm-search takes a city + category; the bulk endpoint
 // takes an array of curated candidates. osmId format-locked to an OSM element ref.
@@ -572,6 +608,19 @@ export const safePlacesListQuerySchema = z.object({
     }),
 });
 
+// Resources list (P-37): offset/page + optional category filter only (no
+// city/search/near — those are safe-places-specific).
+export const resourcesListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_OFFSET_PAGE_SIZE)
+    .default(DEFAULT_OFFSET_PAGE_SIZE),
+  category: resourceCategorySchema.optional(),
+});
+
 // Admin reports queue: offset/page + optional status filter (read-only this
 // slice — resolve/dismiss is a Sprint-4 moderation action).
 export const adminReportsQuerySchema = z.object({
@@ -612,6 +661,9 @@ export type UpdateEventInput = z.infer<typeof updateEventSchema>;
 export type CreateSafePlaceInput = z.infer<typeof createSafePlaceSchema>;
 export type UpdateSafePlaceInput = z.infer<typeof updateSafePlaceSchema>;
 export type SafePlacesListQuery = z.infer<typeof safePlacesListQuerySchema>;
+export type CreateResourceInput = z.infer<typeof createResourceSchema>;
+export type UpdateResourceInput = z.infer<typeof updateResourceSchema>;
+export type ResourcesListQuery = z.infer<typeof resourcesListQuerySchema>;
 export type OsmSearchInput = z.infer<typeof osmSearchSchema>;
 export type BulkCreateSafePlacesInput = z.infer<
   typeof bulkCreateSafePlacesSchema

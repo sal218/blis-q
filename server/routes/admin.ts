@@ -8,6 +8,7 @@ import type {
   ModeratedReportRow,
   AdminUserRow,
   SafePlaceRow,
+  ResourceRow,
 } from "../storage";
 import { supabaseClient, supabaseAdmin } from "../supabase";
 import {
@@ -26,6 +27,9 @@ import {
   uploadUrlSchema,
   osmSearchSchema,
   bulkCreateSafePlacesSchema,
+  resourcesListQuerySchema,
+  createResourceSchema,
+  updateResourceSchema,
 } from "../validation";
 import { searchOverpass, OverpassError } from "../overpass";
 import {
@@ -46,6 +50,8 @@ import type {
   AdminUserDTO,
   SafePlaceDTO,
   SafePlaceCategory,
+  ResourceDTO,
+  ResourceCategory,
   OffsetPage,
 } from "@shared/types";
 
@@ -127,6 +133,12 @@ export function registerAdminRoutes(app: Express): void {
   app.post("/api/admin/safe-places/bulk", ...admin, handleBulkCreateSafePlaces);
   app.patch("/api/admin/safe-places/:id", ...admin, handleUpdateSafePlace);
   app.delete("/api/admin/safe-places/:id", ...admin, handleDeleteSafePlace);
+
+  // Resources (admin-curated Support & Education content, P-37).
+  app.get("/api/admin/resources", ...admin, handleListResources);
+  app.post("/api/admin/resources", ...admin, handleCreateResource);
+  app.patch("/api/admin/resources/:id", ...admin, handleUpdateResource);
+  app.delete("/api/admin/resources/:id", ...admin, handleDeleteResource);
 }
 
 async function toSafePlaceDTO(row: SafePlaceRow): Promise<SafePlaceDTO> {
@@ -916,6 +928,146 @@ async function handleDeleteSafePlace(
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("[DELETE /api/admin/safe-places/:id]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// ── Resources (admin-curated Support & Education content, P-37) ───────────────
+// Mirrors the safe-places admin CRUD: requireAdmin, rate-limit first, Zod → 400,
+// transactional + IDs-only audit in storage, soft-delete.
+
+function toResourceDTO(row: ResourceRow): ResourceDTO {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category as ResourceCategory,
+    body: row.body,
+    url: row.url,
+    featured: row.featured,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+async function handleListResources(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const parsed = resourcesListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const q = parsed.data;
+    const { rows, total } = await storage.listResources({
+      page: q.page,
+      pageSize: q.pageSize,
+      category: q.category,
+    });
+    const body: OffsetPage<ResourceDTO> = {
+      data: rows.map(toResourceDTO),
+      page: q.page,
+      pageSize: q.pageSize,
+      total,
+      totalPages: Math.ceil(total / q.pageSize),
+    };
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[GET /api/admin/resources]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleCreateResource(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = createResourceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const row = await storage.createResource(
+      parsed.data,
+      userId,
+      req.ip ?? null,
+    );
+    return res.status(201).json(toResourceDTO(row));
+  } catch (err) {
+    console.error("[POST /api/admin/resources]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleUpdateResource(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = updateResourceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const row = await storage.updateResource(
+      id,
+      parsed.data,
+      userId,
+      req.ip ?? null,
+    );
+    if (!row) return res.status(404).json({ error: "Not found" });
+    return res.status(200).json(toResourceDTO(row));
+  } catch (err) {
+    console.error("[PATCH /api/admin/resources/:id]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleDeleteResource(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const result = await storage.softDeleteResource(id, userId, req.ip ?? null);
+    if (result === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/admin/resources/:id]", {
       code: safeErrorCode(err),
     });
     return res.status(500).json({ error: "Internal Server Error" });

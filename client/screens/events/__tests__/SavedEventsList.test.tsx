@@ -32,6 +32,16 @@ const ev = (id: string, title: string): EventDTO => ({
 beforeEach(() => savedMock.mockReset());
 
 describe("SavedEventsList", () => {
+  it("shows the skeleton on the first load", () => {
+    savedMock.mockReturnValue({
+      events: [],
+      status: "loading",
+      retry: jest.fn(),
+    });
+    render(<SavedEventsList onOpenEvent={jest.fn()} />);
+    expect(screen.getByTestId("card-list-skeleton")).toBeTruthy();
+  });
+
   it("renders saved event cards and opens one on tap", () => {
     savedMock.mockReturnValue({
       events: [ev("e1", "Pride Meetup")],

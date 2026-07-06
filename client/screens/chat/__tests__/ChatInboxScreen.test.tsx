@@ -31,6 +31,12 @@ function renderInbox() {
 beforeEach(() => chatsMock.mockReset());
 
 describe("ChatInboxScreen", () => {
+  it("shows the inbox skeleton on the first load", () => {
+    chatsMock.mockReturnValue(state({ status: "loading", chats: [] }));
+    renderInbox();
+    expect(screen.getByTestId("chat-inbox-skeleton")).toBeTruthy();
+  });
+
   it("renders a chat row with its preview and navigates to the thread (canModerate from role)", () => {
     chatsMock.mockReturnValue(
       state({

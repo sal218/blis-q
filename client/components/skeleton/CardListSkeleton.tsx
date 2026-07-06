@@ -131,9 +131,9 @@ export function CardListSkeleton({
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    root: {
-      flex: 1,
-    },
+    // No flex:1 — the cards are top-aligned, so this composes both as a
+    // full-screen early-return AND inline inside a ScrollView section (Home).
+    root: {},
     rootPadded: {
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,

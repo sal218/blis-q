@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   FlatList,
-  ActivityIndicator,
   RefreshControl,
   Pressable,
   StyleSheet,
@@ -15,6 +14,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { Avatar } from "@/components/Avatar";
 import { MagnifyingGlass } from "@/components/icons/PhosphorIcons";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
+import { ChatInboxSkeleton } from "@/components/skeleton/ChatInboxSkeleton";
 import { useChats } from "@/hooks/useChats";
 import { formatInboxTime } from "@/lib/relativeTime";
 import { strings } from "@/i18n";
@@ -60,11 +60,7 @@ export function ChatInboxScreen({ navigation }: Props) {
   };
 
   if (status === "loading" && chats.length === 0) {
-    return (
-      <View style={[styles.root, styles.centered]}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
+    return <ChatInboxSkeleton />;
   }
 
   if (status === "error" && chats.length === 0) {

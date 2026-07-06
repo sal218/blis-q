@@ -1,14 +1,9 @@
 import { useMemo } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  ActivityIndicator,
-  StyleSheet,
-} from "react-native";
+import { View, Text, FlatList, StyleSheet } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { SafePlaceCard } from "@/components/SafePlaceCard";
+import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
 import { useSavedSafePlaces } from "@/hooks/useSavedSafePlaces";
 import { strings } from "@/i18n";
 import { spacing, type ThemeColors } from "@/constants/theme";
@@ -26,11 +21,7 @@ export function SavedSafePlacesList({ onOpenPlace }: Props = {}) {
   const { places, status, toggleSave, retry } = useSavedSafePlaces();
 
   if (status === "loading" && places.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
+    return <CardListSkeleton count={4} />;
   }
 
   if (status === "error" && places.length === 0) {

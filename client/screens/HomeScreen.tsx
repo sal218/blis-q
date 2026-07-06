@@ -1,12 +1,5 @@
 import { useMemo } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  StyleSheet,
-} from "react-native";
+import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
@@ -18,6 +11,8 @@ import { useHomeEvents } from "@/hooks/useHomeEvents";
 import { SectionHeader } from "@/components/SectionHeader";
 import { CommunityRailCard } from "@/components/CommunityRailCard";
 import { EventCard } from "@/components/EventCard";
+import { RailSkeleton } from "@/components/skeleton/RailSkeleton";
+import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
 import { strings, format } from "@/i18n";
 import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
 
@@ -85,10 +80,7 @@ export function HomeScreen({ navigation }: Props) {
           onSeeAll={goToCommunities}
         />
         {status === "loading" ? (
-          <ActivityIndicator
-            color={colors.primary}
-            style={styles.railLoading}
-          />
+          <RailSkeleton />
         ) : (
           <ScrollView
             horizontal
@@ -128,10 +120,7 @@ export function HomeScreen({ navigation }: Props) {
           onSeeAll={goToEvents}
         />
         {eventsStatus === "loading" ? (
-          <ActivityIndicator
-            color={colors.primary}
-            style={styles.railLoading}
-          />
+          <CardListSkeleton variant="event" count={2} padded={false} />
         ) : events.length === 0 ? (
           <View style={styles.placeholderCard}>
             <Ionicons
@@ -224,9 +213,6 @@ function createStyles(colors: ThemeColors) {
     rail: {
       paddingRight: spacing.lg,
       paddingVertical: spacing.xs,
-    },
-    railLoading: {
-      alignSelf: "flex-start",
     },
     eventsList: {
       gap: spacing.sm,

@@ -81,6 +81,14 @@ beforeEach(() => {
 });
 
 describe("HomeScreen", () => {
+  it("shows the rail + event skeletons while the sections are loading", () => {
+    listMock.mockReturnValue(new Promise(() => {})); // communities rail stays loading
+    eventsMock.mockReturnValue({ events: [], status: "loading" });
+    renderHome();
+    expect(screen.getByTestId("rail-skeleton")).toBeTruthy();
+    expect(screen.getByTestId("card-list-skeleton")).toBeTruthy();
+  });
+
   it("greets the user and shows the section titles", async () => {
     listMock.mockResolvedValue(page([]));
     renderHome();

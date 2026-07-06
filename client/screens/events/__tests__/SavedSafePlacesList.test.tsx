@@ -27,6 +27,17 @@ const place = (id: string, name: string): SafePlaceDTO => ({
 beforeEach(() => savedMock.mockReset());
 
 describe("SavedSafePlacesList", () => {
+  it("shows the skeleton on the first load", () => {
+    savedMock.mockReturnValue({
+      places: [],
+      status: "loading",
+      toggleSave: jest.fn(),
+      retry: jest.fn(),
+    });
+    render(<SavedSafePlacesList />);
+    expect(screen.getByTestId("card-list-skeleton")).toBeTruthy();
+  });
+
   it("renders saved place cards; the bookmark unsaves via toggleSave", () => {
     const toggleSave = jest.fn();
     const p = place("s1", "Tęczowy Zakątek");

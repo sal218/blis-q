@@ -1,14 +1,9 @@
 import { useMemo } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  ActivityIndicator,
-  StyleSheet,
-} from "react-native";
+import { View, Text, FlatList, StyleSheet } from "react-native";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { EventCard } from "@/components/EventCard";
+import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
 import { useSavedEvents } from "@/hooks/useSavedEvents";
 import { strings } from "@/i18n";
 import { spacing, type ThemeColors } from "@/constants/theme";
@@ -26,11 +21,7 @@ export function SavedEventsList({ onOpenEvent }: Props) {
   const { events, status, retry } = useSavedEvents();
 
   if (status === "loading" && events.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
+    return <CardListSkeleton variant="event" count={4} />;
   }
 
   if (status === "error" && events.length === 0) {

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -96,6 +97,9 @@ export function SafePlacesPage() {
   const debouncedCity = useDebouncedValue(filterCity);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Monotonic request id — with the debounced filter several loads can be in
+  // flight; only the latest response is allowed to commit.
+  const reqSeq = useRef(0);
 
   // Create/edit form drawer.
   const [formOpen, setFormOpen] = useState(false);
@@ -144,6 +148,7 @@ export function SafePlacesPage() {
       cat: "" | SafePlaceCategory,
       cityTerm: string,
     ) => {
+      const seq = ++reqSeq.current;
       setLoading(true);
       setError(null);
       try {
@@ -156,12 +161,14 @@ export function SafePlacesPage() {
           "GET",
           `/api/admin/safe-places?${query.toString()}`,
         );
+        if (seq !== reqSeq.current) return; // a newer load superseded this one
         setPage(data);
         setPageNum(data.page);
       } catch {
+        if (seq !== reqSeq.current) return;
         setError("Nie udało się załadować bezpiecznych miejsc.");
       } finally {
-        setLoading(false);
+        if (seq === reqSeq.current) setLoading(false);
       }
     },
     [],

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { adminFetch } from "../lib/api";
 import type { OffsetPage, AdminUserDTO } from "../lib/types";
 import { DataTable, type Column } from "../components/DataTable";
@@ -82,6 +88,10 @@ export function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  // Monotonic request id — with debounced search several loads can be in
+  // flight; only the latest response is allowed to commit, so a slow older
+  // request can't render stale results over a newer query.
+  const reqSeq = useRef(0);
 
   const setBusy = (id: string, busy: boolean) =>
     setBusyIds((prev) => {
@@ -97,6 +107,7 @@ export function UsersPage() {
       searchTerm: string,
       statusFilter: StatusFilter,
     ) => {
+      const seq = ++reqSeq.current;
       setLoading(true);
       setError(null);
       try {
@@ -109,12 +120,14 @@ export function UsersPage() {
           "GET",
           `/api/admin/users?${query.toString()}`,
         );
+        if (seq !== reqSeq.current) return; // a newer load superseded this one
         setPage(data);
         setPageNum(data.page);
       } catch {
+        if (seq !== reqSeq.current) return;
         setError("Nie udało się załadować użytkowników.");
       } finally {
-        setLoading(false);
+        if (seq === reqSeq.current) setLoading(false);
       }
     },
     [],

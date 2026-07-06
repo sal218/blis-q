@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { adminFetch } from "../lib/api";
 import type { CommunityDTO, OffsetPage } from "../lib/types";
 import { DataTable, type Column } from "../components/DataTable";
@@ -30,6 +36,9 @@ export function CommunitiesPage() {
   const debouncedSearch = useDebouncedValue(search);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Monotonic request id — with debounced search several loads can be in
+  // flight; only the latest response is allowed to commit.
+  const reqSeq = useRef(0);
 
   // Form drawer state. formOpen + editingId: null = create, id = edit.
   const [formOpen, setFormOpen] = useState(false);
@@ -40,6 +49,7 @@ export function CommunitiesPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const load = useCallback(async (targetPage: number, searchTerm: string) => {
+    const seq = ++reqSeq.current;
     setLoading(true);
     setError(null);
     try {
@@ -49,12 +59,14 @@ export function CommunitiesPage() {
         "GET",
         `/api/admin/communities?${query.toString()}`,
       );
+      if (seq !== reqSeq.current) return; // a newer load superseded this one
       setPage(data);
       setPageNum(data.page);
     } catch {
+      if (seq !== reqSeq.current) return;
       setError("Nie udało się załadować społeczności.");
     } finally {
-      setLoading(false);
+      if (seq === reqSeq.current) setLoading(false);
     }
   }, []);
 

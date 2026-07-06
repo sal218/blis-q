@@ -74,8 +74,31 @@ function esc(v: string): string {
   return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+// Escape regex metacharacters so an admin-typed city is matched literally (not
+// as a pattern) when used inside an Overpass `~` regex filter.
+function escRegex(v: string): string {
+  return v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// City name tags to match the administrative area against. OSM stores the
+// LOCAL/native name in `name` (Warsaw → "Warszawa"); English and alternate
+// spellings live in these companions, so matching all of them lets an admin
+// type either "Warszawa" or "Warsaw" (or "Cracow" for Kraków).
+const CITY_NAME_TAGS = [
+  "name",
+  "name:en",
+  "int_name",
+  "official_name",
+  "alt_name",
+] as const;
+
 function buildQuery(city: string, category: SafePlaceCategory): string {
-  const c = esc(city.trim());
+  // Regex-escaped for the `~` match, then string-escaped for the QL literal, so
+  // the city is matched literally + case-insensitively across the name tags.
+  const cityRe = esc(escRegex(city.trim()));
+  const areaUnion = CITY_NAME_TAGS.map(
+    (tag) => `area["${tag}"~"^${cityRe}$",i]["boundary"="administrative"];`,
+  ).join("");
   const stmts: string[] = [];
   for (const f of CATEGORY_TAGS[category]) {
     const alt = f.values.map(esc).join("|");
@@ -85,7 +108,8 @@ function buildQuery(city: string, category: SafePlaceCategory): string {
   }
   return [
     "[out:json][timeout:25];",
-    `area["name"="${c}"]["boundary"="administrative"]->.a;`,
+    // Union of the same area matched on each name tag → one area set `.a`.
+    `(${areaUnion})->.a;`,
     `(${stmts.join("")});`,
     `out center ${MAX_RESULTS};`,
   ].join("\n");

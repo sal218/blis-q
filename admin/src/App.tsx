@@ -9,6 +9,7 @@ import {
 } from "./lib/api";
 import { Icon, type IconName } from "./components/Icon";
 import { Alert, Button, ConfirmProvider, Field, Input } from "./components/ui";
+import { DashboardPage } from "./pages/DashboardPage";
 import { CommunitiesPage } from "./pages/CommunitiesPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ModerationPage } from "./pages/ModerationPage";
@@ -24,6 +25,15 @@ type NavItem = {
   label: string;
   icon: IconName;
   element: JSX.Element;
+};
+
+// Overview landing page — the portal's home. Rendered as a standalone link
+// above the grouped sections; `/` is its route.
+const DASHBOARD_ITEM: NavItem = {
+  path: "/",
+  label: "Pulpit",
+  icon: "squaresFour",
+  element: <DashboardPage />,
 };
 
 const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
@@ -86,7 +96,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   },
 ];
 
-const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
+const ALL_NAV_ITEMS = [DASHBOARD_ITEM, ...NAV_GROUPS.flatMap((g) => g.items)];
 
 export function App() {
   const [admin, setAdmin] = useState<AdminUser | null>(null);
@@ -129,6 +139,12 @@ export function App() {
           </div>
 
           <nav className="bq-nav" aria-label="Nawigacja główna">
+            {/* Dashboard is the home route ("/"), so `end` keeps it from
+                matching every path as active. */}
+            <NavLink to={DASHBOARD_ITEM.path} end className="bq-nav-link">
+              <Icon name={DASHBOARD_ITEM.icon} size={17} />
+              <span className="bq-nav-label">{DASHBOARD_ITEM.label}</span>
+            </NavLink>
             {NAV_GROUPS.map((group) => (
               <div key={group.title} style={{ display: "contents" }}>
                 <span className="bq-nav-section">{group.title}</span>
@@ -172,7 +188,6 @@ export function App() {
         <main className="bq-main">
           <div className="bq-page">
             <Routes>
-              <Route path="/" element={<Navigate to="/reports" replace />} />
               {ALL_NAV_ITEMS.map((item) => (
                 <Route
                   key={item.path}
@@ -180,7 +195,7 @@ export function App() {
                   element={item.element}
                 />
               ))}
-              <Route path="*" element={<Navigate to="/reports" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
         </main>

@@ -149,7 +149,9 @@ export function SafePlacesPage() {
       try {
         const query = new URLSearchParams({ page: String(targetPage) });
         if (cat) query.set("category", cat);
-        if (cityTerm.trim()) query.set("city", cityTerm.trim());
+        // Substring search over name + city + address (server does the LIKE),
+        // so a partial term like "War" matches "Warszawa".
+        if (cityTerm.trim()) query.set("search", cityTerm.trim());
         const data = await adminFetch<OffsetPage<SafePlaceDTO>>(
           "GET",
           `/api/admin/safe-places?${query.toString()}`,
@@ -555,11 +557,11 @@ export function SafePlacesPage() {
             }}
           >
             <SearchInput
-              placeholder="Szukaj po mieście"
+              placeholder="Szukaj po nazwie lub mieście"
               value={filterCity}
               onChange={(e) => setFilterCity(e.target.value)}
               style={{ minWidth: 220 }}
-              aria-label="Szukaj po mieście"
+              aria-label="Szukaj po nazwie lub mieście"
             />
             <Button type="submit">Szukaj</Button>
           </form>

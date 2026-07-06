@@ -86,10 +86,35 @@ jobs:
     runs-on: ubuntu-latest
     needs: fast-gate
     if: "github.actor != 'dependabot[bot]' && !contains(github.event.head_commit.message, '[skip integration]') && !contains(github.event.pull_request.title, '[skip integration]')"
+    # Runs against a LOCAL Postgres service container instead of the remote
+    # Supabase test project. Every query hits localhost, so the ~cross-region
+    # round-trip latency that made this job ~20 min is gone (it dominated the
+    # wall-clock — the tests seed/clean up thousands of rows). It's a REAL
+    # Postgres, so results stay real: identical SQL/constraint/RLS semantics, and
+    # the tests use the service role (which bypasses RLS) exactly as against
+    # Supabase. The schema is built fresh each run from shared/schema.ts. The DB
+    # is ephemeral (a fresh container per run), so no data leaks between runs.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: blisq_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
-      DATABASE_URL: ${{ secrets.BLISQ_TEST_DATABASE_URL }}
-      SUPABASE_URL: ${{ secrets.BLISQ_TEST_SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BLISQ_TEST_SUPABASE_SERVICE_ROLE_KEY }}
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/blisq_test
+      # Supabase is MOCKED in integration tests (jest.mock("../supabase")); these
+      # are non-empty placeholders only, so env validation passes (like fast-gate).
+      # No BLISQ_TEST_* secrets are needed anymore.
+      SUPABASE_URL: https://placeholder.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
       SUPABASE_ANON_KEY: placeholder-anon-key-not-used-in-tests
       SESSION_SECRET: ci-test-session-secret-at-least-32-chars
       RESEND_API_KEY: re_test_disabled
@@ -101,39 +126,20 @@ jobs:
       FIREBASE_PRIVATE_KEY: "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA00000000000000000000000000000000000000000000000=\n-----END RSA PRIVATE KEY-----"
 
     steps:
-      # Gate the whole job on the test-DB secret being present. Until a test
-      # Supabase project is provisioned and BLISQ_TEST_* secrets are set
-      # (Sprint 1), this job no-ops and PASSES rather than failing red on an
-      # unconfigured DB. Once the secret exists, the steps below run for real.
-      - name: Check test DB configured
-        id: gate
-        run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::notice::BLISQ_TEST_* secrets not configured — skipping integration tests."
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v6
-        if: steps.gate.outputs.configured == 'true'
 
       - name: Setup Node
-        if: steps.gate.outputs.configured == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: "npm"
 
       - name: Install dependencies
-        if: steps.gate.outputs.configured == 'true'
         # --legacy-peer-deps until `npx expo install --fix` pins the exact Expo
-        # SDK 54 RN peer set in Sprint 1 (e.g. react-native-screens vs RN). The
-        # conflicts are version-range mismatches, not real incompatibilities.
+        # SDK 54 RN peer set (version-range mismatches, not real incompatibilities).
         run: npm ci --legacy-peer-deps
 
       - name: Create .env.test
-        if: steps.gate.outputs.configured == 'true'
         run: |
           cat > .env.test << ENVEOF
           DATABASE_URL=${DATABASE_URL}
@@ -150,10 +156,22 @@ jobs:
           FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
           ENVEOF
 
-      - name: Push schema to test DB
-        if: steps.gate.outputs.configured == 'true'
-        run: npm run db:push
+      # Build the schema into the fresh local Postgres, then apply RLS.
+      # drizzle.config has `strict: true`, so `drizzle-kit push` asks "execute
+      # these statements?" — against an empty DB that's a big additive diff (all
+      # CREATE TABLEs, no rename menus), so we answer it with `yes`. We do NOT use
+      # `drizzle-kit push --force` (which also emits DISABLE ROW LEVEL SECURITY —
+      # CLAUDE.md §2); `yes | push` keeps the safe no-force path. `set +o pipefail`
+      # so `yes` getting SIGPIPE when push exits doesn't fail the pipeline (the
+      # pipeline then reports push's own exit code). Then db-rls.mjs re-asserts
+      # supabase/rls.sql and verifies zero-policy RLS. timeout = hang safety net.
+      - name: Build schema (fresh local Postgres)
+        timeout-minutes: 5
+        run: |
+          set +o pipefail
+          yes | npx drizzle-kit push
+          set -o pipefail
+          node scripts/db-rls.mjs
 
       - name: Run integration tests
-        if: steps.gate.outputs.configured == 'true'
         run: npm run test:integration

@@ -1,13 +1,17 @@
-import {
-  useCallback,
-  useEffect,
-  useState,
-  type CSSProperties,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { adminFetch } from "../lib/api";
 import type { OffsetPage, AdminUserDTO } from "../lib/types";
 import { DataTable, type Column } from "../components/DataTable";
+import {
+  Alert,
+  Badge,
+  Button,
+  PageHeader,
+  Pagination,
+  SearchInput,
+  Segmented,
+  useConfirm,
+} from "../components/ui";
 
 // Admin users directory + ban/unban (docs/API.md §14, backend #23). List with
 // email/displayName search + status filter; ban/unban via the moderation
@@ -24,17 +28,48 @@ const STATUSES: { value: StatusFilter; label: string }[] = [
   { value: "banned", label: "Zablokowani" },
 ];
 
-// Local user-status badge — the shared StatusBadge is report-only (ReportStatus).
+// Deterministic accent per user for the avatar initial (display only).
+const AVATAR_HUES = [258, 288, 220, 340, 190, 160];
+
+function UserAvatar({ name }: { name: string }) {
+  const initial = name.trim().charAt(0).toUpperCase() || "?";
+  let hash = 0;
+  for (let i = 0; i < name.length; i++)
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  const hue = AVATAR_HUES[Math.abs(hash) % AVATAR_HUES.length];
+  return (
+    <span
+      className="bq-avatar"
+      style={{
+        width: 28,
+        height: 28,
+        fontSize: 12,
+        background: `linear-gradient(135deg, hsl(${hue} 72% 62%), hsl(${hue + 24} 68% 48%))`,
+      }}
+      aria-hidden
+    >
+      {initial}
+    </span>
+  );
+}
+
 function UserStatusBadge({ user }: { user: AdminUserDTO }) {
-  const { label, style } = user.deletedAt
-    ? { label: "Usunięty", style: styles.badgeDeleted }
-    : user.bannedAt
-      ? { label: "Zablokowany", style: styles.badgeBanned }
-      : { label: "Aktywny", style: styles.badgeActive };
-  return <span style={{ ...styles.badge, ...style }}>{label}</span>;
+  if (user.deletedAt) return <Badge tone="neutral">Usunięty</Badge>;
+  if (user.bannedAt)
+    return (
+      <Badge tone="danger" dot>
+        Zablokowany
+      </Badge>
+    );
+  return (
+    <Badge tone="success" dot>
+      Aktywny
+    </Badge>
+  );
 }
 
 export function UsersPage() {
+  const confirm = useConfirm();
   const [page, setPage] = useState<OffsetPage<AdminUserDTO> | null>(null);
   const [pageNum, setPageNum] = useState(1);
   const [search, setSearch] = useState("");
@@ -93,13 +128,13 @@ export function UsersPage() {
   }
 
   async function ban(user: AdminUserDTO) {
-    if (
-      !window.confirm(
-        `Zablokować użytkownika ${user.displayName}? Straci dostęp do aplikacji (poza eksportem/usunięciem konta).`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Zablokować użytkownika ${user.displayName}?`,
+      body: "Użytkownik straci dostęp do aplikacji (poza eksportem i usunięciem konta). Możesz to później cofnąć.",
+      confirmLabel: "Zablokuj",
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(user.id, true);
     setActionError(null);
     try {
@@ -115,9 +150,12 @@ export function UsersPage() {
   }
 
   async function unban(user: AdminUserDTO) {
-    if (!window.confirm(`Odblokować użytkownika ${user.displayName}?`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Odblokować użytkownika ${user.displayName}?`,
+      body: "Użytkownik odzyska pełny dostęp do aplikacji.",
+      confirmLabel: "Odblokuj",
+    });
+    if (!ok) return;
     setBusy(user.id, true);
     setActionError(null);
     try {
@@ -133,60 +171,74 @@ export function UsersPage() {
   }
 
   const columns: Column<AdminUserDTO>[] = [
-    { key: "name", header: "Nazwa", render: (u) => u.displayName },
+    {
+      key: "name",
+      header: "Użytkownik",
+      render: (u) => (
+        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <UserAvatar name={u.displayName} />
+          <span className="bq-td-strong">{u.displayName}</span>
+        </span>
+      ),
+    },
     {
       key: "email",
       header: "E-mail",
-      render: (u) => <code style={styles.code}>{u.email}</code>,
+      render: (u) => <code className="bq-td-mono">{u.email}</code>,
     },
     {
       key: "role",
       header: "Rola",
+      width: 120,
       render: (u) =>
         u.isAdmin ? (
-          <span style={{ ...styles.badge, ...styles.badgeAdmin }}>Admin</span>
+          <Badge tone="brand">Admin</Badge>
         ) : (
-          <span style={styles.muted}>Użytkownik</span>
+          <span className="bq-td-muted">Użytkownik</span>
         ),
     },
     {
       key: "status",
       header: "Status",
+      width: 140,
       render: (u) => <UserStatusBadge user={u} />,
     },
     {
       key: "created",
       header: "Dołączył",
-      render: (u) => new Date(u.createdAt).toLocaleString("pl-PL"),
+      width: 170,
+      render: (u) => (
+        <span className="bq-td-num">
+          {new Date(u.createdAt).toLocaleString("pl-PL")}
+        </span>
+      ),
     },
     {
       key: "actions",
       header: "Akcje",
+      width: 130,
       render: (u) => {
-        if (u.deletedAt) return <span style={styles.muted}>—</span>;
+        if (u.deletedAt) return <span className="bq-td-muted">—</span>;
         const busy = busyIds.has(u.id);
         if (u.bannedAt) {
           return (
-            <button
-              style={styles.smallButton}
-              disabled={busy}
-              onClick={() => unban(u)}
-            >
+            <Button size="sm" disabled={busy} onClick={() => unban(u)}>
               Odblokuj
-            </button>
+            </Button>
           );
         }
         // Ban is hidden for admins (covers self) — avoids an admin lockout /
         // privilege foot-gun; admin promotion/demotion is a separate slice (P-16).
-        if (u.isAdmin) return <span style={styles.muted}>—</span>;
+        if (u.isAdmin) return <span className="bq-td-muted">—</span>;
         return (
-          <button
-            style={styles.dangerButton}
+          <Button
+            size="sm"
+            variant="dangerOutline"
             disabled={busy}
             onClick={() => ban(u)}
           >
             Zablokuj
-          </button>
+          </Button>
         );
       },
     },
@@ -194,140 +246,51 @@ export function UsersPage() {
 
   return (
     <section>
-      <h1 style={styles.h1}>Użytkownicy</h1>
+      <PageHeader
+        title="Użytkownicy"
+        description="Katalog kont — wyszukuj po nazwie lub adresie e-mail, blokuj i odblokowuj użytkowników."
+      />
 
-      <div style={styles.controls}>
-        <form onSubmit={onSearchSubmit} style={styles.searchForm}>
-          <input
-            style={styles.input}
+      <div className="bq-toolbar">
+        <form className="bq-toolbar-group" onSubmit={onSearchSubmit}>
+          <SearchInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Szukaj po nazwie lub e-mailu"
+            style={{ minWidth: 280 }}
+            aria-label="Szukaj użytkowników"
           />
-          <button type="submit" style={styles.ghostButton}>
-            Szukaj
-          </button>
+          <Button type="submit">Szukaj</Button>
         </form>
-        <div style={styles.filterRow}>
-          <label style={styles.muted}>Status:</label>
-          <select
-            style={styles.select}
-            value={status}
-            onChange={(e) => setStatus(e.target.value as StatusFilter)}
-          >
-            {STATUSES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Segmented
+          ariaLabel="Filtr statusu konta"
+          options={STATUSES}
+          value={status}
+          onChange={setStatus}
+        />
       </div>
 
-      {error && <p style={styles.error}>{error}</p>}
-      {actionError && <p style={styles.error}>{actionError}</p>}
-      {loading ? (
-        <p style={styles.muted}>Ładowanie…</p>
-      ) : (
-        <>
-          <DataTable
-            columns={columns}
-            rows={page?.data ?? []}
-            keyOf={(u) => u.id}
-            emptyLabel="Brak użytkowników."
-          />
-          {page && page.totalPages > 1 && (
-            <div style={styles.pager}>
-              <button
-                style={styles.ghostButton}
-                disabled={pageNum <= 1}
-                onClick={() => load(pageNum - 1, search, status)}
-              >
-                Poprzednia
-              </button>
-              <span style={styles.muted}>
-                {page.page} / {page.totalPages}
-              </span>
-              <button
-                style={styles.ghostButton}
-                disabled={pageNum >= page.totalPages}
-                onClick={() => load(pageNum + 1, search, status)}
-              >
-                Następna
-              </button>
-            </div>
-          )}
-        </>
+      {error && <Alert tone="error">{error}</Alert>}
+      {actionError && <Alert tone="error">{actionError}</Alert>}
+
+      <DataTable
+        columns={columns}
+        rows={page?.data ?? []}
+        keyOf={(u) => u.id}
+        loading={loading}
+        emptyLabel="Brak użytkowników"
+        emptyIcon="user"
+        emptyDescription="Żadne konta nie pasują do wyszukiwania lub filtra."
+      />
+      {page && (
+        <Pagination
+          page={page.page}
+          totalPages={page.totalPages}
+          total={page.total}
+          disabled={loading}
+          onPage={(p) => load(p, search, status)}
+        />
       )}
     </section>
   );
 }
-
-const styles: Record<string, CSSProperties> = {
-  h1: { fontSize: 24, marginBottom: 16 },
-  controls: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 16,
-    flexWrap: "wrap",
-  },
-  searchForm: { display: "flex", gap: 8 },
-  filterRow: { display: "flex", alignItems: "center", gap: 8 },
-  input: {
-    padding: "8px 12px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    fontSize: 14,
-    minWidth: 240,
-    fontFamily: "inherit",
-  },
-  select: {
-    padding: "8px 12px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    fontSize: 14,
-    fontFamily: "inherit",
-  },
-  code: { fontSize: 12, color: "#6B7280" },
-  badge: {
-    fontSize: 12,
-    fontWeight: 600,
-    padding: "2px 8px",
-    borderRadius: 999,
-  },
-  badgeActive: { background: "#DCFCE7", color: "#166534" },
-  badgeBanned: { background: "#FEE2E2", color: "#991B1B" },
-  badgeDeleted: { background: "#F3F4F6", color: "#6B7280" },
-  badgeAdmin: { background: "#EDE9FE", color: "#5B21B6" },
-  smallButton: {
-    padding: "6px 12px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    background: "#FFFFFF",
-    color: "#111827",
-    cursor: "pointer",
-    fontSize: 13,
-  },
-  dangerButton: {
-    padding: "6px 12px",
-    borderRadius: 8,
-    border: "1px solid #DC2626",
-    background: "#FFFFFF",
-    color: "#DC2626",
-    cursor: "pointer",
-    fontSize: 13,
-  },
-  pager: { display: "flex", gap: 12, alignItems: "center", marginTop: 16 },
-  ghostButton: {
-    padding: "10px 16px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    background: "#FFFFFF",
-    color: "#111827",
-    cursor: "pointer",
-  },
-  muted: { color: "#6B7280", fontSize: 14 },
-  error: { color: "#DC2626", fontSize: 14, margin: 0 },
-};

@@ -2,7 +2,6 @@ import {
   useCallback,
   useEffect,
   useState,
-  type CSSProperties,
   type ChangeEvent,
   type FormEvent,
 } from "react";
@@ -19,12 +18,26 @@ import {
   ACCESSIBILITY_FEATURE_LABELS,
 } from "../lib/types";
 import { DataTable, type Column } from "../components/DataTable";
+import { Icon } from "../components/Icon";
+import {
+  Alert,
+  Button,
+  Drawer,
+  Field,
+  Input,
+  PageHeader,
+  Pagination,
+  SearchInput,
+  Select,
+  Textarea,
+  useConfirm,
+} from "../components/ui";
 
-// Admin safe-places CRUD (docs/API.md §11/§14; epic P-40 slice SP-1). List +
-// filters + a create/edit form + soft delete. All calls go through adminFetch
-// (server gates with isAuthenticated + requireAdmin); the dashboard is a view
-// layer — it never touches the DB. Coordinates are optional here (manual entry);
-// the geocode helper + the OSM "browse nearby → bulk-add" map panel are SP-2.
+// Admin safe-places CRUD (docs/API.md §11/§14; epic P-40 slices SP-1/SP-2/SP-6a).
+// List + filters, a create/edit form and the "Import from OpenStreetMap" flow —
+// each in its own slide-over drawer. All calls go through adminFetch (server
+// gates with isAuthenticated + requireAdmin); the dashboard is a view layer —
+// it never touches the DB. Coordinates are optional here (manual entry).
 
 const CATEGORY_KEYS = SAFE_PLACE_CATEGORIES;
 
@@ -32,11 +45,11 @@ function CategoryChip({ category }: { category: SafePlaceCategory }) {
   const meta = SAFE_PLACE_CATEGORY_META[category];
   return (
     <span
+      className="bq-badge"
       style={{
-        ...styles.chip,
         color: meta.color,
-        background: `${meta.color}1A`, // ~10% tint
-        borderColor: `${meta.color}55`,
+        background: `${meta.color}14`,
+        borderColor: `${meta.color}45`,
       }}
     >
       {meta.label}
@@ -44,40 +57,34 @@ function CategoryChip({ category }: { category: SafePlaceCategory }) {
   );
 }
 
-// Phosphor (regular, MIT) paths for the accessibility features — inlined so the
-// admin table can render the same glyphs as the mobile detail screen.
-const FEATURE_ICON_PATHS: Record<AccessibilityFeature, string> = {
-  wheelchair_accessible:
-    "M255.59,189.47a8,8,0,0,0-10.12-5.06l-17.42,5.81-28.9-57.8A8,8,0,0,0,192,128H112V104h56a8,8,0,0,0,0-16H112V79a32,32,0,1,0-16,0V89.81A72,72,0,0,0,112,232c33.52,0,63.69-22.71,71.75-54a8,8,0,1,0-15.5-4C162.09,198,137.91,216,112,216A56,56,0,0,1,96,106.34V136a8,8,0,0,0,8,8h83.05l29.79,59.58a8,8,0,0,0,9.69,4l24-8A8,8,0,0,0,255.59,189.47ZM88,48a16,16,0,1,1,16,16A16,16,0,0,1,88,48Z",
-  gender_neutral_restroom:
-    "M208,104a80,80,0,1,0-88,79.6V232a8,8,0,0,0,16,0V183.6A80.11,80.11,0,0,0,208,104Zm-80,64a64,64,0,1,1,64-64A64.07,64.07,0,0,1,128,168Z",
-  free_wifi:
-    "M140,204a12,12,0,1,1-12-12A12,12,0,0,1,140,204ZM237.08,87A172,172,0,0,0,18.92,87,8,8,0,0,0,29.08,99.37a156,156,0,0,1,197.84,0A8,8,0,0,0,237.08,87ZM205,122.77a124,124,0,0,0-153.94,0A8,8,0,0,0,61,135.31a108,108,0,0,1,134.06,0,8,8,0,0,0,11.24-1.3A8,8,0,0,0,205,122.77Zm-32.26,35.76a76.05,76.05,0,0,0-89.42,0,8,8,0,0,0,9.42,12.94,60,60,0,0,1,70.58,0,8,8,0,1,0,9.42-12.94Z",
+// The accessibility glyphs shared with the mobile detail screen (Phosphor).
+const FEATURE_ICONS: Record<
+  AccessibilityFeature,
+  "wheelchair" | "genderNeutral" | "wifi"
+> = {
+  wheelchair_accessible: "wheelchair",
+  gender_neutral_restroom: "genderNeutral",
+  free_wifi: "wifi",
 };
 
 function FeatureIcons({ features }: { features: AccessibilityFeature[] }) {
-  if (features.length === 0) return <span style={styles.muted}>—</span>;
+  if (features.length === 0) return <span className="bq-td-muted">—</span>;
   return (
-    <span style={{ display: "flex", gap: 6 }}>
+    <span style={{ display: "flex", gap: 8, color: "var(--brand-600)" }}>
       {features.map((f) => (
-        <svg
+        <Icon
           key={f}
-          width={20}
-          height={20}
-          viewBox="0 0 256 256"
-          fill="#4F46E5"
-          role="img"
-          aria-label={ACCESSIBILITY_FEATURE_LABELS[f]}
-        >
-          <title>{ACCESSIBILITY_FEATURE_LABELS[f]}</title>
-          <path d={FEATURE_ICON_PATHS[f]} />
-        </svg>
+          name={FEATURE_ICONS[f]}
+          size={18}
+          label={ACCESSIBILITY_FEATURE_LABELS[f]}
+        />
       ))}
     </span>
   );
 }
 
 export function SafePlacesPage() {
+  const confirm = useConfirm();
   const [page, setPage] = useState<OffsetPage<SafePlaceDTO> | null>(null);
   const [pageNum, setPageNum] = useState(1);
   const [filterCategory, setFilterCategory] = useState<"" | SafePlaceCategory>(
@@ -87,6 +94,8 @@ export function SafePlacesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Create/edit form drawer.
+  const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [category, setCategory] = useState<SafePlaceCategory | "">("");
@@ -111,7 +120,8 @@ export function SafePlacesPage() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Import-from-OSM panel state.
+  // Import-from-OSM drawer state.
+  const [importOpen, setImportOpen] = useState(false);
   const [importCity, setImportCity] = useState("");
   const [importCategory, setImportCategory] =
     useState<SafePlaceCategory>("cafe");
@@ -156,7 +166,7 @@ export function SafePlacesPage() {
     load(1, "", "");
   }, [load]);
 
-  function resetForm() {
+  function resetFormState() {
     setEditingId(null);
     setName("");
     setCategory("");
@@ -170,6 +180,16 @@ export function SafePlacesPage() {
     setImagePreview(null);
     setImageError(null);
     setFormError(null);
+  }
+
+  function closeForm() {
+    setFormOpen(false);
+    resetFormState();
+  }
+
+  function startCreate() {
+    resetFormState();
+    setFormOpen(true);
   }
 
   function toggleFeature(f: AccessibilityFeature) {
@@ -238,7 +258,7 @@ export function SafePlacesPage() {
     setImagePreview(place.imageUrl);
     setImageError(null);
     setFormError(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setFormOpen(true);
   }
 
   // Parse the coordinate pair, mirroring the server: both-or-neither + ranges.
@@ -298,13 +318,14 @@ export function SafePlacesPage() {
       else if (imageKey === null && editingId) body.imageKey = null;
       // Accessibility: always send the current selection (a full replace).
       body.accessibilityFeatures = accessibility;
+      const wasEditing = Boolean(editingId);
       if (editingId) {
         await adminFetch("PATCH", `/api/admin/safe-places/${editingId}`, body);
       } else {
         await adminFetch("POST", "/api/admin/safe-places", body);
       }
-      resetForm();
-      await load(editingId ? pageNum : 1, filterCategory, filterCity);
+      closeForm();
+      await load(wasEditing ? pageNum : 1, filterCategory, filterCity);
     } catch {
       setFormError("Nie udało się zapisać. Sprawdź dane i spróbuj ponownie.");
     } finally {
@@ -313,10 +334,16 @@ export function SafePlacesPage() {
   }
 
   async function onDelete(place: SafePlaceDTO) {
-    if (!window.confirm(`Usunąć miejsce „${place.name}”?`)) return;
+    const ok = await confirm({
+      title: `Usunąć miejsce „${place.name}”?`,
+      body: "Miejsce zniknie z listy i mapy w aplikacji.",
+      confirmLabel: "Usuń",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await adminFetch("DELETE", `/api/admin/safe-places/${place.id}`);
-      if (editingId === place.id) resetForm();
+      if (editingId === place.id) closeForm();
       await load(pageNum, filterCategory, filterCity);
     } catch {
       setError("Nie udało się usunąć miejsca.");
@@ -396,49 +423,79 @@ export function SafePlacesPage() {
     {
       key: "image",
       header: "",
+      width: 56,
       render: (p) =>
         p.imageUrl ? (
-          <img src={p.imageUrl} alt="" style={styles.thumb} />
+          <img src={p.imageUrl} alt="" className="bq-thumb" />
         ) : (
-          <div style={styles.thumbEmpty} />
+          <div className="bq-thumb-empty">
+            <Icon name="image" size={15} />
+          </div>
         ),
     },
-    { key: "name", header: "Nazwa", render: (p) => p.name },
+    {
+      key: "name",
+      header: "Nazwa",
+      render: (p) => <span className="bq-td-strong">{p.name}</span>,
+    },
     {
       key: "category",
       header: "Kategoria",
+      width: 160,
       render: (p) => <CategoryChip category={p.category} />,
     },
-    { key: "city", header: "Miasto", render: (p) => p.city ?? "—" },
+    {
+      key: "city",
+      header: "Miasto",
+      width: 140,
+      render: (p) => p.city ?? <span className="bq-td-muted">—</span>,
+    },
     {
       key: "accessibility",
-      header: "Dostępność",
+      header: "Udogodnienia",
+      width: 120,
       render: (p) => <FeatureIcons features={p.accessibilityFeatures} />,
     },
     {
       key: "coords",
-      header: "Współrzędne",
+      header: "Na mapie",
+      width: 110,
       render: (p) =>
         p.latitude !== null && p.longitude !== null ? (
-          <span style={styles.coordsOk}>✓ na mapie</span>
+          <span
+            style={{
+              color: "var(--success)",
+              fontWeight: 600,
+              fontSize: 12.5,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+            }}
+          >
+            <Icon name="check" size={13} /> tak
+          </span>
         ) : (
-          <span style={styles.muted}>— brak</span>
+          <span className="bq-td-muted">brak</span>
         ),
     },
     {
       key: "actions",
       header: "",
+      width: 170,
+      align: "right",
       render: (p) => (
-        <span style={styles.actions}>
-          <button style={styles.linkButton} onClick={() => startEdit(p)}>
+        <span className="bq-row-actions" style={{ justifyContent: "flex-end" }}>
+          <Button size="sm" icon="pencil" onClick={() => startEdit(p)}>
             Edytuj
-          </button>
-          <button
-            style={{ ...styles.linkButton, color: "#DC2626" }}
+          </Button>
+          <Button
+            size="sm"
+            variant="dangerOutline"
+            icon="trash"
             onClick={() => onDelete(p)}
           >
             Usuń
-          </button>
+          </Button>
         </span>
       ),
     },
@@ -446,225 +503,413 @@ export function SafePlacesPage() {
 
   return (
     <section>
-      <h1 style={styles.h1}>Bezpieczne miejsca</h1>
-
-      <form style={styles.card} onSubmit={onSubmit}>
-        <h2 style={styles.h2}>
-          {editingId ? "Edytuj miejsce" : "Nowe miejsce"}
-        </h2>
-
-        <label style={styles.label}>Nazwa</label>
-        <input
-          style={styles.input}
-          placeholder="np. Tęczowa Kawiarnia"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-
-        <label style={styles.label}>Kategoria</label>
-        <div style={styles.chipRow}>
-          {CATEGORY_KEYS.map((c) => {
-            const meta = SAFE_PLACE_CATEGORY_META[c];
-            const selected = category === c;
-            return (
-              <button
-                type="button"
-                key={c}
-                onClick={() => setCategory(c)}
-                style={{
-                  ...styles.pickChip,
-                  color: selected ? "#FFFFFF" : meta.color,
-                  background: selected ? meta.color : `${meta.color}12`,
-                  borderColor: selected ? meta.color : `${meta.color}55`,
-                }}
-              >
-                {meta.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <label style={styles.label}>Opis (opcjonalnie)</label>
-        <textarea
-          style={{ ...styles.input, height: 72, resize: "vertical" }}
-          placeholder="Krótki opis miejsca"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-
-        <label style={styles.label}>
-          Udogodnienia (opcjonalnie — tylko potwierdzone przez zespół)
-        </label>
-        <div style={styles.chipRow}>
-          {ACCESSIBILITY_FEATURES.map((f) => {
-            const selected = accessibility.includes(f);
-            return (
-              <button
-                type="button"
-                key={f}
-                onClick={() => toggleFeature(f)}
-                style={{
-                  ...styles.pickChip,
-                  color: selected ? "#FFFFFF" : "#374151",
-                  background: selected ? "#4F46E5" : "#F3F4F6",
-                  borderColor: selected ? "#4F46E5" : "#D1D5DB",
-                }}
-              >
-                {ACCESSIBILITY_FEATURE_LABELS[f]}
-              </button>
-            );
-          })}
-        </div>
-
-        <label style={styles.label}>
-          Zdjęcie (opcjonalnie — JPG/PNG/WebP, do 5 MB)
-        </label>
-        <div style={styles.imageRow}>
-          {imagePreview ? (
-            <img src={imagePreview} alt="" style={styles.imagePreview} />
-          ) : (
-            <div style={styles.imagePlaceholder}>Brak zdjęcia</div>
-          )}
-          <div style={styles.imageControls}>
-            <label style={styles.uploadBtn}>
-              {imageBusy
-                ? "Przesyłanie…"
-                : imagePreview
-                  ? "Zmień zdjęcie"
-                  : "Dodaj zdjęcie"}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={onPickImage}
-                disabled={imageBusy}
-                style={{ display: "none" }}
-              />
-            </label>
-            {imagePreview ? (
-              <button
-                type="button"
-                onClick={removeImage}
-                disabled={imageBusy}
-                style={styles.removeBtn}
-              >
-                Usuń zdjęcie
-              </button>
-            ) : null}
-          </div>
-        </div>
-        {imageError ? <p style={styles.error}>{imageError}</p> : null}
-
-        <div style={styles.grid2}>
-          <div>
-            <label style={styles.label}>Adres (opcjonalnie)</label>
-            <input
-              style={styles.input}
-              placeholder="Ulica i numer"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-          </div>
-          <div>
-            <label style={styles.label}>Miasto (opcjonalnie)</label>
-            <input
-              style={styles.input}
-              placeholder="np. Warszawa"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <label style={styles.label}>
-          Współrzędne (opcjonalnie — mapę/pin dodamy wkrótce)
-        </label>
-        <div style={styles.grid2}>
-          <input
-            style={styles.input}
-            placeholder="Szerokość (lat)"
-            inputMode="decimal"
-            value={latitude}
-            onChange={(e) => setLatitude(e.target.value)}
-          />
-          <input
-            style={styles.input}
-            placeholder="Długość (lng)"
-            inputMode="decimal"
-            value={longitude}
-            onChange={(e) => setLongitude(e.target.value)}
-          />
-        </div>
-
-        {formError && <p style={styles.error}>{formError}</p>}
-        <div style={styles.formActions}>
-          <button type="submit" style={styles.primaryButton} disabled={busy}>
-            {busy ? "Zapisywanie…" : editingId ? "Zapisz" : "Dodaj miejsce"}
-          </button>
-          {editingId && (
-            <button
-              type="button"
-              style={styles.ghostButton}
-              onClick={resetForm}
+      <PageHeader
+        title="Bezpieczne miejsca"
+        description="Zweryfikowane, przyjazne miejsca pokazywane w aplikacji. Import z OpenStreetMap to pula kandydatów — każde miejsce wymaga ręcznej weryfikacji zespołu."
+        actions={
+          <>
+            <Button
+              icon="globe"
+              onClick={() => {
+                setImportMsg(null);
+                setSearchError(null);
+                setImportOpen(true);
+              }}
             >
-              Anuluj
-            </button>
-          )}
-        </div>
-      </form>
+              Importuj z OSM
+            </Button>
+            <Button variant="primary" icon="plus" onClick={startCreate}>
+              Dodaj miejsce
+            </Button>
+          </>
+        }
+      />
 
-      {/* Import from OpenStreetMap (SP-2) — search a city + category, tick the
-          venues, add them in bulk. Dedupe is server-side (osm_id). */}
-      <div style={styles.card}>
-        <h2 style={styles.h2}>Importuj z OpenStreetMap</h2>
-        <form style={styles.importRow} onSubmit={onSearchOsm}>
-          <input
-            style={styles.input}
+      <div className="bq-toolbar">
+        <div className="bq-toolbar-group">
+          <Select
+            value={filterCategory}
+            onChange={(e) => {
+              const v = e.target.value as "" | SafePlaceCategory;
+              setFilterCategory(v);
+              load(1, v, filterCity);
+            }}
+            aria-label="Filtr kategorii"
+            style={{ width: 200 }}
+          >
+            <option value="">Wszystkie kategorie</option>
+            {CATEGORY_KEYS.map((c) => (
+              <option key={c} value={c}>
+                {SAFE_PLACE_CATEGORY_META[c].label}
+              </option>
+            ))}
+          </Select>
+          <form
+            className="bq-toolbar-group"
+            onSubmit={(e) => {
+              e.preventDefault();
+              load(1, filterCategory, filterCity);
+            }}
+          >
+            <SearchInput
+              placeholder="Szukaj po mieście"
+              value={filterCity}
+              onChange={(e) => setFilterCity(e.target.value)}
+              style={{ minWidth: 220 }}
+              aria-label="Szukaj po mieście"
+            />
+            <Button type="submit">Szukaj</Button>
+          </form>
+        </div>
+      </div>
+
+      {error && <Alert tone="error">{error}</Alert>}
+      {importMsg && !importOpen && <Alert tone="success">{importMsg}</Alert>}
+
+      <DataTable
+        columns={columns}
+        rows={page?.data ?? []}
+        keyOf={(p) => p.id}
+        loading={loading}
+        emptyLabel="Brak bezpiecznych miejsc"
+        emptyIcon="mapPin"
+        emptyDescription="Dodaj miejsce ręcznie lub zaimportuj kandydatów z OpenStreetMap."
+        emptyAction={
+          <Button variant="primary" icon="plus" onClick={startCreate}>
+            Dodaj miejsce
+          </Button>
+        }
+      />
+      {page && (
+        <Pagination
+          page={page.page}
+          totalPages={page.totalPages}
+          total={page.total}
+          disabled={loading}
+          onPage={(p) => load(p, filterCategory, filterCity)}
+        />
+      )}
+
+      {/* ---- Create/edit drawer ---- */}
+      <Drawer
+        open={formOpen}
+        onClose={closeForm}
+        title={editingId ? "Edytuj miejsce" : "Nowe miejsce"}
+        subtitle="Dodawaj tylko miejsca zweryfikowane przez zespół."
+        footer={
+          <>
+            <Button onClick={closeForm}>Anuluj</Button>
+            <Button
+              type="submit"
+              form="safe-place-form"
+              variant="primary"
+              loading={busy}
+            >
+              {busy
+                ? "Zapisywanie…"
+                : editingId
+                  ? "Zapisz zmiany"
+                  : "Dodaj miejsce"}
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="safe-place-form"
+          onSubmit={onSubmit}
+          style={{ display: "flex", flexDirection: "column", gap: 16 }}
+        >
+          <Field label="Nazwa">
+            <Input
+              placeholder="np. Tęczowa Kawiarnia"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus={!editingId}
+            />
+          </Field>
+
+          <div className="bq-field">
+            <span className="bq-label">Kategoria</span>
+            <div className="bq-chip-row">
+              {CATEGORY_KEYS.map((c) => {
+                const meta = SAFE_PLACE_CATEGORY_META[c];
+                const selected = category === c;
+                return (
+                  <button
+                    type="button"
+                    key={c}
+                    className="bq-chip"
+                    aria-pressed={selected}
+                    onClick={() => setCategory(c)}
+                    style={{
+                      color: selected ? "#FFFFFF" : meta.color,
+                      background: selected ? meta.color : `${meta.color}10`,
+                      borderColor: selected ? meta.color : `${meta.color}50`,
+                    }}
+                  >
+                    {meta.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <Field label="Opis (opcjonalnie)">
+            <Textarea
+              placeholder="Krótki opis miejsca"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </Field>
+
+          <div className="bq-field">
+            <span className="bq-label">Udogodnienia (opcjonalnie)</span>
+            <p className="bq-help" style={{ marginTop: -2 }}>
+              Zaznaczaj wyłącznie udogodnienia potwierdzone przez zespół — brak
+              zaznaczenia oznacza „nieznane", nigdy „niedostępne".
+            </p>
+            <div className="bq-chip-row">
+              {ACCESSIBILITY_FEATURES.map((f) => {
+                const selected = accessibility.includes(f);
+                return (
+                  <button
+                    type="button"
+                    key={f}
+                    className="bq-chip"
+                    aria-pressed={selected}
+                    onClick={() => toggleFeature(f)}
+                    style={
+                      selected
+                        ? {
+                            color: "#FFFFFF",
+                            background: "var(--brand-500)",
+                            borderColor: "var(--brand-500)",
+                          }
+                        : undefined
+                    }
+                  >
+                    <Icon name={FEATURE_ICONS[f]} size={14} />
+                    {ACCESSIBILITY_FEATURE_LABELS[f]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bq-field">
+            <span className="bq-label">
+              Zdjęcie (opcjonalnie — JPG/PNG/WebP, do 5 MB)
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {imagePreview ? (
+                <img
+                  src={imagePreview}
+                  alt=""
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 12,
+                    objectFit: "cover",
+                    border: "1px solid var(--gray-200)",
+                  }}
+                />
+              ) : (
+                <div
+                  className="bq-thumb-empty"
+                  style={{ width: 72, height: 72, borderRadius: 12 }}
+                >
+                  <Icon name="image" size={22} />
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label className="bq-btn bq-btn-secondary bq-btn-sm">
+                  <Icon name="downloadSimple" size={13} />
+                  {imageBusy
+                    ? "Przesyłanie…"
+                    : imagePreview
+                      ? "Zmień zdjęcie"
+                      : "Dodaj zdjęcie"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={onPickImage}
+                    disabled={imageBusy}
+                    style={{ display: "none" }}
+                  />
+                </label>
+                {imagePreview ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={imageBusy}
+                    onClick={removeImage}
+                  >
+                    Usuń zdjęcie
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            {imageError ? <Alert tone="error">{imageError}</Alert> : null}
+          </div>
+
+          <div className="bq-grid-2">
+            <Field label="Adres (opcjonalnie)">
+              <Input
+                placeholder="Ulica i numer"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </Field>
+            <Field label="Miasto (opcjonalnie)">
+              <Input
+                placeholder="np. Warszawa"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+              />
+            </Field>
+          </div>
+
+          <div className="bq-field">
+            <span className="bq-label">
+              Współrzędne (opcjonalnie — mapę/pin dodamy wkrótce)
+            </span>
+            <div className="bq-grid-2">
+              <Input
+                placeholder="Szerokość (lat)"
+                inputMode="decimal"
+                value={latitude}
+                onChange={(e) => setLatitude(e.target.value)}
+                aria-label="Szerokość geograficzna"
+              />
+              <Input
+                placeholder="Długość (lng)"
+                inputMode="decimal"
+                value={longitude}
+                onChange={(e) => setLongitude(e.target.value)}
+                aria-label="Długość geograficzna"
+              />
+            </div>
+          </div>
+
+          {formError && <Alert tone="error">{formError}</Alert>}
+        </form>
+      </Drawer>
+
+      {/* ---- Import from OpenStreetMap drawer (SP-2) — search a city +
+           category, tick the venues, add them in bulk. Dedupe is server-side
+           (osm_id). ---- */}
+      <Drawer
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Importuj z OpenStreetMap"
+        subtitle="Wyniki to pula kandydatów, nie zweryfikowana lista — każde miejsce wymaga oceny zespołu przed publikacją."
+        footer={
+          candidates.length > 0 ? (
+            <>
+              <Button onClick={() => setImportOpen(false)}>Zamknij</Button>
+              <Button
+                variant="primary"
+                icon="plus"
+                loading={importing}
+                disabled={importing || selectedCount === 0}
+                onClick={onImportSelected}
+              >
+                {importing
+                  ? "Dodawanie…"
+                  : `Dodaj zaznaczone (${selectedCount})`}
+              </Button>
+            </>
+          ) : (
+            <Button onClick={() => setImportOpen(false)}>Zamknij</Button>
+          )
+        }
+      >
+        <form
+          onSubmit={onSearchOsm}
+          style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+        >
+          <Input
             placeholder="Miasto (np. Warszawa)"
             value={importCity}
             onChange={(e) => setImportCity(e.target.value)}
+            style={{ flex: 1, minWidth: 160 }}
+            aria-label="Miasto do wyszukania"
+            autoFocus
           />
-          <select
-            style={styles.select}
+          <Select
             value={importCategory}
             onChange={(e) =>
               setImportCategory(e.target.value as SafePlaceCategory)
             }
+            aria-label="Kategoria do wyszukania"
+            style={{ width: 170 }}
           >
             {CATEGORY_KEYS.map((c) => (
               <option key={c} value={c}>
                 {SAFE_PLACE_CATEGORY_META[c].label}
               </option>
             ))}
-          </select>
-          <button
+          </Select>
+          <Button
             type="submit"
-            style={styles.primaryButton}
-            disabled={searching}
+            variant="primary"
+            icon="magnifyingGlass"
+            loading={searching}
           >
-            {searching ? "Szukam…" : "Szukaj w OSM"}
-          </button>
+            {searching ? "Szukam…" : "Szukaj"}
+          </Button>
         </form>
-        {searchError && <p style={styles.error}>{searchError}</p>}
-        {importMsg && <p style={styles.muted}>{importMsg}</p>}
+
+        {searchError && <Alert tone="error">{searchError}</Alert>}
+        {importMsg && <Alert tone="success">{importMsg}</Alert>}
 
         {candidates.length > 0 && (
           <>
-            <div style={styles.importHeader}>
-              <label style={styles.selectAll}>
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  onChange={toggleAll}
-                />
-                Zaznacz wszystkie ({candidates.length})
-              </label>
-            </div>
-            <div style={styles.candidateList}>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--gray-700)",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+              />
+              Zaznacz wszystkie ({candidates.length})
+            </label>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                border: "1px solid var(--gray-200)",
+                borderRadius: 12,
+                overflow: "hidden",
+              }}
+            >
               {candidates.map((c, i) => (
-                <div key={c.osmId} style={styles.candidateRow}>
+                <div
+                  key={c.osmId}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "10px 12px",
+                    borderBottom:
+                      i === candidates.length - 1
+                        ? "none"
+                        : "1px solid var(--gray-100)",
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={c.selected}
+                    aria-label={`Zaznacz ${c.name}`}
                     onChange={() =>
                       setCandidates((cs) =>
                         cs.map((x, j) =>
@@ -673,13 +918,23 @@ export function SafePlacesPage() {
                       )
                     }
                   />
-                  <div style={styles.candidateInfo}>
-                    <span style={styles.candidateName}>{c.name}</span>
-                    {c.address && <span style={styles.muted}>{c.address}</span>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span
+                      className="bq-td-strong"
+                      style={{ display: "block", fontSize: 13.5 }}
+                    >
+                      {c.name}
+                    </span>
+                    {c.address && (
+                      <span style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                        {c.address}
+                      </span>
+                    )}
                   </div>
-                  <select
-                    style={styles.candidateCategory}
+                  <Select
                     value={c.category}
+                    aria-label={`Kategoria dla ${c.name}`}
+                    style={{ width: 150, padding: "5px 28px 5px 10px" }}
                     onChange={(e) =>
                       setCandidates((cs) =>
                         cs.map((x, j) =>
@@ -698,297 +953,17 @@ export function SafePlacesPage() {
                         {SAFE_PLACE_CATEGORY_META[cat].label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               ))}
             </div>
-            <div style={styles.formActions}>
-              <button
-                type="button"
-                style={styles.primaryButton}
-                disabled={importing || selectedCount === 0}
-                onClick={onImportSelected}
-              >
-                {importing
-                  ? "Dodawanie…"
-                  : `Dodaj zaznaczone (${selectedCount})`}
-              </button>
-            </div>
+            <p className="bq-help">
+              Dane © OpenStreetMap contributors. Duplikaty są pomijane
+              automatycznie.
+            </p>
           </>
         )}
-      </div>
-
-      <div style={styles.filterRow}>
-        <select
-          style={styles.select}
-          value={filterCategory}
-          onChange={(e) => {
-            const v = e.target.value as "" | SafePlaceCategory;
-            setFilterCategory(v);
-            load(1, v, filterCity);
-          }}
-        >
-          <option value="">Wszystkie kategorie</option>
-          {CATEGORY_KEYS.map((c) => (
-            <option key={c} value={c}>
-              {SAFE_PLACE_CATEGORY_META[c].label}
-            </option>
-          ))}
-        </select>
-        <form
-          style={styles.searchInline}
-          onSubmit={(e) => {
-            e.preventDefault();
-            load(1, filterCategory, filterCity);
-          }}
-        >
-          <input
-            style={styles.input}
-            placeholder="Szukaj po mieście"
-            value={filterCity}
-            onChange={(e) => setFilterCity(e.target.value)}
-          />
-          <button type="submit" style={styles.ghostButton}>
-            Szukaj
-          </button>
-        </form>
-      </div>
-
-      {error && <p style={styles.error}>{error}</p>}
-      {loading ? (
-        <p style={styles.muted}>Ładowanie…</p>
-      ) : (
-        <>
-          <DataTable
-            columns={columns}
-            rows={page?.data ?? []}
-            keyOf={(p) => p.id}
-            emptyLabel="Brak bezpiecznych miejsc."
-          />
-          {page && page.totalPages > 1 && (
-            <div style={styles.pager}>
-              <button
-                style={styles.ghostButton}
-                disabled={pageNum <= 1}
-                onClick={() => load(pageNum - 1, filterCategory, filterCity)}
-              >
-                Poprzednia
-              </button>
-              <span style={styles.muted}>
-                {page.page} / {page.totalPages}
-              </span>
-              <button
-                style={styles.ghostButton}
-                disabled={pageNum >= page.totalPages}
-                onClick={() => load(pageNum + 1, filterCategory, filterCity)}
-              >
-                Następna
-              </button>
-            </div>
-          )}
-        </>
-      )}
+      </Drawer>
     </section>
   );
 }
-
-const INDIGO = "#4F46E5";
-
-const styles: Record<string, CSSProperties> = {
-  h1: { fontSize: 24, marginBottom: 16 },
-  h2: { fontSize: 16, margin: "0 0 8px" },
-  card: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-    background: "#FFFFFF",
-    padding: 24,
-    borderRadius: 14,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-    marginBottom: 24,
-    maxWidth: 640,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#374151",
-    marginTop: 6,
-  },
-  input: {
-    padding: "10px 12px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    fontSize: 14,
-    fontFamily: "inherit",
-    width: "100%",
-    boxSizing: "border-box",
-  },
-  grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
-  chipRow: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 2 },
-  pickChip: {
-    padding: "6px 12px",
-    borderRadius: 999,
-    border: "1px solid",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-    fontFamily: "inherit",
-  },
-  chip: {
-    display: "inline-block",
-    padding: "3px 10px",
-    borderRadius: 999,
-    border: "1px solid",
-    fontSize: 12,
-    fontWeight: 600,
-  },
-  coordsOk: { color: "#059669", fontSize: 13, fontWeight: 600 },
-  filterRow: {
-    display: "flex",
-    gap: 12,
-    marginBottom: 16,
-    maxWidth: 640,
-    flexWrap: "wrap",
-  },
-  select: {
-    padding: "10px 12px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    fontSize: 14,
-    fontFamily: "inherit",
-    background: "#FFFFFF",
-  },
-  searchInline: { display: "flex", gap: 8, flex: 1, minWidth: 220 },
-  formActions: { display: "flex", gap: 8, marginTop: 10 },
-  primaryButton: {
-    padding: "10px 18px",
-    borderRadius: 8,
-    border: "none",
-    background: INDIGO,
-    color: "#FFFFFF",
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  ghostButton: {
-    padding: "10px 16px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    background: "#FFFFFF",
-    color: "#111827",
-    cursor: "pointer",
-  },
-  linkButton: {
-    background: "transparent",
-    border: "none",
-    color: INDIGO,
-    cursor: "pointer",
-    fontSize: 14,
-    padding: 0,
-  },
-  actions: { display: "flex", gap: 12 },
-  pager: { display: "flex", gap: 12, alignItems: "center", marginTop: 16 },
-  muted: { color: "#6B7280", fontSize: 14 },
-  error: { color: "#DC2626", fontSize: 14, margin: "6px 0 0" },
-  imageRow: { display: "flex", alignItems: "center", gap: 12, marginTop: 2 },
-  imagePreview: {
-    width: 72,
-    height: 72,
-    borderRadius: 12,
-    objectFit: "cover",
-    border: "1px solid #D1D5DB",
-  },
-  imagePlaceholder: {
-    width: 72,
-    height: 72,
-    borderRadius: 12,
-    border: "1px dashed #D1D5DB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 11,
-    color: "#9CA3AF",
-    textAlign: "center",
-  },
-  thumb: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    objectFit: "cover",
-    display: "block",
-  },
-  thumbEmpty: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    background: "#F3F4F6",
-  },
-  imageControls: { display: "flex", flexDirection: "column", gap: 6 },
-  uploadBtn: {
-    padding: "8px 14px",
-    borderRadius: 8,
-    border: "1px solid #6D28D9",
-    color: "#6D28D9",
-    background: "#F5F3FF",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-    textAlign: "center",
-  },
-  removeBtn: {
-    padding: "6px 14px",
-    borderRadius: 8,
-    border: "1px solid #D1D5DB",
-    background: "#FFFFFF",
-    color: "#374151",
-    fontSize: 13,
-    cursor: "pointer",
-    fontFamily: "inherit",
-  },
-  importRow: {
-    display: "flex",
-    gap: 8,
-    flexWrap: "wrap",
-    alignItems: "center",
-  },
-  importHeader: { marginTop: 12, marginBottom: 4 },
-  selectAll: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#374151",
-    cursor: "pointer",
-  },
-  candidateList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-    maxHeight: 320,
-    overflowY: "auto",
-    border: "1px solid #E5E7EB",
-    borderRadius: 8,
-    padding: 8,
-  },
-  candidateRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "6px 4px",
-  },
-  candidateInfo: {
-    display: "flex",
-    flexDirection: "column",
-    flex: 1,
-    minWidth: 0,
-  },
-  candidateName: { fontSize: 14, fontWeight: 600, color: "#111827" },
-  candidateCategory: {
-    padding: "6px 8px",
-    borderRadius: 6,
-    border: "1px solid #D1D5DB",
-    fontSize: 13,
-    fontFamily: "inherit",
-    background: "#FFFFFF",
-  },
-};

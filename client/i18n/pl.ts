@@ -253,8 +253,8 @@ export const pl = {
   },
 
   // Resources tab (P-37 Support & Education, design ref: profile-resources.png):
-  // a hub (categories grid + featured strip) → a filtered list → a detail.
-  // Admin-curated content; read-only for users.
+  // one directory screen (search + category chips + featured section + list)
+  // that pushes a detail. Admin-curated content; read-only for users.
   resources: {
     title: "Wsparcie", // big header ("Resources")
     subtitle: "Wsparcie, informacje i narzędzia dla społeczności LGBTQ+.", // "Support, information and tools for the LGBTQ+ community."

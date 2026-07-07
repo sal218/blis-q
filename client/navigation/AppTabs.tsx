@@ -31,7 +31,8 @@ import { strings } from "@/i18n";
 // Chat · Profile. The Events tab is a stack: its landing screen hosts a segmented
 // control (Events / Safe places / Communities) and pushes Community detail/create
 // on top. The Wsparcie (Resources / Support & Education, P-37) tab is a stack:
-// its hub pushes a filtered list and a resource detail. The Chat tab is a stack:
+// its directory screen (search + category chips + featured + list) pushes a
+// resource detail. The Chat tab is a stack:
 // the Messages inbox pushes the chat thread. Profile is a stack so it can host
 // the blocked-users screen. (There is intentionally no Communities tab —
 // communities live under Events → Communities.)

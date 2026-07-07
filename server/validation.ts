@@ -609,8 +609,8 @@ export const safePlacesListQuerySchema = z.object({
     }),
 });
 
-// Resources list (P-37): offset/page + optional category filter only (no
-// city/search/near — those are safe-places-specific).
+// Resources list (P-37): offset/page + an optional category filter + an optional
+// server-side search (case-insensitive substring over title+body, LIKE-escaped).
 export const resourcesListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce

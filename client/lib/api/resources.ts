@@ -9,9 +9,9 @@ import {
 // Typed client for the Resources read API (docs/API.md §11; P-37 Support &
 // Education). Read-only for users: an offset-paged, admin-curated list of
 // support/education content (featured-first). The screens go through these
-// functions, never fetch directly. NO `search` param server-side — the list
-// endpoint takes page + category only; the mobile search box filters the loaded
-// items client-side (server-side search deferred, P-28).
+// functions, never fetch directly. The list supports page + an optional
+// category filter + an optional server-side `search` (case-insensitive
+// substring over title + body).
 
 export type ResourcesResult<T> = ApiResult<T, CommonApiError>;
 

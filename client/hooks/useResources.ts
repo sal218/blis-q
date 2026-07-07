@@ -1,29 +1,28 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { listResources } from "@/lib/api/resources";
 import { strings } from "@/i18n";
 import type { ResourceDTO, ResourceCategory } from "@shared/types";
 
-// Data hook for the mobile Resources list (P-37): OFFSET pagination (load-more
-// appends the next page), a SERVER-SIDE category filter, a CLIENT-SIDE search
-// over the loaded pages (the list endpoint has no ?search= — P-28), a silent
-// refetch-on-focus (curated content changes between visits), and a monotonic
-// stale-response guard (mirrors useSafePlaces): a response is applied only if
-// its sequence id is still the latest. Read-only — no save/report (the DTO has
-// no `saved`).
+// Data hook for the mobile Resources directory (P-37): OFFSET pagination
+// (load-more appends the next page), a SERVER-SIDE category filter AND search
+// (case-insensitive over title+body), a silent refetch-on-focus (curated content
+// changes between visits), and a monotonic stale-response guard (mirrors
+// useSafePlaces): a response is applied only if its sequence id is still the
+// latest. Read-only — no save/report (the DTO has no `saved`).
 
 export type ResourcesStatus = "loading" | "ready" | "error";
 
 type LoadMode = "replace" | "refresh" | "more" | "silent";
 
 export type UseResources = {
-  items: ResourceDTO[]; // the client-search-filtered view of the loaded pages
+  items: ResourceDTO[];
   status: ResourcesStatus;
   errorMessage: string | null;
   refreshing: boolean;
   loadingMore: boolean;
   category: ResourceCategory | null; // active filter (null = all)
-  search: string; // active client-side search term ("" = all)
+  search: string; // active search term ("" = all)
   setCategory: (category: ResourceCategory | null) => void;
   setSearch: (search: string) => void;
   refresh: () => void;
@@ -31,26 +30,24 @@ export type UseResources = {
   retry: () => void;
 };
 
-export function useResources(
-  initialCategory: ResourceCategory | null = null,
-): UseResources {
-  const [rawItems, setRawItems] = useState<ResourceDTO[]>([]);
+export function useResources(): UseResources {
+  const [items, setItems] = useState<ResourceDTO[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [status, setStatus] = useState<ResourcesStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [category, setCategoryState] = useState<ResourceCategory | null>(
-    initialCategory,
-  );
+  const [category, setCategoryState] = useState<ResourceCategory | null>(null);
   const [search, setSearchState] = useState("");
 
   const requestSeq = useRef(0);
   const loadedOnce = useRef(false);
-  // The category is read from a ref inside fetchPage so focus-refetch + load-more
-  // use the CURRENT filter (setCategory updates it synchronously before reload).
-  const categoryRef = useRef<ResourceCategory | null>(initialCategory);
+  // Filters are read from refs inside fetchPage so focus-refetch + load-more use
+  // the CURRENT filter (setCategory/setSearch update them synchronously before
+  // the reload they trigger).
+  const categoryRef = useRef<ResourceCategory | null>(null);
+  const searchRef = useRef("");
 
   const fetchPage = useCallback(async (targetPage: number, mode: LoadMode) => {
     const seq = ++requestSeq.current;
@@ -62,6 +59,7 @@ export function useResources(
     const result = await listResources({
       page: targetPage,
       category: categoryRef.current ?? undefined,
+      search: searchRef.current || undefined,
     });
 
     if (mode === "more") setLoadingMore(false);
@@ -71,7 +69,7 @@ export function useResources(
 
     if (result.ok) {
       const pageData = result.data;
-      setRawItems((prev) =>
+      setItems((prev) =>
         mode === "more" ? [...prev, ...pageData.data] : pageData.data,
       );
       setPage(pageData.page);
@@ -94,8 +92,8 @@ export function useResources(
   const refresh = useCallback(() => fetchPage(1, "refresh"), [fetchPage]);
   const retry = useCallback(() => fetchPage(1, "replace"), [fetchPage]);
 
-  // Switch the (server-side) category filter (null = all). Ref FIRST so the
-  // reload uses it. No-op if unchanged; requestSeq drops any in-flight old page.
+  // Switch the category filter (null = all). Ref FIRST so the reload uses it. A
+  // no-op if unchanged; requestSeq drops any in-flight page from the old filter.
   const setCategory = useCallback(
     (next: ResourceCategory | null) => {
       if (next === categoryRef.current) return;
@@ -106,12 +104,19 @@ export function useResources(
     [fetchPage],
   );
 
-  // Client-side search over the loaded pages (title + body). The list endpoint
-  // has no ?search=, so this only matches what's already fetched — a known
-  // limitation (server-side search is P-28). Just updates state; no refetch.
-  const setSearch = useCallback((next: string) => {
-    setSearchState(next);
-  }, []);
+  // Apply the server-side search (called debounced as the user types). Trimmed;
+  // a blank term clears it → full list. No-op if unchanged; requestSeq drops any
+  // in-flight page from the previous term.
+  const setSearch = useCallback(
+    (next: string) => {
+      const trimmed = next.trim();
+      if (trimmed === searchRef.current) return;
+      searchRef.current = trimmed;
+      setSearchState(trimmed);
+      void fetchPage(1, "replace");
+    },
+    [fetchPage],
+  );
 
   const loadMore = useCallback(() => {
     if (loadingMore || refreshing || status !== "ready" || page >= totalPages) {
@@ -119,15 +124,6 @@ export function useResources(
     }
     fetchPage(page + 1, "more");
   }, [fetchPage, loadingMore, refreshing, status, page, totalPages]);
-
-  const items = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rawItems;
-    return rawItems.filter(
-      (r) =>
-        r.title.toLowerCase().includes(q) || r.body.toLowerCase().includes(q),
-    );
-  }, [rawItems, search]);
 
   return {
     items,

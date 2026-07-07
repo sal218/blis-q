@@ -45,7 +45,11 @@ describe("useResources", () => {
     const { result } = renderHook(() => useResources());
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(result.current.items.map((r) => r.id)).toEqual(["r1"]);
-    expect(listMock).toHaveBeenLastCalledWith({ page: 1, category: undefined });
+    expect(listMock).toHaveBeenLastCalledWith({
+      page: 1,
+      category: undefined,
+      search: undefined,
+    });
   });
 
   it("setCategory refetches page 1 with the new category", async () => {
@@ -60,6 +64,7 @@ describe("useResources", () => {
       expect(listMock).toHaveBeenLastCalledWith({
         page: 1,
         category: "legal_rights",
+        search: undefined,
       }),
     );
     expect(result.current.category).toBe("legal_rights");
@@ -86,32 +91,24 @@ describe("useResources", () => {
     expect(listMock.mock.calls.length).toBe(calls);
   });
 
-  it("search filters the loaded items client-side WITHOUT refetching", async () => {
-    listMock.mockResolvedValue(
-      pageOf(
-        [
-          resource({ id: "r1", title: "Telefon zaufania", body: "kryzys" }),
-          resource({ id: "r2", title: "Poradnik prawny", body: "prawa" }),
-        ],
-        1,
-        1,
-      ),
-    );
+  it("setSearch refetches page 1 with the (server-side) search term", async () => {
+    listMock.mockResolvedValue(pageOf([resource({ id: "r1" })], 1, 1));
     const { result } = renderHook(() => useResources());
     await waitFor(() => expect(result.current.status).toBe("ready"));
-    const calls = listMock.mock.calls.length;
 
-    act(() => {
-      result.current.setSearch("prawn");
+    listMock.mockResolvedValue(pageOf([resource({ id: "r2" })], 1, 1));
+    await act(async () => {
+      result.current.setSearch("zaufanie");
     });
+    await waitFor(() =>
+      expect(listMock).toHaveBeenLastCalledWith({
+        page: 1,
+        category: undefined,
+        search: "zaufanie",
+      }),
+    );
+    expect(result.current.search).toBe("zaufanie");
     expect(result.current.items.map((r) => r.id)).toEqual(["r2"]);
-    // No server round-trip — the list endpoint has no ?search=.
-    expect(listMock.mock.calls.length).toBe(calls);
-
-    act(() => {
-      result.current.setSearch("");
-    });
-    expect(result.current.items.map((r) => r.id)).toEqual(["r1", "r2"]);
   });
 
   it("a failed load → error, and retry refetches", async () => {

@@ -1,6 +1,7 @@
 jest.mock("@/hooks/useResources", () => ({ useResources: jest.fn() }));
 
-import { render, screen, fireEvent } from "@testing-library/react-native";
+import { render, screen, fireEvent, act } from "@testing-library/react-native";
+import { Linking } from "react-native";
 import { ResourcesScreen } from "@/screens/resources/ResourcesScreen";
 import { useResources } from "@/hooks/useResources";
 import { strings } from "@/i18n";
@@ -38,87 +39,142 @@ function state(over: Partial<ReturnType<typeof useResources>> = {}) {
   };
 }
 
-const renderHub = (nav: { navigate: jest.Mock }) =>
+const renderScreen = (nav: { navigate: jest.Mock }) =>
   render(<ResourcesScreen navigation={nav as never} route={{} as never} />);
 
 beforeEach(() => rMock.mockReset());
 
-describe("ResourcesScreen (hub)", () => {
-  it("renders the header, subtitle and all 6 category cards", () => {
+describe("ResourcesScreen (directory)", () => {
+  it("renders the header, subtitle, inline search and category chips", () => {
     rMock.mockReturnValue(state());
-    renderHub({ navigate: jest.fn() });
+    renderScreen({ navigate: jest.fn() });
     expect(screen.getByText(strings.resources.title)).toBeTruthy();
     expect(screen.getByText(strings.resources.subtitle)).toBeTruthy();
-    expect(screen.getByText(strings.resources.categoriesHeader)).toBeTruthy();
+    // The search is a real inline input (not a button that navigates away).
+    expect(
+      screen.getByPlaceholderText(strings.resources.searchPlaceholder),
+    ).toBeTruthy();
+    expect(screen.getByText(strings.resources.filterAll)).toBeTruthy();
     expect(
       screen.getByText(strings.resources.categories.mental_health),
     ).toBeTruthy();
-    expect(
-      screen.getByText(strings.resources.categories.education_careers),
-    ).toBeTruthy();
   });
 
-  it("shows the featured strip only when there are featured resources", () => {
-    // No featured → the section (and its header) is absent.
-    rMock.mockReturnValue(
-      state({ items: [resource({ id: "r1", featured: false })] }),
-    );
-    const { rerender } = renderHub({ navigate: jest.fn() });
-    expect(screen.queryByText(strings.resources.featuredTitle)).toBeNull();
-
-    rMock.mockReturnValue(
-      state({
-        items: [resource({ id: "r1", title: "Trevor", featured: true })],
-      }),
-    );
-    rerender(
-      <ResourcesScreen
-        navigation={{ navigate: jest.fn() } as never}
-        route={{} as never}
-      />,
-    );
-    expect(screen.getByText(strings.resources.featuredTitle)).toBeTruthy();
-    expect(screen.getByText("Trevor")).toBeTruthy();
-  });
-
-  it("shows a skeleton while the featured strip is loading", () => {
+  it("shows the skeleton on the first load, then the cards", () => {
     rMock.mockReturnValue(state({ status: "loading", items: [] }));
-    renderHub({ navigate: jest.fn() });
+    const nav = { navigate: jest.fn() };
+    const { rerender } = renderScreen(nav);
     expect(screen.getByTestId("card-list-skeleton")).toBeTruthy();
-  });
 
-  it("a category card navigates to the list preselected to that category", () => {
-    rMock.mockReturnValue(state());
-    const nav = { navigate: jest.fn() };
-    renderHub(nav);
-    fireEvent.press(
-      screen.getByText(strings.resources.categories.legal_rights),
+    rMock.mockReturnValue(
+      state({ items: [resource({ id: "Materiał Alpha" })] }),
     );
-    expect(nav.navigate).toHaveBeenCalledWith("ResourcesList", {
-      category: "legal_rights",
-    });
+    rerender(<ResourcesScreen navigation={nav as never} route={{} as never} />);
+    expect(screen.queryByTestId("card-list-skeleton")).toBeNull();
+    expect(screen.getByText("Materiał Alpha")).toBeTruthy();
   });
 
-  it("the search box and 'view all' navigate to the full list", () => {
-    rMock.mockReturnValue(state());
-    const nav = { navigate: jest.fn() };
-    renderHub(nav);
-    fireEvent.press(screen.getByText(strings.resources.searchPlaceholder));
-    expect(nav.navigate).toHaveBeenCalledWith("ResourcesList", {});
-
-    fireEvent.press(screen.getByText(strings.resources.viewAll));
-    expect(nav.navigate).toHaveBeenCalledWith("ResourcesList", {});
-  });
-
-  it("a featured card opens the detail screen", () => {
+  it("in the default view, shows a 'Polecane' featured section + the rest list", () => {
     rMock.mockReturnValue(
       state({
-        items: [resource({ id: "r9", title: "ILGA", featured: true })],
+        items: [
+          resource({ id: "Trevor", featured: true }),
+          resource({ id: "Zwykły wpis", featured: false }),
+        ],
+      }),
+    );
+    renderScreen({ navigate: jest.fn() });
+    expect(screen.getByText(strings.resources.featuredTitle)).toBeTruthy();
+    expect(screen.getByText(strings.resources.allTitle)).toBeTruthy();
+    expect(screen.getByText("Trevor")).toBeTruthy();
+    expect(screen.getByText("Zwykły wpis")).toBeTruthy();
+  });
+
+  it("hides the featured section when a category is active", () => {
+    rMock.mockReturnValue(
+      state({
+        category: "mental_health",
+        items: [resource({ id: "X", featured: true })],
+      }),
+    );
+    renderScreen({ navigate: jest.fn() });
+    expect(screen.queryByText(strings.resources.featuredTitle)).toBeNull();
+  });
+
+  it("tapping a category chip calls setCategory; 'Wszystkie' clears it", () => {
+    const setCategory = jest.fn();
+    rMock.mockReturnValue(state({ category: "legal_rights", setCategory }));
+    renderScreen({ navigate: jest.fn() });
+    fireEvent.press(
+      screen.getByText(strings.resources.categories.mental_health),
+    );
+    expect(setCategory).toHaveBeenCalledWith("mental_health");
+    fireEvent.press(screen.getByText(strings.resources.filterAll));
+    expect(setCategory).toHaveBeenCalledWith(null);
+  });
+
+  it("typing in the search box calls setSearch (debounced)", () => {
+    jest.useFakeTimers();
+    const setSearch = jest.fn();
+    rMock.mockReturnValue(state({ setSearch }));
+    renderScreen({ navigate: jest.fn() });
+    const input = screen.getByPlaceholderText(
+      strings.resources.searchPlaceholder,
+    );
+    fireEvent.changeText(input, "zaufan");
+    expect(setSearch).not.toHaveBeenCalledWith("zaufan");
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(setSearch).toHaveBeenCalledWith("zaufan");
+    jest.useRealTimers();
+  });
+
+  it("tapping a card opens the detail — and never opens a link directly (P3)", () => {
+    const openURL = jest
+      .spyOn(Linking, "openURL")
+      .mockResolvedValue(undefined as unknown as void);
+    rMock.mockReturnValue(
+      state({
+        items: [
+          resource({
+            id: "r1",
+            title: "Linkowany",
+            url: "https://example.org",
+          }),
+        ],
       }),
     );
     const nav = { navigate: jest.fn() };
-    renderHub(nav);
-    fireEvent.press(screen.getByText("ILGA"));
-    expect(nav.navigate).toHaveBeenCalledWith("ResourceDetail", { id: "r9" });
+    renderScreen(nav);
+    fireEvent.press(screen.getByText("Linkowany"));
+    expect(nav.navigate).toHaveBeenCalledWith("ResourceDetail", { id: "r1" });
+    expect(openURL).not.toHaveBeenCalled();
+    openURL.mockRestore();
+  });
+
+  it("empty-copy precedence: plain / category / search", () => {
+    rMock.mockReturnValue(state({ items: [] }));
+    const nav = { navigate: jest.fn() };
+    const { rerender } = renderScreen(nav);
+    expect(screen.getByText(strings.resources.empty)).toBeTruthy();
+
+    rMock.mockReturnValue(state({ items: [], category: "legal_rights" }));
+    rerender(<ResourcesScreen navigation={nav as never} route={{} as never} />);
+    expect(screen.getByText(strings.resources.emptyCategory)).toBeTruthy();
+
+    rMock.mockReturnValue(state({ items: [], search: "zzz" }));
+    rerender(<ResourcesScreen navigation={nav as never} route={{} as never} />);
+    expect(screen.getByText(strings.resources.emptySearch)).toBeTruthy();
+  });
+
+  it("shows the error state with a retry", () => {
+    const retry = jest.fn();
+    rMock.mockReturnValue(
+      state({ items: [], status: "error", errorMessage: "Błąd", retry }),
+    );
+    renderScreen({ navigate: jest.fn() });
+    fireEvent.press(screen.getByText(strings.resources.retry));
+    expect(retry).toHaveBeenCalled();
   });
 });

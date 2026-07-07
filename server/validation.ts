@@ -291,6 +291,7 @@ export const updateSafePlaceSchema = z
 const MAX_RESOURCE_TITLE_LENGTH = 200;
 const MAX_RESOURCE_BODY_LENGTH = 5000;
 const MAX_URL_LENGTH = 2048;
+const MAX_RESOURCE_SEARCH_LENGTH = 100;
 
 export const resourceCategorySchema = z.enum(RESOURCE_CATEGORIES);
 
@@ -619,6 +620,9 @@ export const resourcesListQuerySchema = z.object({
     .max(MAX_OFFSET_PAGE_SIZE)
     .default(DEFAULT_OFFSET_PAGE_SIZE),
   category: resourceCategorySchema.optional(),
+  // Optional case-insensitive substring search over title + body (LIKE-escaped
+  // in storage). Blank/whitespace is rejected by min(1) after trim.
+  search: z.string().trim().min(1).max(MAX_RESOURCE_SEARCH_LENGTH).optional(),
 });
 
 // Admin reports queue: offset/page + optional status filter (read-only this

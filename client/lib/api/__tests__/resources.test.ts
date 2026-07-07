@@ -44,12 +44,26 @@ describe("listResources", () => {
     );
   });
 
-  it("composes page + (encoded) category — never a search param", async () => {
+  it("composes page + (encoded) category + (encoded) search", async () => {
     fetchMock.mockResolvedValue(res(200, PAGE));
-    await listResources({ page: 2, category: "legal_rights" });
+    await listResources({
+      page: 2,
+      category: "legal_rights",
+      search: "Kraków",
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       "GET",
-      "/api/v1/resources?page=2&category=legal_rights",
+      "/api/v1/resources?page=2&category=legal_rights&search=Krak%C3%B3w",
+      undefined,
+    );
+  });
+
+  it("omits a blank search", async () => {
+    fetchMock.mockResolvedValue(res(200, PAGE));
+    await listResources({ search: "   " });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "GET",
+      "/api/v1/resources",
       undefined,
     );
   });

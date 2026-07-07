@@ -7,7 +7,6 @@ import {
   BookOpen,
 } from "@/components/icons/PhosphorIcons";
 import type { NavigatorScreenParams } from "@react-navigation/native";
-import type { ResourceCategory } from "@shared/types";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -25,7 +24,6 @@ import { ProfileScreen } from "@/screens/ProfileScreen";
 import { BlockedUsersScreen } from "@/screens/BlockedUsersScreen";
 import { AboutScreen } from "@/screens/AboutScreen";
 import { ResourcesScreen } from "@/screens/resources/ResourcesScreen";
-import { ResourcesListScreen } from "@/screens/resources/ResourcesListScreen";
 import { ResourceDetailScreen } from "@/screens/resources/ResourceDetailScreen";
 import { strings } from "@/i18n";
 
@@ -60,8 +58,6 @@ export type AppTabsParamList = {
 
 export type ResourcesStackParamList = {
   ResourcesHome: undefined;
-  // Optional preselected category (from a hub category card); omitted = all.
-  ResourcesList: { category?: ResourceCategory };
   ResourceDetail: { id: string };
 };
 
@@ -169,18 +165,14 @@ function ResourcesStack() {
       <ResourcesStackNav.Screen
         name="ResourcesHome"
         component={ResourcesScreen}
-        // The hub owns its big header + subtitle (design ref), so no native bar.
+        // The directory owns its header + search + filters, so no native bar.
         options={{ headerShown: false }}
-      />
-      <ResourcesStackNav.Screen
-        name="ResourcesList"
-        component={ResourcesListScreen}
-        options={{ title: strings.resources.listTitle }}
       />
       <ResourcesStackNav.Screen
         name="ResourceDetail"
         component={ResourceDetailScreen}
-        options={{ title: "" }}
+        // Full-bleed: the screen renders its own floating back button.
+        options={{ headerShown: false }}
       />
     </ResourcesStackNav.Navigator>
   );

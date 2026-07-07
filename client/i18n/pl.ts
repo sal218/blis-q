@@ -257,8 +257,8 @@ export const pl = {
   // Admin-curated content; read-only for users.
   resources: {
     title: "Wsparcie", // big header ("Resources")
-    listTitle: "Materiały", // list-screen header ("Resources" list)
     subtitle: "Wsparcie, informacje i narzędzia dla społeczności LGBTQ+.", // "Support, information and tools for the LGBTQ+ community."
+    allTitle: "Wszystkie materiały", // section header above the non-featured list
     searchPlaceholder: "Szukaj materiałów", // "Search resources"
     categoriesHeader: "Kategorie", // "Categories"
     featuredTitle: "Polecane materiały", // "Featured Resources"

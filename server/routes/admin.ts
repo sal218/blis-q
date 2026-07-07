@@ -966,6 +966,7 @@ async function handleListResources(
       page: q.page,
       pageSize: q.pageSize,
       category: q.category,
+      search: q.search,
     });
     const body: OffsetPage<ResourceDTO> = {
       data: rows.map(toResourceDTO),

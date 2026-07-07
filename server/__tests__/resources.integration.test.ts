@@ -188,6 +188,84 @@ describe("GET /api/v1/resources", () => {
     expect(titles).not.toContain("Legal one");
   });
 
+  it("searches over the title (case-insensitive) and excludes non-matches", async () => {
+    const admin = await seedUser();
+    const tok = `Zxq${Date.now()}`;
+    const hit = await seedResource(admin, {
+      title: `Telefon ${tok} zaufania`,
+    });
+    const miss = await seedResource(admin, { title: "Zupełnie inny wpis" });
+    mockUser = { id: await seedUser(), isAdmin: false };
+
+    const res = await request(app)
+      .get("/api/v1/resources")
+      .query({ search: tok.toLowerCase() });
+    expect(res.status).toBe(200);
+    const ids = res.body.data.map((r: { id: string }) => r.id);
+    expect(ids).toContain(hit);
+    expect(ids).not.toContain(miss);
+  });
+
+  it("searches over the body too", async () => {
+    const admin = await seedUser();
+    const tok = `Bod${Date.now()}`;
+    const id = await seedResource(admin, {
+      title: "Poradnik",
+      body: `Zawiera ${tok} w treści.`,
+    });
+    mockUser = { id: await seedUser(), isAdmin: false };
+
+    const res = await request(app)
+      .get("/api/v1/resources")
+      .query({ search: tok });
+    expect(res.body.data.map((r: { id: string }) => r.id)).toContain(id);
+  });
+
+  it("treats LIKE metacharacters as literal (escaped)", async () => {
+    const admin = await seedUser();
+    const stamp = Date.now();
+    const literal = await seedResource(admin, { title: `Rabat_${stamp}` });
+    const wildcard = await seedResource(admin, { title: `RabatX${stamp}` });
+    mockUser = { id: await seedUser(), isAdmin: false };
+
+    // "_" must match a literal underscore, NOT any character → only `literal`.
+    const res = await request(app)
+      .get("/api/v1/resources")
+      .query({ search: `Rabat_${stamp}` });
+    const ids = res.body.data.map((r: { id: string }) => r.id);
+    expect(ids).toContain(literal);
+    expect(ids).not.toContain(wildcard);
+  });
+
+  it("combines search with the category filter", async () => {
+    const admin = await seedUser();
+    const tok = `Cmb${Date.now()}`;
+    const mental = await seedResource(admin, {
+      title: `${tok} umysł`,
+      category: "mental_health",
+    });
+    const legal = await seedResource(admin, {
+      title: `${tok} prawo`,
+      category: "legal_rights",
+    });
+    mockUser = { id: await seedUser(), isAdmin: false };
+
+    const res = await request(app)
+      .get("/api/v1/resources")
+      .query({ search: tok, category: "mental_health" });
+    const ids = res.body.data.map((r: { id: string }) => r.id);
+    expect(ids).toContain(mental);
+    expect(ids).not.toContain(legal);
+  });
+
+  it("rejects a blank/whitespace search with 400", async () => {
+    mockUser = { id: await seedUser(), isAdmin: false };
+    const res = await request(app)
+      .get("/api/v1/resources")
+      .query({ search: "   " });
+    expect(res.status).toBe(400);
+  });
+
   it("rejects an out-of-set category with 400", async () => {
     mockUser = { id: await seedUser(), isAdmin: false };
     const res = await request(app)

@@ -29,10 +29,10 @@ function state(over: Partial<ReturnType<typeof useResource>> = {}) {
   };
 }
 
-const renderDetail = () =>
+const renderDetail = (nav: { goBack: jest.Mock } = { goBack: jest.fn() }) =>
   render(
     <ResourceDetailScreen
-      navigation={{} as never}
+      navigation={nav as never}
       route={{ params: { id: "r1" } } as never}
     />,
   );
@@ -50,6 +50,14 @@ describe("ResourceDetailScreen", () => {
     expect(
       screen.getByText("Bezpłatna, anonimowa linia wsparcia psychicznego."),
     ).toBeTruthy();
+  });
+
+  it("is full-bleed: renders its own back button that pops the stack", () => {
+    hookMock.mockReturnValue(state());
+    const nav = { goBack: jest.fn() };
+    renderDetail(nav);
+    fireEvent.press(screen.getByLabelText(strings.common.back));
+    expect(nav.goBack).toHaveBeenCalled();
   });
 
   it("shows the open-link CTA and opens the URL when the resource links out", () => {

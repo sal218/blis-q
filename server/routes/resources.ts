@@ -49,6 +49,7 @@ async function handleList(req: Request, res: Response): Promise<Response> {
       page: q.page,
       pageSize: q.pageSize,
       category: q.category,
+      search: q.search,
     });
 
     const body: OffsetPage<ResourceDTO> = {

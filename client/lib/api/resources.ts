@@ -15,17 +15,21 @@ import {
 
 export type ResourcesResult<T> = ApiResult<T, CommonApiError>;
 
-// GET /api/v1/resources — offset page + optional category. Featured-first, then
-// newest; soft-deleted excluded (server-side).
+// GET /api/v1/resources — offset page + optional category + optional search.
+// Featured-first, then newest; soft-deleted excluded (server-side). `search` is
+// a case-insensitive substring over title + body (blank omitted → full list).
 export function listResources(params: {
   page?: number;
   category?: ResourceCategory;
+  search?: string;
 }): Promise<ResourcesResult<OffsetPage<ResourceDTO>>> {
   const parts: string[] = [];
   if (params.page) parts.push(`page=${params.page}`);
   if (params.category) {
     parts.push(`category=${encodeURIComponent(params.category)}`);
   }
+  const search = params.search?.trim();
+  if (search) parts.push(`search=${encodeURIComponent(search)}`);
   const query = parts.length ? `?${parts.join("&")}` : "";
   return request(
     "GET",

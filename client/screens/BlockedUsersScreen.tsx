@@ -7,40 +7,59 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from "react-native";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
+import { ScreenHeader } from "@/components/ScreenHeader";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { Avatar } from "@/components/Avatar";
 import { useBlockedUsers } from "@/hooks/useBlockedUsers";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type { PublicUser } from "@shared/types";
+import type { ProfileStackParamList } from "@/navigation/AppTabs";
 
 // Blocked-users list (Profile → Blocked users). Data lives in useBlockedUsers;
 // this screen is composition only. Block *initiation* is not here — it's
-// deferred to where content surfaces a user (later slice).
+// deferred to where content surfaces a user (later slice). Full-bleed: its own
+// ScreenHeader (rendered above every state so a back button is always present).
 
-export function BlockedUsersScreen() {
+type Props = NativeStackScreenProps<ProfileStackParamList, "BlockedUsers">;
+
+export function BlockedUsersScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { blocks, status, errorMessage, pendingIds, reload, unblock } =
     useBlockedUsers();
 
+  const header = (
+    <ScreenHeader
+      title={strings.profile.blockedUsers}
+      onBack={navigation.goBack}
+    />
+  );
+
   if (status === "loading") {
     return (
-      <View style={[styles.root, styles.centered]}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={styles.root}>
+        {header}
+        <View style={styles.centeredFill}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
       </View>
     );
   }
 
   if (status === "error") {
     return (
-      <View style={[styles.root, styles.centered]}>
-        <Text style={styles.message}>
-          {errorMessage ?? strings.profile.blockedLoadError}
-        </Text>
-        <View style={styles.fullWidth}>
-          <PrimaryButton label={strings.communities.retry} onPress={reload} />
+      <View style={styles.root}>
+        {header}
+        <View style={styles.centeredFill}>
+          <Text style={styles.message}>
+            {errorMessage ?? strings.profile.blockedLoadError}
+          </Text>
+          <View style={styles.fullWidth}>
+            <PrimaryButton label={strings.communities.retry} onPress={reload} />
+          </View>
         </View>
       </View>
     );
@@ -48,6 +67,7 @@ export function BlockedUsersScreen() {
 
   return (
     <View style={styles.root}>
+      {header}
       <FlatList
         data={blocks}
         showsVerticalScrollIndicator={false}
@@ -101,7 +121,8 @@ function createStyles(colors: ThemeColors) {
       // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
       backgroundColor: "transparent",
     },
-    centered: {
+    centeredFill: {
+      flex: 1,
       alignItems: "center",
       justifyContent: "center",
       padding: spacing.xl,

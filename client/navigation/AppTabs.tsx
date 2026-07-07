@@ -126,22 +126,22 @@ function EventsStack() {
       <EventsStackNav.Screen
         name="Saved"
         component={SavedScreen}
-        options={{ title: strings.saved.title }}
+        options={{ headerShown: false }}
       />
       <EventsStackNav.Screen
         name="CreateEvent"
         component={CreateEventScreen}
-        options={{ title: strings.events.createTitle }}
+        options={{ headerShown: false }}
       />
       <EventsStackNav.Screen
         name="CommunityDetail"
         component={CommunityDetailScreen}
-        options={{ title: "" }}
+        options={{ headerShown: false }}
       />
       <EventsStackNav.Screen
         name="CreateCommunity"
         component={CreateCommunityScreen}
-        options={{ title: strings.communities.createTitle }}
+        options={{ headerShown: false }}
       />
       <EventsStackNav.Screen
         name="ChatThread"
@@ -226,12 +226,12 @@ function ProfileStack() {
       <ProfileStackNav.Screen
         name="BlockedUsers"
         component={BlockedUsersScreen}
-        options={{ title: strings.profile.blockedUsers }}
+        options={{ headerShown: false }}
       />
       <ProfileStackNav.Screen
         name="About"
         component={AboutScreen}
-        options={{ title: strings.about.title }}
+        options={{ headerShown: false }}
       />
     </ProfileStackNav.Navigator>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { ScreenHeader } from "@/components/ScreenHeader";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { FormError } from "@/components/forms/FormError";
 import { Avatar } from "@/components/Avatar";
@@ -46,25 +47,30 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
   } = useCommunityDetail(id);
   const [segment, setSegment] = useState(ABOUT);
 
-  // Title the native header with the community name once it loads.
-  useEffect(() => {
-    if (community) navigation.setOptions({ title: community.name });
-  }, [community, navigation]);
+  // Full-bleed: a back-only header (the community name is shown in-content
+  // below). Rendered in every state so the user can always leave.
+  const header = <ScreenHeader onBack={navigation.goBack} />;
 
   if (status === "loading") {
     return (
-      <View style={[styles.root, styles.centered]}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={styles.root}>
+        {header}
+        <View style={styles.centeredFill}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
       </View>
     );
   }
 
   if (status === "error" || !community) {
     return (
-      <View style={[styles.root, styles.centered]}>
-        <Text style={styles.errorText}>{loadError}</Text>
-        <View style={styles.fullWidth}>
-          <PrimaryButton label={strings.communities.retry} onPress={reload} />
+      <View style={styles.root}>
+        {header}
+        <View style={styles.centeredFill}>
+          <Text style={styles.errorText}>{loadError}</Text>
+          <View style={styles.fullWidth}>
+            <PrimaryButton label={strings.communities.retry} onPress={reload} />
+          </View>
         </View>
       </View>
     );
@@ -83,6 +89,7 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.root}>
+      {header}
       <View style={styles.header}>
         <Avatar
           uri={community.imageUrl}
@@ -175,7 +182,8 @@ function createStyles(colors: ThemeColors) {
       // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
       backgroundColor: "transparent",
     },
-    centered: {
+    centeredFill: {
+      flex: 1,
       alignItems: "center",
       justifyContent: "center",
       padding: spacing.xl,
@@ -192,7 +200,7 @@ function createStyles(colors: ThemeColors) {
     header: {
       alignItems: "center",
       paddingHorizontal: spacing.lg,
-      paddingTop: spacing.lg,
+      paddingTop: spacing.sm,
       paddingBottom: spacing.md,
     },
     name: {

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { ScrollView, StyleSheet } from "react-native";
+import { View, ScrollView, StyleSheet } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextField } from "@/components/forms/TextField";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { FormError } from "@/components/forms/FormError";
@@ -63,35 +64,41 @@ export function CreateCommunityScreen({ navigation }: Props) {
   };
 
   return (
-    <ScrollView
-      style={styles.root}
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-    >
-      <FormError message={formError} />
-      <TextField
-        label={strings.communities.nameLabel}
-        value={name}
-        onChangeText={setName}
-        placeholder={strings.communities.namePlaceholder}
-        error={nameError}
-        autoCapitalize="sentences"
+    <View style={styles.root}>
+      <ScreenHeader
+        title={strings.communities.createTitle}
+        onBack={navigation.goBack}
       />
-      <TextField
-        label={strings.communities.descriptionLabel}
-        value={description}
-        onChangeText={setDescription}
-        placeholder={strings.communities.descriptionPlaceholder}
-        error={descriptionError}
-        autoCapitalize="sentences"
-      />
-      <PrimaryButton
-        label={strings.communities.create}
-        onPress={onSubmit}
-        loading={submitting}
-      />
-    </ScrollView>
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <FormError message={formError} />
+        <TextField
+          label={strings.communities.nameLabel}
+          value={name}
+          onChangeText={setName}
+          placeholder={strings.communities.namePlaceholder}
+          error={nameError}
+          autoCapitalize="sentences"
+        />
+        <TextField
+          label={strings.communities.descriptionLabel}
+          value={description}
+          onChangeText={setDescription}
+          placeholder={strings.communities.descriptionPlaceholder}
+          error={descriptionError}
+          autoCapitalize="sentences"
+        />
+        <PrimaryButton
+          label={strings.communities.create}
+          onPress={onSubmit}
+          loading={submitting}
+        />
+      </ScrollView>
+    </View>
   );
 }
 
@@ -101,6 +108,9 @@ function createStyles() {
       flex: 1,
       // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
       backgroundColor: "transparent",
+    },
+    scroll: {
+      flex: 1,
     },
     content: {
       padding: spacing.lg,

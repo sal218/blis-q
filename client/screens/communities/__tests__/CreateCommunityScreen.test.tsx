@@ -13,7 +13,7 @@ import { strings } from "@/i18n";
 const createMock = createCommunity as unknown as jest.Mock;
 
 function renderCreate() {
-  const navigation = { replace: jest.fn() };
+  const navigation = { replace: jest.fn(), goBack: jest.fn() };
   render(
     <CreateCommunityScreen
       navigation={navigation as never}

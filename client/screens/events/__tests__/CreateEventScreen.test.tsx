@@ -40,7 +40,11 @@ import { strings } from "@/i18n";
 const createMock = createEvent as unknown as jest.Mock;
 
 function renderScreen() {
-  const navigation = { replace: jest.fn(), navigate: jest.fn() };
+  const navigation = {
+    replace: jest.fn(),
+    navigate: jest.fn(),
+    goBack: jest.fn(),
+  };
   const route = { params: { communityId: "c1" } };
   render(
     <CreateEventScreen

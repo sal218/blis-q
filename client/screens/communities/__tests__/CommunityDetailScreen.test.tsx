@@ -54,6 +54,7 @@ function renderDetail() {
     setOptions: jest.fn(),
     replace: jest.fn(),
     navigate: jest.fn(),
+    goBack: jest.fn(),
   };
   render(
     <CommunityDetailScreen

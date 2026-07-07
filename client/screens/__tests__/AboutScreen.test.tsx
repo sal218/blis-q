@@ -12,7 +12,12 @@ import { strings, format } from "@/i18n";
 
 describe("AboutScreen", () => {
   it("renders the app name, version and mission blurb", () => {
-    render(<AboutScreen />);
+    render(
+      <AboutScreen
+        navigation={{ goBack: jest.fn() } as never}
+        route={{} as never}
+      />,
+    );
     expect(screen.getByText(strings.common.appName)).toBeTruthy();
     expect(
       screen.getByText(format(strings.about.version, { version: "1.2.3" })),

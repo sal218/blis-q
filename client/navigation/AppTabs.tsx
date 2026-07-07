@@ -146,7 +146,7 @@ function EventsStack() {
       <EventsStackNav.Screen
         name="ChatThread"
         component={ChatThreadScreen}
-        options={{ title: "" }}
+        options={{ headerShown: false }}
       />
     </EventsStackNav.Navigator>
   );
@@ -198,7 +198,7 @@ function ChatStack() {
       <ChatStackNav.Screen
         name="ChatThread"
         component={ChatThreadScreen}
-        options={{ title: "" }}
+        options={{ headerShown: false }}
       />
     </ChatStackNav.Navigator>
   );

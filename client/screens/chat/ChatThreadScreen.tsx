@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
+import { ScreenHeader } from "@/components/ScreenHeader";
 import { ChatThreadSkeleton } from "@/components/skeleton/ChatThreadSkeleton";
 import { ReportPostModal } from "@/components/ReportPostModal";
 import {
@@ -30,11 +31,12 @@ import type { MessageDTO } from "@shared/types";
 // inverted message list (newest at the bottom) + an inline composer. History is
 // HTTP; new messages arrive live via useCommunityChat. Reached from a community
 // (Events stack) AND from the Messages inbox (Chat stack) — so it's typed against
-// the shared params + only the navigation it uses (setOptions), stack-agnostic.
+// the shared params + only the navigation it uses (goBack), stack-agnostic.
+// Full-bleed: its own ScreenHeader (community name + back), no native top bar.
 
 type Props = {
   route: { params: ChatThreadParams };
-  navigation: { setOptions: (options: { title?: string }) => void };
+  navigation: { goBack: () => void };
 };
 
 const MAX_MESSAGE_LENGTH = 2000;
@@ -65,9 +67,10 @@ export function ChatThreadScreen({ route, navigation }: Props) {
     null,
   );
 
-  useEffect(() => {
-    navigation.setOptions({ title: communityName });
-  }, [navigation, communityName]);
+  // Own header (full-bleed) — rendered in every state so back always works.
+  const header = (
+    <ScreenHeader title={communityName} onBack={navigation.goBack} />
+  );
 
   const onSend = useCallback(async () => {
     const text = draft.trim();
@@ -186,17 +189,27 @@ export function ChatThreadScreen({ route, navigation }: Props) {
   );
 
   if (status === "loading" && messages.length === 0) {
-    return <ChatThreadSkeleton />;
+    return (
+      <View style={styles.root}>
+        {header}
+        <View style={styles.listFill}>
+          <ChatThreadSkeleton />
+        </View>
+      </View>
+    );
   }
 
   if (status === "error" && messages.length === 0) {
     return (
-      <View style={[styles.root, styles.centered]}>
-        <Text style={styles.errorText}>
-          {errorMessage ?? strings.chat.loadError}
-        </Text>
-        <View style={styles.fullWidth}>
-          <PrimaryButton label={strings.chat.retry} onPress={retry} />
+      <View style={styles.root}>
+        {header}
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>
+            {errorMessage ?? strings.chat.loadError}
+          </Text>
+          <View style={styles.fullWidth}>
+            <PrimaryButton label={strings.chat.retry} onPress={retry} />
+          </View>
         </View>
       </View>
     );
@@ -206,10 +219,12 @@ export function ChatThreadScreen({ route, navigation }: Props) {
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={insets.top + 44}
+      keyboardVerticalOffset={0}
     >
+      {header}
       <FlatList
         testID="chat-thread"
+        style={styles.list}
         inverted
         showsVerticalScrollIndicator={false}
         data={messages}
@@ -285,6 +300,14 @@ function createStyles(colors: ThemeColors) {
     },
     fullWidth: {
       alignSelf: "stretch",
+    },
+    // The inverted list fills the space between the header and the composer.
+    list: {
+      flex: 1,
+    },
+    // Wrapper so the loading skeleton fills below the header.
+    listFill: {
+      flex: 1,
     },
     errorText: {
       color: colors.textMuted,

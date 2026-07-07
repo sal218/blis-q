@@ -107,7 +107,10 @@ async function handleSuspension(gen: number): Promise<void> {
 // retry the original request once. Refresh + expired-session handling are
 // registered by the auth layer. A single in-flight promise makes concurrent 401s
 // share one refresh attempt.
-type RefreshOutcome = "ok" | "suspended" | "failed";
+// Kept structurally in sync with session.ts's RefreshOutcome — the auth layer
+// registers `() => refreshSession()` as the handler. "offline" = a transient
+// network/5xx failure where auth state is unknown → keep the session (P-10a).
+type RefreshOutcome = "ok" | "suspended" | "failed" | "offline";
 let refreshHandler: (() => Promise<RefreshOutcome>) | null = null;
 let sessionExpiredHandler: (() => void | Promise<void>) | null = null;
 let refreshInFlight: Promise<RefreshOutcome> | null = null;
@@ -184,10 +187,13 @@ export async function request<T, E>(
     } else if (outcome === "suspended") {
       // The refresh itself returned 403 account_suspended → show suspension.
       await handleSuspension(gen);
-    } else {
-      // Refresh failed → the session is gone; route to login with a notice.
+    } else if (outcome === "failed") {
+      // Genuine rejection → the session is gone; route to login with a notice.
       await runSessionExpired();
     }
+    // "offline": a transient network/5xx failure — KEEP the session (P-10a). We
+    // don't retry (the refresh couldn't complete) and don't log out; the original
+    // 401 falls through to mapError below, so the caller sees a transient error.
   }
 
   // Suspension check on the FINAL response (initial OR retried) — covers a retry

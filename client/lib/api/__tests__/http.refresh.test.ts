@@ -76,6 +76,21 @@ describe("request() — token refresh on 401 (P-10)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // no retry
   });
 
+  it("401 then refresh offline → keeps the session (no logout, no retry) — P-10a", async () => {
+    fetchMock.mockResolvedValue(res(401, { error: "Unauthorized" }));
+    refresh.mockResolvedValue("offline");
+
+    const result = await call();
+
+    // A transient refresh failure must NOT force a logout…
+    expect(onExpired).not.toHaveBeenCalled();
+    expect(onSuspended).not.toHaveBeenCalled();
+    // …and there's no retry (the refresh couldn't complete). The original 401
+    // falls through to the mapped error, so the caller sees a transient failure.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: false, error: { kind: "server" } });
+  });
+
   it("401 then refresh suspended → fires suspendedHandler", async () => {
     fetchMock.mockResolvedValue(res(401, { error: "Unauthorized" }));
     refresh.mockResolvedValue("suspended");

@@ -58,9 +58,15 @@ export async function loadSession(): Promise<StoredSession | null> {
     if (expiryMs <= Date.now()) {
       // Access token expired but the refresh token is still here → exchange it
       // (cold-start). refreshSession() persists the rotated session on success;
-      // we re-read and return it. A failed/suspended refresh signs the user out.
+      // we re-read and return it.
       const outcome = await refreshSession();
       if (outcome === "ok") return await readStoredSession();
+      // P-10a: a TRANSIENT failure (offline / 5xx) must not sign a valid user out
+      // at launch — keep the stored session. The access token is expired, so the
+      // first authenticated call 401s and the mid-session interceptor refreshes
+      // once the network is back; until then the user simply isn't logged out.
+      if (outcome === "offline") return stored;
+      // A genuine rejection ("failed") or a ban ("suspended") signs out.
       await clearSession();
       return null;
     }
@@ -102,14 +108,20 @@ export async function clearSession(): Promise<void> {
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "";
 
-export type RefreshOutcome = "ok" | "suspended" | "failed";
+export type RefreshOutcome = "ok" | "suspended" | "failed" | "offline";
 
 // Exchange the stored refresh token for a fresh session (tracker P-10). Uses a
 // PLAIN fetch — NOT the typed request() layer — so it can never re-enter the
 // 401→refresh interceptor that calls it. Returns:
 //   "ok"        — refreshed + persisted; the caller can retry the original request
 //   "suspended" — the account is banned (403 account_suspended) → suspension screen
-//   "failed"    — no token / invalid-expired-revoked refresh token / network / other
+//   "failed"    — a GENUINE rejection: no token / invalid-expired-revoked refresh
+//                 token (401 / other 4xx) → the session is gone, sign out
+//   "offline"   — a TRANSIENT failure we can't attribute to auth: a network throw
+//                 (offline / DNS / TLS) or a 5xx server hiccup. The auth state is
+//                 UNKNOWN, so the caller KEEPS the session (P-10a — a momentary
+//                 connectivity blip during a refresh must NOT force a logout); the
+//                 next successful refresh re-checks the ban/deleted gates.
 // Never throws.
 export async function refreshSession(): Promise<RefreshOutcome> {
   try {
@@ -132,11 +144,15 @@ export async function refreshSession(): Promise<RefreshOutcome> {
         const body = (await res.json()) as { code?: unknown };
         if (body?.code === "account_suspended") return "suspended";
       } catch {
-        // unparseable body → fall through to "failed"
+        // unparseable body → fall through
       }
     }
+    // A 5xx is a transient server error, not an auth rejection → keep the session.
+    if (res.status >= 500) return "offline";
+    // 401 / other 4xx / unparseable 403 → a genuine rejection.
     return "failed";
   } catch {
-    return "failed";
+    // fetch threw → offline / DNS / TLS. Transient — keep the session.
+    return "offline";
   }
 }

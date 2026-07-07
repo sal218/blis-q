@@ -32,8 +32,9 @@ type Props = {
 };
 
 export function EventCard({ event, onPress, onToggleSave }: Props) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const isDark = mode === "dark";
 
   const badge = formatEventDateBadge(event.startsAt);
   const year = new Date(event.startsAt).getFullYear();
@@ -44,7 +45,11 @@ export function EventCard({ event, onPress, onToggleSave }: Props) {
       accessibilityRole="button"
       accessibilityLabel={event.title}
       onPress={() => onPress(event.id)}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      style={({ pressed }) => [
+        styles.card,
+        isDark && styles.cardDark,
+        pressed && styles.cardPressed,
+      ]}
     >
       <View style={styles.dateCol}>
         <Text style={styles.weekday}>{badge.weekday}</Text>
@@ -125,11 +130,24 @@ function createStyles(colors: ThemeColors) {
     card: {
       flexDirection: "row",
       backgroundColor: colors.card,
-      borderRadius: 22,
+      borderRadius: 24,
       borderWidth: 1,
       borderColor: colors.border,
       padding: spacing.md + 2,
       ...shadow,
+    },
+    // Dark mode: a translucent "glass" surface on the deep-purple page, with a
+    // soft lavender edge + an inner top highlight (light reflecting on glass) and
+    // a softer, deeper shadow. Light mode keeps the clean white card above.
+    cardDark: {
+      backgroundColor: "rgba(30,25,70,0.55)",
+      borderColor: "rgba(255,255,255,0.14)",
+      borderTopColor: "rgba(255,255,255,0.22)",
+      shadowColor: "#000000",
+      shadowOpacity: 0.28,
+      shadowRadius: 20,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 6,
     },
     cardPressed: {
       opacity: 0.85,

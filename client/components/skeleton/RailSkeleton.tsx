@@ -1,14 +1,16 @@
 import { ScrollView, StyleSheet } from "react-native";
 import { SkeletonBlock } from "@/components/skeleton/SkeletonBlock";
-import { spacing, radius } from "@/constants/theme";
+import {
+  RAIL_CARD_WIDTH,
+  RAIL_CARD_HEIGHT,
+  RAIL_CARD_RADIUS,
+} from "@/components/CommunityRailCard";
+import { spacing } from "@/constants/theme";
 
 // A horizontal rail of card-shaped placeholders, shown while the Home
 // "Your communities" rail is loading. Mirrors the real rail: a horizontal
-// ScrollView of 150×190 (radius.lg) cards (see CommunityRailCard) — scrollable so
-// it never overflows narrow screens.
-
-const CARD_WIDTH = 150;
-const CARD_HEIGHT = 190;
+// ScrollView of the same-size cards (dimensions imported from CommunityRailCard
+// so they can't drift) — scrollable so it never overflows narrow screens.
 
 interface Props {
   count?: number;
@@ -26,9 +28,9 @@ export function RailSkeleton({ count = 3 }: Props) {
         <SkeletonBlock
           key={i}
           testID="rail-skeleton-card"
-          width={CARD_WIDTH}
-          height={CARD_HEIGHT}
-          borderRadius={radius.lg}
+          width={RAIL_CARD_WIDTH}
+          height={RAIL_CARD_HEIGHT}
+          borderRadius={RAIL_CARD_RADIUS}
           style={styles.card}
         />
       ))}

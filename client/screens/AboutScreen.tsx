@@ -1,15 +1,21 @@
 import { useMemo } from "react";
 import { View, Text, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import Constants from "expo-constants";
 import { useTheme } from "@/contexts/ThemeContext";
+import { ScreenHeader } from "@/components/ScreenHeader";
 import { strings, format } from "@/i18n";
 import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
+import type { ProfileStackParamList } from "@/navigation/AppTabs";
 
 // A simple static "About Blis-Q" screen reached from Profile → Wsparcie. No user
 // data, no network — app name, a short mission blurb, and the build version.
+// Full-bleed: its own ScreenHeader, no native top bar.
 
-export function AboutScreen() {
+type Props = NativeStackScreenProps<ProfileStackParamList, "About">;
+
+export function AboutScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -17,25 +23,28 @@ export function AboutScreen() {
   const version = Constants.expoConfig?.version ?? "";
 
   return (
-    <ScrollView
-      style={styles.root}
-      contentContainerStyle={{
-        paddingTop: insets.top + spacing.lg,
-        paddingBottom: insets.bottom + spacing.xl,
-        paddingHorizontal: spacing.lg,
-      }}
-    >
-      <Text style={styles.appName}>{strings.common.appName}</Text>
-      {version ? (
-        <Text style={styles.version}>
-          {format(strings.about.version, { version })}
-        </Text>
-      ) : null}
+    <View style={styles.root}>
+      <ScreenHeader title={strings.about.title} onBack={navigation.goBack} />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{
+          paddingTop: spacing.sm,
+          paddingBottom: insets.bottom + spacing.xl,
+          paddingHorizontal: spacing.lg,
+        }}
+      >
+        <Text style={styles.appName}>{strings.common.appName}</Text>
+        {version ? (
+          <Text style={styles.version}>
+            {format(strings.about.version, { version })}
+          </Text>
+        ) : null}
 
-      <View style={styles.card}>
-        <Text style={styles.body}>{strings.about.body}</Text>
-      </View>
-    </ScrollView>
+        <View style={styles.card}>
+          <Text style={styles.body}>{strings.about.body}</Text>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -44,6 +53,9 @@ function createStyles(colors: ThemeColors) {
     root: {
       flex: 1,
       backgroundColor: "transparent",
+    },
+    scroll: {
+      flex: 1,
     },
     appName: {
       color: colors.text,

@@ -12,6 +12,7 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
+import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextField } from "@/components/forms/TextField";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { FormError } from "@/components/forms/FormError";
@@ -220,147 +221,155 @@ export function CreateEventScreen({ route, navigation }: Props) {
   };
 
   return (
-    <ScrollView
-      style={styles.root}
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Text style={styles.subtitle}>{strings.events.createSubtitle}</Text>
-      <FormError message={formError} />
+    <View style={styles.root}>
+      <ScreenHeader
+        title={strings.events.createTitle}
+        onBack={navigation.goBack}
+      />
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.subtitle}>{strings.events.createSubtitle}</Text>
+        <FormError message={formError} />
 
-      <Section icon={TextAa} title={strings.events.titleLabel}>
-        <TextField
-          hideLabel
-          label={strings.events.titleLabel}
-          value={title}
-          onChangeText={setTitle}
-          placeholder={strings.events.titlePlaceholder}
-          error={titleError}
-          autoCapitalize="sentences"
-        />
-      </Section>
+        <Section icon={TextAa} title={strings.events.titleLabel}>
+          <TextField
+            hideLabel
+            label={strings.events.titleLabel}
+            value={title}
+            onChangeText={setTitle}
+            placeholder={strings.events.titlePlaceholder}
+            error={titleError}
+            autoCapitalize="sentences"
+          />
+        </Section>
 
-      <Section icon={NotePencil} title={strings.events.descriptionLabel}>
-        <TextField
-          hideLabel
-          label={strings.events.descriptionLabel}
-          value={description}
-          onChangeText={setDescription}
-          placeholder={strings.events.descriptionPlaceholder}
-          error={descriptionError}
-          autoCapitalize="sentences"
-        />
-      </Section>
+        <Section icon={NotePencil} title={strings.events.descriptionLabel}>
+          <TextField
+            hideLabel
+            label={strings.events.descriptionLabel}
+            value={description}
+            onChangeText={setDescription}
+            placeholder={strings.events.descriptionPlaceholder}
+            error={descriptionError}
+            autoCapitalize="sentences"
+          />
+        </Section>
 
-      <Section icon={MapPin} title={strings.events.locationLabel}>
-        <TextField
-          hideLabel
-          label={strings.events.locationLabel}
-          value={location}
-          onChangeText={setLocation}
-          placeholder={strings.events.locationPlaceholder}
-          error={locationError}
-          autoCapitalize="sentences"
-        />
-      </Section>
+        <Section icon={MapPin} title={strings.events.locationLabel}>
+          <TextField
+            hideLabel
+            label={strings.events.locationLabel}
+            value={location}
+            onChangeText={setLocation}
+            placeholder={strings.events.locationPlaceholder}
+            error={locationError}
+            autoCapitalize="sentences"
+          />
+        </Section>
 
-      <Section icon={Faders} title={strings.events.categoryLabel}>
-        <View style={styles.categoryWrap}>
-          {EVENT_CATEGORIES.map((c) => (
-            <CategoryChip
-              key={c}
-              label={strings.events.categories[c]}
-              category={c}
-              selected={category === c}
-              onPress={() => setCategory((cur) => (cur === c ? null : c))}
+        <Section icon={Faders} title={strings.events.categoryLabel}>
+          <View style={styles.categoryWrap}>
+            {EVENT_CATEGORIES.map((c) => (
+              <CategoryChip
+                key={c}
+                label={strings.events.categories[c]}
+                category={c}
+                selected={category === c}
+                onPress={() => setCategory((cur) => (cur === c ? null : c))}
+              />
+            ))}
+          </View>
+        </Section>
+
+        <Section icon={CalendarBlank} title={strings.events.startLabel}>
+          <View style={styles.dateRow}>
+            <DateTimeChip
+              testID="start-date"
+              value={startsAt}
+              mode="date"
+              onPick={(d) => setStartsAt((s) => mergePart(s, d, "date"))}
             />
-          ))}
-        </View>
-      </Section>
+            <DateTimeChip
+              testID="start-time"
+              value={startsAt}
+              mode="time"
+              onPick={(d) => setStartsAt((s) => mergePart(s, d, "time"))}
+            />
+          </View>
 
-      <Section icon={CalendarBlank} title={strings.events.startLabel}>
-        <View style={styles.dateRow}>
-          <DateTimeChip
-            testID="start-date"
-            value={startsAt}
-            mode="date"
-            onPick={(d) => setStartsAt((s) => mergePart(s, d, "date"))}
-          />
-          <DateTimeChip
-            testID="start-time"
-            value={startsAt}
-            mode="time"
-            onPick={(d) => setStartsAt((s) => mergePart(s, d, "time"))}
-          />
-        </View>
-
-        {/* End (optional) */}
-        {endsAt === null ? (
-          <Pressable
-            testID="add-end"
-            accessibilityRole="button"
-            onPress={() =>
-              setEndsAt(new Date(startsAt.getTime() + 60 * 60_000))
-            }
-            style={({ pressed }) => [
-              styles.endToggle,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={styles.endToggleAdd}>＋ {strings.events.addEnd}</Text>
-          </Pressable>
-        ) : (
-          <>
-            <Text style={styles.endLabel}>{strings.events.endLabel}</Text>
-            <View style={styles.dateRow}>
-              <DateTimeChip
-                testID="end-date"
-                value={endsAt}
-                mode="date"
-                onPick={(d) =>
-                  setEndsAt((e) => mergePart(e ?? startsAt, d, "date"))
-                }
-              />
-              <DateTimeChip
-                testID="end-time"
-                value={endsAt}
-                mode="time"
-                onPick={(d) =>
-                  setEndsAt((e) => mergePart(e ?? startsAt, d, "time"))
-                }
-              />
-            </View>
+          {/* End (optional) */}
+          {endsAt === null ? (
             <Pressable
-              testID="remove-end"
+              testID="add-end"
               accessibilityRole="button"
-              onPress={() => {
-                setEndsAt(null);
-                setDateError(null);
-              }}
+              onPress={() =>
+                setEndsAt(new Date(startsAt.getTime() + 60 * 60_000))
+              }
               style={({ pressed }) => [
                 styles.endToggle,
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={styles.endToggleRemove}>
-                ✕ {strings.events.removeEnd}
+              <Text style={styles.endToggleAdd}>
+                ＋ {strings.events.addEnd}
               </Text>
             </Pressable>
-          </>
-        )}
+          ) : (
+            <>
+              <Text style={styles.endLabel}>{strings.events.endLabel}</Text>
+              <View style={styles.dateRow}>
+                <DateTimeChip
+                  testID="end-date"
+                  value={endsAt}
+                  mode="date"
+                  onPick={(d) =>
+                    setEndsAt((e) => mergePart(e ?? startsAt, d, "date"))
+                  }
+                />
+                <DateTimeChip
+                  testID="end-time"
+                  value={endsAt}
+                  mode="time"
+                  onPick={(d) =>
+                    setEndsAt((e) => mergePart(e ?? startsAt, d, "time"))
+                  }
+                />
+              </View>
+              <Pressable
+                testID="remove-end"
+                accessibilityRole="button"
+                onPress={() => {
+                  setEndsAt(null);
+                  setDateError(null);
+                }}
+                style={({ pressed }) => [
+                  styles.endToggle,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.endToggleRemove}>
+                  ✕ {strings.events.removeEnd}
+                </Text>
+              </Pressable>
+            </>
+          )}
 
-        {dateError ? <Text style={styles.dateError}>{dateError}</Text> : null}
-      </Section>
+          {dateError ? <Text style={styles.dateError}>{dateError}</Text> : null}
+        </Section>
 
-      <View style={styles.submit}>
-        <PrimaryButton
-          label={strings.events.create}
-          onPress={onSubmit}
-          loading={submitting}
-        />
-      </View>
-    </ScrollView>
+        <View style={styles.submit}>
+          <PrimaryButton
+            label={strings.events.create}
+            onPress={onSubmit}
+            loading={submitting}
+          />
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -370,6 +379,9 @@ function createStyles(colors: ThemeColors) {
       flex: 1,
       // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
       backgroundColor: "transparent",
+    },
+    scroll: {
+      flex: 1,
     },
     content: {
       padding: spacing.lg,

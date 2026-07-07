@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { View, StyleSheet } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
+import { ScreenHeader } from "@/components/ScreenHeader";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { SavedEventsList } from "@/screens/events/SavedEventsList";
 import { SavedSafePlacesList } from "@/screens/events/SavedSafePlacesList";
@@ -28,6 +29,7 @@ export function SavedScreen({ navigation }: Props) {
 
   return (
     <View style={styles.root}>
+      <ScreenHeader title={strings.saved.title} onBack={navigation.goBack} />
       <View style={styles.segment}>
         <SegmentedControl
           segments={SEGMENTS}

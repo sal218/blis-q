@@ -29,20 +29,35 @@ beforeEach(() => {
 describe("BlockedUsersScreen", () => {
   it("renders the blocked users", async () => {
     listMock.mockResolvedValue({ ok: true, data: BLOCKS });
-    render(<BlockedUsersScreen />);
+    render(
+      <BlockedUsersScreen
+        navigation={{ goBack: jest.fn() } as never}
+        route={{} as never}
+      />,
+    );
     expect(await screen.findByText("Alex")).toBeTruthy();
     expect(screen.getByText("Marta")).toBeTruthy();
   });
 
   it("shows the empty state when there are no blocks", async () => {
     listMock.mockResolvedValue({ ok: true, data: [] });
-    render(<BlockedUsersScreen />);
+    render(
+      <BlockedUsersScreen
+        navigation={{ goBack: jest.fn() } as never}
+        route={{} as never}
+      />,
+    );
     expect(await screen.findByText(strings.profile.blockedEmpty)).toBeTruthy();
   });
 
   it("shows an error state and retries", async () => {
     listMock.mockResolvedValueOnce({ ok: false, error: { kind: "network" } });
-    render(<BlockedUsersScreen />);
+    render(
+      <BlockedUsersScreen
+        navigation={{ goBack: jest.fn() } as never}
+        route={{} as never}
+      />,
+    );
     expect(await screen.findByText(strings.errors.network)).toBeTruthy();
 
     listMock.mockResolvedValueOnce({ ok: true, data: BLOCKS });
@@ -55,7 +70,12 @@ describe("BlockedUsersScreen", () => {
   it("removes a user from the list after a successful unblock", async () => {
     listMock.mockResolvedValue({ ok: true, data: BLOCKS });
     unblockMock.mockResolvedValue({ ok: true, data: { ok: true } });
-    render(<BlockedUsersScreen />);
+    render(
+      <BlockedUsersScreen
+        navigation={{ goBack: jest.fn() } as never}
+        route={{} as never}
+      />,
+    );
     await screen.findByText("Alex");
 
     fireEvent.press(

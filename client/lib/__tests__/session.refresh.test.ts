@@ -65,10 +65,17 @@ describe("refreshSession", () => {
     await expect(refreshSession()).resolves.toBe("failed");
   });
 
-  it("network throw → 'failed'", async () => {
+  it("network throw → 'offline' (transient, keep the session — P-10a)", async () => {
     await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, "rt");
     fetchMock.mockRejectedValue(new Error("offline"));
 
-    await expect(refreshSession()).resolves.toBe("failed");
+    await expect(refreshSession()).resolves.toBe("offline");
+  });
+
+  it("5xx → 'offline' (transient server error, keep the session — P-10a)", async () => {
+    await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, "rt");
+    fetchMock.mockResolvedValue(res(503, { error: "Service Unavailable" }));
+
+    await expect(refreshSession()).resolves.toBe("offline");
   });
 });

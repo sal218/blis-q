@@ -115,4 +115,25 @@ describe("loadSession — cold-start refresh (P-10)", () => {
     expect(await loadSession()).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("expired + refresh offline (network throw) → KEEPS the session (P-10a)", async () => {
+    await saveSession(sessionWith(PAST));
+    fetchMock.mockRejectedValue(new Error("offline"));
+
+    const result = await loadSession();
+    // The (expired) stored session is kept — a launch-time blip must not log out.
+    expect(result?.user.id).toBe("u1");
+    expect(result?.accessToken).toBe("at");
+    // The store is NOT cleared.
+    expect(await SecureStore.getItemAsync(ACCESS_TOKEN_KEY)).toBe("at");
+  });
+
+  it("expired + refresh offline (5xx) → KEEPS the session (P-10a)", async () => {
+    await saveSession(sessionWith(PAST));
+    fetchMock.mockResolvedValue(res(503, { error: "Service Unavailable" }));
+
+    const result = await loadSession();
+    expect(result?.accessToken).toBe("at");
+    expect(await SecureStore.getItemAsync(ACCESS_TOKEN_KEY)).toBe("at");
+  });
 });

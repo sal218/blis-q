@@ -24,10 +24,11 @@ export const pl = {
     signOut: "Wyloguj się",
   },
 
-  // Bottom tabs (post-login IA): Home · Events · Chat · Profile.
+  // Bottom tabs (post-login IA): Home · Events · Wsparcie · Chat · Profile.
   tabs: {
     home: "Strona główna",
     events: "Wydarzenia",
+    resources: "Wsparcie", // "Support" — the Resources tab (P-37)
     chat: "Czat",
     profile: "Profil",
   },
@@ -248,6 +249,37 @@ export const pl = {
       education: "Edukacja", // "Education"
       service: "Usługa", // "Service"
       other: "Inne", // "Other"
+    },
+  },
+
+  // Resources tab (P-37 Support & Education, design ref: profile-resources.png):
+  // a hub (categories grid + featured strip) → a filtered list → a detail.
+  // Admin-curated content; read-only for users.
+  resources: {
+    title: "Wsparcie", // big header ("Resources")
+    listTitle: "Materiały", // list-screen header ("Resources" list)
+    subtitle: "Wsparcie, informacje i narzędzia dla społeczności LGBTQ+.", // "Support, information and tools for the LGBTQ+ community."
+    searchPlaceholder: "Szukaj materiałów", // "Search resources"
+    categoriesHeader: "Kategorie", // "Categories"
+    featuredTitle: "Polecane materiały", // "Featured Resources"
+    viewAll: "Zobacz wszystkie materiały", // "View all resources"
+    filterAll: "Wszystkie", // "All" — the category filter chip that clears
+    empty: "Nie ma jeszcze żadnych materiałów.", // "No resources yet."
+    emptyCategory: "Brak materiałów w tej kategorii.", // "No resources in this category."
+    emptySearch: "Brak wyników dla tego wyszukiwania.", // "No results for this search."
+    loadError: "Nie udało się załadować materiałów.", // "Couldn't load resources."
+    retry: "Spróbuj ponownie", // "Try again"
+    clear: "Wyczyść wyszukiwanie", // "Clear search" (a11y label for the ✕)
+    detailLoadError: "Nie udało się załadować materiału.", // "Couldn't load the resource." (singular)
+    openLink: "Otwórz stronę", // "Open link" — external-link CTA on the detail
+    // Category labels — keys MUST match RESOURCE_CATEGORIES (shared/types.ts).
+    categories: {
+      mental_health: "Zdrowie psychiczne", // "Mental Health & Wellbeing"
+      legal_rights: "Prawa i pomoc prawna", // "Legal Rights & Support"
+      community_orgs: "Organizacje społeczne", // "Community Organizations"
+      education_careers: "Edukacja i kariera", // "Education & Careers"
+      health_services: "Usługi zdrowotne", // "Health Services"
+      housing_support: "Wsparcie mieszkaniowe", // "Housing Support"
     },
   },
 

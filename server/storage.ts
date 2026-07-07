@@ -3170,9 +3170,18 @@ export class DatabaseStorage {
     page: number;
     pageSize: number;
     category?: string;
+    search?: string;
   }): Promise<{ rows: ResourceRow[]; total: number }> {
     const conditions: (SQL | undefined)[] = [isNull(resources.deletedAt)];
     if (input.category) conditions.push(eq(resources.category, input.category));
+    // Case-insensitive substring over title + body. likeEscape() keeps a literal
+    // %/_ in the term from acting as a wildcard (mirrors listSafePlaces).
+    if (input.search) {
+      const term = `%${likeEscape(input.search)}%`;
+      conditions.push(
+        or(ilike(resources.title, term), ilike(resources.body, term)),
+      );
+    }
     const where = and(...conditions);
 
     const rows = await db

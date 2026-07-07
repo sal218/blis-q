@@ -1,0 +1,52 @@
+import type { OffsetPage, ResourceDTO, ResourceCategory } from "@shared/types";
+import {
+  request,
+  commonApiError,
+  type ApiResult,
+  type CommonApiError,
+} from "@/lib/api/http";
+
+// Typed client for the Resources read API (docs/API.md §11; P-37 Support &
+// Education). Read-only for users: an offset-paged, admin-curated list of
+// support/education content (featured-first). The screens go through these
+// functions, never fetch directly. The list supports page + an optional
+// category filter + an optional server-side `search` (case-insensitive
+// substring over title + body).
+
+export type ResourcesResult<T> = ApiResult<T, CommonApiError>;
+
+// GET /api/v1/resources — offset page + optional category + optional search.
+// Featured-first, then newest; soft-deleted excluded (server-side). `search` is
+// a case-insensitive substring over title + body (blank omitted → full list).
+export function listResources(params: {
+  page?: number;
+  category?: ResourceCategory;
+  search?: string;
+}): Promise<ResourcesResult<OffsetPage<ResourceDTO>>> {
+  const parts: string[] = [];
+  if (params.page) parts.push(`page=${params.page}`);
+  if (params.category) {
+    parts.push(`category=${encodeURIComponent(params.category)}`);
+  }
+  const search = params.search?.trim();
+  if (search) parts.push(`search=${encodeURIComponent(search)}`);
+  const query = parts.length ? `?${parts.join("&")}` : "";
+  return request(
+    "GET",
+    `/api/v1/resources${query}`,
+    undefined,
+    (res) => res.json() as Promise<OffsetPage<ResourceDTO>>,
+    commonApiError,
+  );
+}
+
+// GET /api/v1/resources/:id — one resource. 404 = missing / soft-deleted.
+export function getResource(id: string): Promise<ResourcesResult<ResourceDTO>> {
+  return request(
+    "GET",
+    `/api/v1/resources/${id}`,
+    undefined,
+    (res) => res.json() as Promise<ResourceDTO>,
+    commonApiError,
+  );
+}

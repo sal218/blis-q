@@ -9,7 +9,7 @@
  * copying the regular-weight path `d` from that repo.
  */
 import Svg, { Path } from "react-native-svg";
-import type { EventCategory } from "@shared/types";
+import type { EventCategory, ResourceCategory } from "@shared/types";
 
 interface IconProps {
   size?: number;
@@ -220,6 +220,46 @@ export function CategoryIcon({
   return (
     <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
       <Path d={EVENT_CATEGORY_ICON_PATHS[category]} />
+    </Svg>
+  );
+}
+
+// Per-resource-category glyph (P-37 Resources, design ref:
+// assets/profile-resources.png), keyed by RESOURCE_CATEGORIES. Phosphor v2
+// "regular" paths, one per coarse content topic — hand-heart (support),
+// shield-check (rights), users (orgs), graduation cap (education), heartbeat
+// (health), house (housing). Article-9-safe content-topic glyphs, never
+// identity symbols. Exhaustive over ResourceCategory, so a new category key is a
+// compile error until its glyph is added here.
+const RESOURCE_CATEGORY_ICON_PATHS: Record<ResourceCategory, string> = {
+  mental_health: EVENT_CATEGORY_ICON_PATHS.support,
+  legal_rights:
+    "M208,40H48A16,16,0,0,0,32,56v58.78c0,89.61,75.82,119.34,91,124.39a15.53,15.53,0,0,0,10,0c15.2-5.05,91-34.78,91-124.39V56A16,16,0,0,0,208,40Zm0,74.79c0,78.42-66.35,104.62-80,109.18-13.53-4.51-80-30.69-80-109.18V56H208ZM82.34,141.66a8,8,0,0,1,11.32-11.32L112,148.68l50.34-50.34a8,8,0,0,1,11.32,11.32l-56,56a8,8,0,0,1-11.32,0Z",
+  community_orgs:
+    "M244.8,150.4a8,8,0,0,1-11.2-1.6A51.6,51.6,0,0,0,192,128a8,8,0,0,1-7.37-4.89,8,8,0,0,1,0-6.22A8,8,0,0,1,192,112a24,24,0,1,0-23.24-30,8,8,0,1,1-15.5-4A40,40,0,1,1,219,117.51a67.94,67.94,0,0,1,27.43,21.68A8,8,0,0,1,244.8,150.4ZM190.92,212a8,8,0,1,1-13.84,8,57,57,0,0,0-98.16,0,8,8,0,1,1-13.84-8,72.06,72.06,0,0,1,33.74-29.92,48,48,0,1,1,58.36,0A72.06,72.06,0,0,1,190.92,212ZM128,176a32,32,0,1,0-32-32A32,32,0,0,0,128,176ZM72,120a8,8,0,0,0-8-8A24,24,0,1,1,87.24,82a8,8,0,1,0,15.5-4A40,40,0,1,0,37,117.51,67.94,67.94,0,0,0,9.6,139.19a8,8,0,1,0,12.8,9.61A51.6,51.6,0,0,1,64,128,8,8,0,0,0,72,120Z",
+  education_careers: EVENT_CATEGORY_ICON_PATHS.education,
+  health_services: EVENT_CATEGORY_ICON_PATHS.health,
+  housing_support:
+    "M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z",
+};
+
+export function ResourceCategoryIcon({
+  category,
+  size = 24,
+  color = "#000",
+}: IconProps & { category: ResourceCategory }) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d={RESOURCE_CATEGORY_ICON_PATHS[category]} />
+    </Svg>
+  );
+}
+
+// book-open — the Resources ("Wsparcie") bottom-tab glyph.
+export function BookOpen({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d="M232,48H160a40,40,0,0,0-32,16A40,40,0,0,0,96,48H24a8,8,0,0,0-8,8V200a8,8,0,0,0,8,8H96a24,24,0,0,1,24,24,8,8,0,0,0,16,0,24,24,0,0,1,24-24h72a8,8,0,0,0,8-8V56A8,8,0,0,0,232,48ZM96,192H32V64H96a24,24,0,0,1,24,24V200A39.81,39.81,0,0,0,96,192Zm128,0H160a39.81,39.81,0,0,0-24,8V88a24,24,0,0,1,24-24h64Z" />
     </Svg>
   );
 }

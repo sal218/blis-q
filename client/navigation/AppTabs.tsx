@@ -4,6 +4,7 @@ import {
   CalendarMinus,
   ChatsTeardrop,
   User,
+  BookOpen,
 } from "@/components/icons/PhosphorIcons";
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -22,14 +23,19 @@ import { ChatThreadScreen } from "@/screens/chat/ChatThreadScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { BlockedUsersScreen } from "@/screens/BlockedUsersScreen";
 import { AboutScreen } from "@/screens/AboutScreen";
+import { ResourcesScreen } from "@/screens/resources/ResourcesScreen";
+import { ResourceDetailScreen } from "@/screens/resources/ResourceDetailScreen";
 import { strings } from "@/i18n";
 
-// Authenticated app shell. Post-login IA: bottom tabs Home · Events · Chat ·
-// Profile. The Events tab is a stack: its landing screen hosts a segmented
+// Authenticated app shell. Post-login IA: bottom tabs Home · Events · Wsparcie ·
+// Chat · Profile. The Events tab is a stack: its landing screen hosts a segmented
 // control (Events / Safe places / Communities) and pushes Community detail/create
-// on top. The Chat tab is a stack: the Messages inbox pushes the chat thread.
-// Profile is a stack so it can host the blocked-users screen. (There is
-// intentionally no Communities tab — communities live under Events → Communities.)
+// on top. The Wsparcie (Resources / Support & Education, P-37) tab is a stack:
+// its directory screen (search + category chips + featured + list) pushes a
+// resource detail. The Chat tab is a stack:
+// the Messages inbox pushes the chat thread. Profile is a stack so it can host
+// the blocked-users screen. (There is intentionally no Communities tab —
+// communities live under Events → Communities.)
 
 // Shared route params for the chat thread — registered in BOTH the Events stack
 // (reached from a community) and the Chat stack (reached from the inbox), so the
@@ -46,8 +52,14 @@ export type AppTabsParamList = {
   // NavigatorScreenParams so other tabs (e.g. Home) can deep-link into the Events
   // stack, e.g. navigate("Events", { screen: "CommunityDetail", params: { id } }).
   Events: NavigatorScreenParams<EventsStackParamList>;
+  Resources: NavigatorScreenParams<ResourcesStackParamList>;
   Chat: NavigatorScreenParams<ChatStackParamList>;
   ProfileTab: undefined;
+};
+
+export type ResourcesStackParamList = {
+  ResourcesHome: undefined;
+  ResourceDetail: { id: string };
 };
 
 export type EventsStackParamList = {
@@ -74,6 +86,7 @@ export type ProfileStackParamList = {
 
 const Tabs = createBottomTabNavigator<AppTabsParamList>();
 const EventsStackNav = createNativeStackNavigator<EventsStackParamList>();
+const ResourcesStackNav = createNativeStackNavigator<ResourcesStackParamList>();
 const ChatStackNav = createNativeStackNavigator<ChatStackParamList>();
 const ProfileStackNav = createNativeStackNavigator<ProfileStackParamList>();
 
@@ -136,6 +149,33 @@ function EventsStack() {
         options={{ title: "" }}
       />
     </EventsStackNav.Navigator>
+  );
+}
+
+function ResourcesStack() {
+  const { colors } = useTheme();
+  return (
+    <ResourcesStackNav.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.background },
+        headerTintColor: colors.text,
+        contentStyle: { backgroundColor: "transparent" },
+        headerBackButtonDisplayMode: "minimal",
+      }}
+    >
+      <ResourcesStackNav.Screen
+        name="ResourcesHome"
+        component={ResourcesScreen}
+        // The directory owns its header + search + filters, so no native bar.
+        options={{ headerShown: false }}
+      />
+      <ResourcesStackNav.Screen
+        name="ResourceDetail"
+        component={ResourceDetailScreen}
+        // Full-bleed: the screen renders its own floating back button.
+        options={{ headerShown: false }}
+      />
+    </ResourcesStackNav.Navigator>
   );
 }
 
@@ -243,6 +283,16 @@ export function AppTabs() {
           title: strings.tabs.events,
           tabBarIcon: ({ color, size }) => (
             <CalendarMinus size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="Resources"
+        component={ResourcesStack}
+        options={{
+          title: strings.tabs.resources,
+          tabBarIcon: ({ color, size }) => (
+            <BookOpen size={size} color={color} />
           ),
         }}
       />

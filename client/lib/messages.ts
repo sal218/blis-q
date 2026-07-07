@@ -98,6 +98,22 @@ export function safePlacesApiErrorMessage(
   }
 }
 
+// Resources calls use the common error union only (no domain-specific codes);
+// map it to shared copy for the detail screen's load/retry states.
+export function resourcesApiErrorMessage(
+  error: CommonApiError | NetworkError,
+): string {
+  switch (error.kind) {
+    case "rateLimited":
+      return format(strings.errors.rateLimited, { seconds: error.retryAfter });
+    case "network":
+      return strings.errors.network;
+    case "validation":
+    case "server":
+      return strings.errors.generic;
+  }
+}
+
 export function postsApiErrorMessage(error: PostsApiError): string {
   switch (error.kind) {
     case "rateLimited":

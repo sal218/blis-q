@@ -54,7 +54,8 @@ function hookState(over: Partial<ReturnType<typeof useCommunityChat>> = {}) {
 }
 
 function renderThread() {
-  const navigation = { setOptions: jest.fn() } as unknown as never;
+  const goBack = jest.fn();
+  const navigation = { goBack } as unknown as never;
   const route = {
     params: {
       communityId: "c1",
@@ -62,7 +63,10 @@ function renderThread() {
       canModerate: false,
     },
   } as unknown as never;
-  return render(<ChatThreadScreen navigation={navigation} route={route} />);
+  return {
+    ...render(<ChatThreadScreen navigation={navigation} route={route} />),
+    goBack,
+  };
 }
 
 beforeEach(() => {
@@ -71,13 +75,21 @@ beforeEach(() => {
 });
 
 describe("ChatThreadScreen", () => {
+  it("renders its own full-bleed header (community name + back button)", () => {
+    chatMock.mockReturnValue(hookState({ messages: [msg("m1", "Cześć")] }));
+    const { goBack } = renderThread();
+    expect(screen.getByText("Queer Creatives")).toBeTruthy();
+    fireEvent.press(screen.getByLabelText(strings.common.back));
+    expect(goBack).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the thread skeleton on the first load and not once messages arrive", () => {
     chatMock.mockReturnValue(hookState({ status: "loading", messages: [] }));
     const { rerender } = renderThread();
     expect(screen.getByTestId("chat-thread-skeleton")).toBeTruthy();
 
     chatMock.mockReturnValue(hookState({ messages: [msg("m1", "Cześć")] }));
-    const navigation = { setOptions: jest.fn() } as unknown as never;
+    const navigation = { goBack: jest.fn() } as unknown as never;
     const route = {
       params: {
         communityId: "c1",

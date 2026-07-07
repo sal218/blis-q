@@ -68,7 +68,7 @@ export function ResourcesScreen({ navigation }: Props) {
       <Text style={styles.sectionTitle}>
         {strings.resources.categoriesHeader}
       </Text>
-      <View style={styles.grid}>
+      <View style={styles.categoryList}>
         {RESOURCE_CATEGORIES.map((c: ResourceCategory) => {
           const accent = RESOURCE_CATEGORY_COLORS[c];
           return (
@@ -84,12 +84,12 @@ export function ResourcesScreen({ navigation }: Props) {
               ]}
             >
               <View style={styles.catIconDisc}>
-                <ResourceCategoryIcon category={c} size={22} color={accent} />
+                <ResourceCategoryIcon category={c} size={24} color={accent} />
               </View>
               <Text style={styles.catLabel} numberOfLines={2}>
                 {strings.resources.categories[c]}
               </Text>
-              <CaretRight size={18} color={accent} />
+              <CaretRight size={20} color={accent} />
             </Pressable>
           );
         })}
@@ -176,24 +176,21 @@ function createStyles(colors: ThemeColors) {
       marginTop: spacing.xl,
       marginBottom: spacing.md,
     },
-    grid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      justifyContent: "space-between",
-      rowGap: spacing.md,
+    categoryList: {
+      gap: spacing.md,
     },
     catCard: {
-      width: "48%",
       flexDirection: "row",
       alignItems: "center",
-      gap: spacing.sm,
+      gap: spacing.md,
       borderRadius: radius.lg,
-      padding: spacing.md,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
     },
     pressed: { opacity: 0.85 },
     catIconDisc: {
-      width: 44,
-      height: 44,
+      width: 48,
+      height: 48,
       borderRadius: radius.full,
       alignItems: "center",
       justifyContent: "center",
@@ -202,7 +199,7 @@ function createStyles(colors: ThemeColors) {
     catLabel: {
       flex: 1,
       color: colors.text,
-      fontSize: 14,
+      fontSize: 16,
       fontWeight: "700",
       letterSpacing: -0.2,
     },

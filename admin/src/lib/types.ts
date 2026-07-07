@@ -117,12 +117,14 @@ export const RESOURCE_CATEGORY_META: Record<
   ResourceCategory,
   { label: string; color: string }
 > = {
-  mental_health: { label: "Zdrowie psychiczne", color: "#7C3AED" },
-  legal_rights: { label: "Prawa i pomoc prawna", color: "#2563EB" },
-  community_orgs: { label: "Organizacje społeczne", color: "#059669" },
-  education_careers: { label: "Edukacja i kariera", color: "#0891B2" },
-  health_services: { label: "Usługi zdrowotne", color: "#DC2626" },
-  housing_support: { label: "Wsparcie mieszkaniowe", color: "#B45309" },
+  // Palette shared with the mobile app (client/constants/resourceCategories.ts) —
+  // the profile-resources.png mockup colours, so admin + app stay consistent.
+  mental_health: { label: "Zdrowie psychiczne", color: "#7C3AED" }, // violet
+  legal_rights: { label: "Prawa i pomoc prawna", color: "#10B981" }, // emerald
+  community_orgs: { label: "Organizacje społeczne", color: "#F97316" }, // orange
+  education_careers: { label: "Edukacja i kariera", color: "#2563EB" }, // blue
+  health_services: { label: "Usługi zdrowotne", color: "#EC4899" }, // pink
+  housing_support: { label: "Wsparcie mieszkaniowe", color: "#F59E0B" }, // amber
 };
 
 export type ResourceDTO = {

@@ -27,7 +27,7 @@ import type { CommunityDTO } from "@shared/types";
 
 export const RAIL_CARD_WIDTH = 264;
 export const RAIL_CARD_HEIGHT = 160;
-export const RAIL_CARD_RADIUS = 20;
+export const RAIL_CARD_RADIUS = 28;
 
 const NAME_WHITE = "#FFFFFF";
 const META_LAVENDER = "#C4B5FD"; // muted lavender, legible on the dark surface

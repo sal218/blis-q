@@ -9,7 +9,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useHomeCommunities } from "@/hooks/useHomeCommunities";
 import { useHomeEvents } from "@/hooks/useHomeEvents";
 import { SectionHeader } from "@/components/SectionHeader";
-import { CommunityRailCard } from "@/components/CommunityRailCard";
+import {
+  CommunityRailCard,
+  RAIL_CARD_WIDTH,
+  RAIL_CARD_HEIGHT,
+  RAIL_CARD_RADIUS,
+} from "@/components/CommunityRailCard";
 import { EventCard } from "@/components/EventCard";
 import { RailSkeleton } from "@/components/skeleton/RailSkeleton";
 import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
@@ -224,9 +229,9 @@ function createStyles(colors: ThemeColors) {
       marginRight: spacing.md,
     },
     addCard: {
-      width: 150,
-      height: 190,
-      borderRadius: radius.lg,
+      width: RAIL_CARD_WIDTH,
+      height: RAIL_CARD_HEIGHT,
+      borderRadius: RAIL_CARD_RADIUS,
       borderWidth: 1.5,
       borderColor: colors.border,
       borderStyle: "dashed",

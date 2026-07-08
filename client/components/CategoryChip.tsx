@@ -26,8 +26,9 @@ export function CategoryChip({
   selected = false,
   onPress,
 }: Props) {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const isDark = mode === "dark";
 
   // A read-only display chip (no onPress) always reads as "active" soft lavender;
   // an interactive chip only does so when `selected`.
@@ -38,7 +39,14 @@ export function CategoryChip({
       {category ? (
         <CategoryIcon category={category} size={16} color={colors.primary} />
       ) : null}
-      <Text style={[styles.label, soft && styles.labelSoft]} numberOfLines={1}>
+      <Text
+        style={[
+          styles.label,
+          soft && styles.labelSoft,
+          soft && isDark && styles.labelSoftDark,
+        ]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </>
@@ -47,7 +55,14 @@ export function CategoryChip({
   // Read-only display chip: a static pill, not a button.
   if (!onPress) {
     return (
-      <View style={[styles.chip, styles.chipSoft, styles.chipStatic]}>
+      <View
+        style={[
+          styles.chip,
+          styles.chipSoft,
+          isDark && styles.chipSoftDark,
+          styles.chipStatic,
+        ]}
+      >
         {body}
       </View>
     );
@@ -61,6 +76,7 @@ export function CategoryChip({
       style={({ pressed }) => [
         styles.chip,
         selected && styles.chipSoft,
+        selected && isDark && styles.chipSoftDark,
         pressed && styles.pressed,
       ]}
     >
@@ -94,6 +110,12 @@ function createStyles(colors: ThemeColors) {
       backgroundColor: colors.primary + "22",
       borderColor: colors.primary + "55",
     },
+    // Dark mode: a refined translucent violet pill (matches the premium Home
+    // cards). Light mode keeps the primary tint above.
+    chipSoftDark: {
+      backgroundColor: "rgba(124,92,255,0.18)",
+      borderColor: "rgba(167,139,250,0.28)",
+    },
     pressed: {
       opacity: 0.6,
     },
@@ -104,6 +126,9 @@ function createStyles(colors: ThemeColors) {
     },
     labelSoft: {
       color: colors.primary,
+    },
+    labelSoftDark: {
+      color: "#A78BFA",
     },
   });
 }

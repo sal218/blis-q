@@ -27,7 +27,7 @@ import type { CommunityDTO } from "@shared/types";
 
 export const RAIL_CARD_WIDTH = 264;
 export const RAIL_CARD_HEIGHT = 160;
-export const RAIL_CARD_RADIUS = 28;
+export const RAIL_CARD_RADIUS = 34;
 
 const NAME_WHITE = "#FFFFFF";
 const META_LAVENDER = "#C4B5FD"; // muted lavender, legible on the dark surface
@@ -128,7 +128,9 @@ export function CommunityRailCard({
         </>
       )}
 
-      {/* Hairline top highlight — light reflecting on glass. */}
+      {/* Hairline top highlight — light reflecting on glass. Inset from both
+          sides so it ends on the flat top edge and never leaves a bright nub
+          where a full-width line would be clipped by the rounded corners. */}
       <View style={styles.topHighlight} pointerEvents="none" />
 
       {/* Member-count pill, top-right. */}
@@ -174,8 +176,8 @@ function createStyles(colors: ThemeColors) {
     topHighlight: {
       position: "absolute",
       top: 0,
-      left: 0,
-      right: 0,
+      left: RAIL_CARD_RADIUS,
+      right: RAIL_CARD_RADIUS,
       height: 1,
       backgroundColor: "rgba(255,255,255,0.22)",
     },

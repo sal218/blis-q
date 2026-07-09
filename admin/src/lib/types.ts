@@ -140,6 +140,45 @@ export type ResourceDTO = {
   createdAt: string;
 };
 
+// Crisis contacts (docs/API.md §11/§14 — P-37 "Pomoc w kryzysie" safety page).
+// Mirrors shared/types.ts CrisisContactDTO + CRISIS_CONTACT_CATEGORIES (the admin
+// app has no @shared alias). Category is a frozen predefined SERVICE type —
+// coarse, Article-9-safe, never an identity/orientation label. Admin-published
+// only (life-critical accuracy — no user submissions).
+export const CRISIS_CONTACT_CATEGORIES = [
+  "emergency",
+  "emotional_crisis",
+  "legal",
+  "community",
+] as const;
+
+export type CrisisContactCategory = (typeof CRISIS_CONTACT_CATEGORIES)[number];
+
+// Polish label + a distinct chip colour per category (admin display + picker).
+export const CRISIS_CONTACT_CATEGORY_META: Record<
+  CrisisContactCategory,
+  { label: string; color: string }
+> = {
+  emergency: { label: "Pomoc alarmowa", color: "#DC2626" }, // red
+  emotional_crisis: { label: "Kryzys emocjonalny", color: "#7C3AED" }, // violet
+  legal: { label: "Prawne", color: "#2563EB" }, // blue
+  community: { label: "Społeczność", color: "#F97316" }, // orange
+};
+
+export type CrisisContactDTO = {
+  id: string;
+  name: string;
+  phone: string;
+  description: string;
+  // Optional availability text (e.g. "Całodobowo"), or null.
+  hours: string | null;
+  category: CrisisContactCategory;
+  // Admin freshness stamp — the contact has been verified by the team (backs the
+  // "Zweryfikowane" badge). The raw verifiedAt timestamp stays server-side.
+  verified: boolean;
+  createdAt: string;
+};
+
 export type ReportStatus = "pending" | "reviewing" | "resolved" | "dismissed";
 
 export type ReportDTO = {

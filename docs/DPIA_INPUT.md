@@ -24,7 +24,11 @@ processing too, so planned features are included below — but for accuracy:
   posts + reporting, moderation (reports queue, content removal, user
   ban/suspension), and the internal admin dashboard.
 - **Planned (not yet built):** group chat, the safe-places map, events/RSVPs,
-  premium subscriptions, and the **emergency-contacts** section.
+  and premium subscriptions.
+- **Partially built:** the **crisis/support-contacts** feature ("Pomoc w
+  kryzysie") — an admin-curated `crisis_contacts` model with a **backend
+  implemented** (a public read so crisis help works signed-out + admin CRUD); its
+  mobile safety page + admin-web CRUD are pending.
 
 ## 2. Roles
 
@@ -210,7 +214,7 @@ hours**, and what counts as a notifiable breach).
 So we can finalise the build correctly, the DPIA / controller should confirm:
 
 1. The DPIA **explicitly covers** Article 9 data, location, the vulnerable
-   population, large-scale processing — **and the emergency-contacts feature** (§9).
+   population, large-scale processing — **and the crisis/support-contacts feature** (§9).
 2. The **legal basis** (explicit consent) and the consent wording.
 3. **Age / minors:** is the app **adults-only (18+)**, or will it allow minors and
    collect date of birth? (Children are a vulnerable category, and Poland's digital-

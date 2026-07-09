@@ -9,6 +9,7 @@ import type {
   AdminUserRow,
   SafePlaceRow,
   ResourceRow,
+  CrisisContactRow,
 } from "../storage";
 import { supabaseClient, supabaseAdmin } from "../supabase";
 import {
@@ -30,6 +31,9 @@ import {
   resourcesListQuerySchema,
   createResourceSchema,
   updateResourceSchema,
+  crisisContactsListQuerySchema,
+  createCrisisContactSchema,
+  updateCrisisContactSchema,
 } from "../validation";
 import { searchOverpass, OverpassError } from "../overpass";
 import {
@@ -52,6 +56,8 @@ import type {
   SafePlaceCategory,
   ResourceDTO,
   ResourceCategory,
+  CrisisContactDTO,
+  CrisisContactCategory,
   OffsetPage,
 } from "@shared/types";
 
@@ -139,6 +145,21 @@ export function registerAdminRoutes(app: Express): void {
   app.post("/api/admin/resources", ...admin, handleCreateResource);
   app.patch("/api/admin/resources/:id", ...admin, handleUpdateResource);
   app.delete("/api/admin/resources/:id", ...admin, handleDeleteResource);
+
+  // Crisis contacts (admin-curated "Pomoc w kryzysie" safety helplines, P-37).
+  // Reads are public (routes/crisisContacts.ts); writes are admin-only here.
+  app.get("/api/admin/crisis-contacts", ...admin, handleListCrisisContacts);
+  app.post("/api/admin/crisis-contacts", ...admin, handleCreateCrisisContact);
+  app.patch(
+    "/api/admin/crisis-contacts/:id",
+    ...admin,
+    handleUpdateCrisisContact,
+  );
+  app.delete(
+    "/api/admin/crisis-contacts/:id",
+    ...admin,
+    handleDeleteCrisisContact,
+  );
 }
 
 async function toSafePlaceDTO(row: SafePlaceRow): Promise<SafePlaceDTO> {
@@ -1069,6 +1090,157 @@ async function handleDeleteResource(
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("[DELETE /api/admin/resources/:id]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// ── Crisis contacts (admin-curated "Pomoc w kryzysie" helplines, P-37) ─────────
+// Mirrors the resources admin CRUD: requireAdmin, rate-limit first, Zod → 400,
+// transactional + IDs-only audit in storage, soft-delete. Reads are public
+// (routes/crisisContacts.ts); writes are admin-only here. `verified` is derived
+// from the internal verifiedAt stamp — the raw timestamp never leaves us.
+
+function toCrisisContactDTO(row: CrisisContactRow): CrisisContactDTO {
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    description: row.description,
+    hours: row.hours,
+    category: row.category as CrisisContactCategory,
+    verified: row.verifiedAt !== null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+async function handleListCrisisContacts(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const parsed = crisisContactsListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const q = parsed.data;
+    const { rows, total } = await storage.listCrisisContacts({
+      page: q.page,
+      pageSize: q.pageSize,
+      category: q.category,
+    });
+    const body: OffsetPage<CrisisContactDTO> = {
+      data: rows.map(toCrisisContactDTO),
+      page: q.page,
+      pageSize: q.pageSize,
+      total,
+      totalPages: Math.ceil(total / q.pageSize),
+    };
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[GET /api/admin/crisis-contacts]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleCreateCrisisContact(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = createCrisisContactSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const row = await storage.createCrisisContact(
+      parsed.data,
+      userId,
+      req.ip ?? null,
+    );
+    return res.status(201).json(toCrisisContactDTO(row));
+  } catch (err) {
+    console.error("[POST /api/admin/crisis-contacts]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleUpdateCrisisContact(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = updateCrisisContactSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const row = await storage.updateCrisisContact(
+      id,
+      parsed.data,
+      userId,
+      req.ip ?? null,
+    );
+    if (!row) return res.status(404).json({ error: "Not found" });
+    return res.status(200).json(toCrisisContactDTO(row));
+  } catch (err) {
+    console.error("[PATCH /api/admin/crisis-contacts/:id]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleDeleteCrisisContact(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const result = await storage.softDeleteCrisisContact(
+      id,
+      userId,
+      req.ip ?? null,
+    );
+    if (result === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/admin/crisis-contacts/:id]", {
       code: safeErrorCode(err),
     });
     return res.status(500).json({ error: "Internal Server Error" });

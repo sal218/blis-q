@@ -72,6 +72,9 @@ const limiters = {
 
   // Webhooks — keyed by IP (no authenticated user on a webhook request)
   revenuecatWebhookIp: makeLimiter(20, "1 m"),
+
+  // Public reads — keyed by IP (no authenticated user; the route is public)
+  crisisReadIp: makeLimiter(60, "1 m"), // GET /crisis-contacts — public safety read
 };
 
 type RateLimitResult =
@@ -302,4 +305,14 @@ export async function checkRevenueCatWebhookRateLimit(req: {
     limiters.revenuecatWebhookIp,
     `revenuecat-webhook:ip:${getIp(req)}`,
   );
+}
+
+// Public crisis-contacts read — IP-keyed (no authenticated user; the route is
+// intentionally PUBLIC so crisis help works signed-out). Fail-closed like every
+// limiter. Tracked follow-up (P-37): outage-resilient caching so a Redis outage
+// can't hide the safety list (a fail-closed read returns 429 during an outage).
+export async function checkCrisisReadRateLimit(req: {
+  ip?: string;
+}): Promise<RateLimitResult> {
+  return check(limiters.crisisReadIp, `crisis-read:ip:${getIp(req)}`);
 }

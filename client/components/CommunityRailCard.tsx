@@ -196,8 +196,8 @@ function createStyles(colors: ThemeColors) {
     },
     pill: {
       position: "absolute",
-      top: spacing.sm,
-      right: spacing.sm,
+      top: spacing.md,
+      right: spacing.md,
       flexDirection: "row",
       alignItems: "center",
       gap: 4,

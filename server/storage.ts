@@ -33,6 +33,7 @@ import {
   safePlaces,
   safePlaceSaves,
   resources,
+  crisisContacts,
   adCampaigns,
   blocks,
   reports,
@@ -272,6 +273,20 @@ export type ResourceRow = {
   body: string;
   url: string | null;
   featured: boolean;
+  createdAt: Date;
+};
+
+// A crisis-contact row as returned by crisisContactColumns() (P-37). `category`
+// is a DB text column; the route narrows it to CrisisContactCategory on the DTO.
+// `verifiedAt` is internal — the DTO exposes only a derived `verified` boolean.
+export type CrisisContactRow = {
+  id: string;
+  name: string;
+  phone: string;
+  description: string;
+  hours: string | null;
+  category: string;
+  verifiedAt: Date | null;
   createdAt: Date;
 };
 
@@ -869,6 +884,10 @@ export class DatabaseStorage {
         .update(resources)
         .set({ createdById: null })
         .where(eq(resources.createdById, userId));
+      await tx
+        .update(crisisContacts)
+        .set({ createdById: null })
+        .where(eq(crisisContacts.createdById, userId));
       await tx
         .update(adCampaigns)
         .set({ createdById: null })
@@ -3305,6 +3324,177 @@ export class DatabaseStorage {
         actorId,
         action: "resource.deleted",
         resourceType: "resource",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return "deleted";
+    });
+  }
+
+  // ── Crisis contacts (admin-curated "Pomoc w kryzysie" helplines, P-37) ───────
+  // Admin-published content (never user data); audit rows for crisis-contact
+  // mutations carry IDs only — NEVER name/phone/description. Reads are public
+  // (routes/crisisContacts.ts); writes are admin-only (routes/admin.ts).
+
+  private crisisContactColumns() {
+    return {
+      id: crisisContacts.id,
+      name: crisisContacts.name,
+      phone: crisisContacts.phone,
+      description: crisisContacts.description,
+      hours: crisisContacts.hours,
+      category: crisisContacts.category,
+      verifiedAt: crisisContacts.verifiedAt,
+      createdAt: crisisContacts.createdAt,
+    };
+  }
+
+  // One page of visible (non-deleted) crisis contacts + the total. Optional
+  // category filter (exact). Ordered emergency-first (112 leads), then newest,
+  // then id — a deterministic total order so offset pagination can't drift.
+  async listCrisisContacts(input: {
+    page: number;
+    pageSize: number;
+    category?: string;
+  }): Promise<{ rows: CrisisContactRow[]; total: number }> {
+    const conditions: (SQL | undefined)[] = [isNull(crisisContacts.deletedAt)];
+    if (input.category)
+      conditions.push(eq(crisisContacts.category, input.category));
+    const where = and(...conditions);
+
+    const rows = await db
+      .select(this.crisisContactColumns())
+      .from(crisisContacts)
+      .where(where)
+      .orderBy(
+        sql`case ${crisisContacts.category}
+              when 'emergency' then 0
+              when 'emotional_crisis' then 1
+              when 'legal' then 2
+              when 'community' then 3
+              else 4 end`,
+        sql`${crisisContacts.createdAt} desc`,
+        sql`${crisisContacts.id} asc`,
+      )
+      .limit(input.pageSize)
+      .offset((input.page - 1) * input.pageSize);
+
+    const [{ n }] = await db
+      .select({ n: count() })
+      .from(crisisContacts)
+      .where(where);
+
+    return { rows, total: Number(n) };
+  }
+
+  async getCrisisContact(id: string): Promise<CrisisContactRow | null> {
+    const [row] = await db
+      .select(this.crisisContactColumns())
+      .from(crisisContacts)
+      .where(and(eq(crisisContacts.id, id), isNull(crisisContacts.deletedAt)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  // Admin create. Insert + crisis_contact.created audit commit together (§7).
+  // `verified` true stamps verifiedAt = now(); false/omitted leaves it null.
+  async createCrisisContact(
+    input: {
+      name: string;
+      phone: string;
+      description: string;
+      hours?: string;
+      category: string;
+      verified?: boolean;
+    },
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<CrisisContactRow> {
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(crisisContacts)
+        .values({
+          name: input.name,
+          phone: input.phone,
+          description: input.description,
+          hours: input.hours ?? null,
+          category: input.category,
+          verifiedAt: input.verified ? new Date() : null,
+          createdById: actorId,
+        })
+        .returning(this.crisisContactColumns());
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "crisis_contact.created",
+        resourceType: "crisis_contact",
+        resourceId: row.id,
+        ipAddress: ipAddress ?? null,
+      });
+      return row;
+    });
+  }
+
+  // Admin partial update (guarded to non-deleted). Only provided fields written
+  // (undefined = untouched; hours null = remove; verified true ⇒ stamp now, false
+  // ⇒ clear). Returns null if missing/deleted.
+  async updateCrisisContact(
+    id: string,
+    input: {
+      name?: string;
+      phone?: string;
+      description?: string;
+      hours?: string | null;
+      category?: string;
+      verified?: boolean;
+    },
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<CrisisContactRow | null> {
+    const fields: Partial<typeof crisisContacts.$inferInsert> = {};
+    if (input.name !== undefined) fields.name = input.name;
+    if (input.phone !== undefined) fields.phone = input.phone;
+    if (input.description !== undefined) fields.description = input.description;
+    if (input.hours !== undefined) fields.hours = input.hours;
+    if (input.category !== undefined) fields.category = input.category;
+    if (input.verified !== undefined)
+      fields.verifiedAt = input.verified ? new Date() : null;
+
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(crisisContacts)
+        .set(fields)
+        .where(and(eq(crisisContacts.id, id), isNull(crisisContacts.deletedAt)))
+        .returning(this.crisisContactColumns());
+      if (!row) return null;
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "crisis_contact.updated",
+        resourceType: "crisis_contact",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return row;
+    });
+  }
+
+  // Admin soft-delete (guarded UPDATE ... WHERE deletedAt IS NULL). Idempotent-
+  // safe: "not_found" if missing/already deleted. Audited crisis_contact.deleted.
+  async softDeleteCrisisContact(
+    id: string,
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<"deleted" | "not_found"> {
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(crisisContacts)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(crisisContacts.id, id), isNull(crisisContacts.deletedAt)))
+        .returning({ id: crisisContacts.id });
+      if (!row) return "not_found";
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "crisis_contact.deleted",
+        resourceType: "crisis_contact",
         resourceId: id,
         ipAddress: ipAddress ?? null,
       });

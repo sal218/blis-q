@@ -372,6 +372,37 @@ export const resources = pgTable("resources", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
+// ── crisis_contacts ───────────────────────────────────────────────────────────
+// Admin-curated crisis / safety helpline contacts (P-37, "Pomoc w kryzysie",
+// assets/safety-page-*.png): 112, national helplines, LGBT+ org support lines,
+// each with a tap-to-call phone. Rendered on the in-app safety page. ADMIN-
+// PUBLISHED ONLY — never user-generated (life-critical: a wrong number is
+// dangerous). `category` is plain text; the frozen CRISIS_CONTACT_CATEGORIES tuple
+// in shared/types.ts is the source of truth, enforced by Zod (no pgEnum) — coarse
+// SERVICE types, 🔒 never identity (Article-9-safe). `hours` is optional
+// availability text. `verifiedAt` records when an admin last verified the contact
+// (freshness bar), exposed to clients as a `verified` boolean — the raw timestamp
+// never leaves the server. This is CONTENT, not user personal data. `createdById`
+// is the curating admin (survives erasure, anonymised). Soft-delete via
+// `deletedAt`. 112 is a SEEDED, admin-editable record — never hardcoded (content
+// is data; the client maintains it post-handover).
+export const crisisContacts = pgTable("crisis_contacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  phone: text("phone").notNull(),
+  description: text("description").notNull(),
+  hours: text("hours"),
+  category: text("category").notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  createdById: uuid("created_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
 // ── reports ───────────────────────────────────────────────────────────────────
 // Moderation queue. Reports are RETAINED for moderation audit; on erasure the
 // reporter is anonymised (reporterId SET NULL — §5.2). resourceType + resourceId
@@ -596,6 +627,8 @@ export type SafePlace = typeof safePlaces.$inferSelect;
 export type NewSafePlace = typeof safePlaces.$inferInsert;
 export type Resource = typeof resources.$inferSelect;
 export type NewResource = typeof resources.$inferInsert;
+export type CrisisContact = typeof crisisContacts.$inferSelect;
+export type NewCrisisContact = typeof crisisContacts.$inferInsert;
 export type SafePlaceSave = typeof safePlaceSaves.$inferSelect;
 export type Report = typeof reports.$inferSelect;
 export type Block = typeof blocks.$inferSelect;

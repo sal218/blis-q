@@ -278,10 +278,35 @@ export type ResourceDTO = {
   createdAt: string;
 };
 
-export type EmergencyContact = {
-  label: string;
+// Predefined crisis / safety contact categories (P-37, "Pomoc w kryzysie",
+// assets/safety-page-*.png). Coarse SERVICE types for the safety page's filter
+// chips — 🔒 deliberately never identity/orientation (Article-9-safe; a category
+// can't infer sexual orientation; mirrors SAFE_PLACE_CATEGORIES). The Zod
+// validator enums over this tuple. FROZEN — append, never rename. `emergency`
+// leads the list (112) and drives the safety-page banner.
+export const CRISIS_CONTACT_CATEGORIES = [
+  "emergency",
+  "emotional_crisis",
+  "legal",
+  "community",
+] as const;
+
+export type CrisisContactCategory = (typeof CRISIS_CONTACT_CATEGORIES)[number];
+
+// A crisis/safety contact on the "Pomoc w kryzysie" page (P-37). Admin-curated,
+// vetted, life-critical. Reads are public so it works signed-out. `verified`
+// reflects an admin freshness stamp (backs the "Zweryfikowane" badge) — the raw
+// verifiedAt timestamp stays server-side. `hours` null = availability unspecified.
+// This is CONTENT, not user personal data.
+export type CrisisContactDTO = {
+  id: string;
+  name: string;
   phone: string;
-  description: string | null;
+  description: string;
+  hours: string | null;
+  category: CrisisContactCategory;
+  verified: boolean;
+  createdAt: string;
 };
 
 export type NotificationPreferencesDTO = {

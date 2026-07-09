@@ -4,6 +4,7 @@ import {
   SAFE_PLACE_CATEGORIES,
   ACCESSIBILITY_FEATURES,
   RESOURCE_CATEGORIES,
+  CRISIS_CONTACT_CATEGORIES,
 } from "@shared/types";
 import { ALLOWED_IMAGE_CONTENT_TYPES } from "./objectStorage";
 
@@ -321,6 +322,70 @@ export const updateResourceSchema = z
     message: "At least one field is required",
   });
 
+// ── Crisis contacts (admin-curated "Pomoc w kryzysie" helplines, P-37) ─────────
+// Admin-published crisis/help contacts (112, hotlines, LGBT org lines) with a
+// tap-to-call phone. category is a frozen predefined SERVICE type (Article-9-safe).
+const MAX_CRISIS_NAME_LENGTH = 120;
+const MAX_CRISIS_DESCRIPTION_LENGTH = 500;
+const MAX_CRISIS_HOURS_LENGTH = 80;
+const MAX_CRISIS_PHONE_LENGTH = 32;
+
+export const crisisContactCategorySchema = z.enum(CRISIS_CONTACT_CATEGORIES);
+
+// Life-critical, so permissive-but-bounded: accepts 112, "116 123",
+// "+48 22 628 52 22", "800 70 2222" (an optional leading +, then digits, spaces,
+// dashes, parentheses) and rejects non-phone text. Requires ≥3 actual digits.
+const crisisPhoneSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(MAX_CRISIS_PHONE_LENGTH)
+  .regex(/^\+?[0-9][0-9 ()-]*$/, "Invalid phone number")
+  .refine((v) => (v.match(/\d/g)?.length ?? 0) >= 3, {
+    message: "Phone number must contain at least 3 digits",
+  });
+
+export const createCrisisContactSchema = z
+  .object({
+    name: z.string().trim().min(1).max(MAX_CRISIS_NAME_LENGTH),
+    phone: crisisPhoneSchema,
+    description: z.string().trim().min(1).max(MAX_CRISIS_DESCRIPTION_LENGTH),
+    // Optional availability text. Omitted = the card hides the hours pill.
+    hours: z.string().trim().min(1).max(MAX_CRISIS_HOURS_LENGTH).optional(),
+    category: crisisContactCategorySchema,
+    // Admin freshness stamp: true ⇒ verifiedAt = now(), false/omitted ⇒ null.
+    verified: z.boolean().optional(),
+  })
+  .strict();
+
+export const updateCrisisContactSchema = z
+  .object({
+    name: z.string().trim().min(1).max(MAX_CRISIS_NAME_LENGTH).optional(),
+    phone: crisisPhoneSchema.optional(),
+    description: z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_CRISIS_DESCRIPTION_LENGTH)
+      .optional(),
+    // undefined = unchanged · null = REMOVE the hours · string = set/replace.
+    hours: z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_CRISIS_HOURS_LENGTH)
+      .nullable()
+      .optional(),
+    category: crisisContactCategorySchema.optional(),
+    // true ⇒ stamp verifiedAt now · false ⇒ clear · omitted ⇒ leave unchanged.
+    verified: z.boolean().optional(),
+  })
+  .strict()
+  // PATCH must change something — an empty body is a 400, not a silent no-op.
+  .refine((d) => Object.values(d).some((v) => v !== undefined), {
+    message: "At least one field is required",
+  });
+
 // OSM import (slice SP-2). osm-search takes a city + category; the bulk endpoint
 // takes an array of curated candidates. osmId format-locked to an OSM element ref.
 const osmIdSchema = z
@@ -625,6 +690,19 @@ export const resourcesListQuerySchema = z.object({
   search: z.string().trim().min(1).max(MAX_RESOURCE_SEARCH_LENGTH).optional(),
 });
 
+// Crisis contacts list (P-37): offset/page + an optional category filter. NO
+// search — the list is short and curated; the safety page uses category chips.
+export const crisisContactsListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_OFFSET_PAGE_SIZE)
+    .default(DEFAULT_OFFSET_PAGE_SIZE),
+  category: crisisContactCategorySchema.optional(),
+});
+
 // Admin reports queue: offset/page + optional status filter (read-only this
 // slice — resolve/dismiss is a Sprint-4 moderation action).
 export const adminReportsQuerySchema = z.object({
@@ -668,6 +746,15 @@ export type SafePlacesListQuery = z.infer<typeof safePlacesListQuerySchema>;
 export type CreateResourceInput = z.infer<typeof createResourceSchema>;
 export type UpdateResourceInput = z.infer<typeof updateResourceSchema>;
 export type ResourcesListQuery = z.infer<typeof resourcesListQuerySchema>;
+export type CreateCrisisContactInput = z.infer<
+  typeof createCrisisContactSchema
+>;
+export type UpdateCrisisContactInput = z.infer<
+  typeof updateCrisisContactSchema
+>;
+export type CrisisContactsListQuery = z.infer<
+  typeof crisisContactsListQuerySchema
+>;
 export type OsmSearchInput = z.infer<typeof osmSearchSchema>;
 export type BulkCreateSafePlacesInput = z.infer<
   typeof bulkCreateSafePlacesSchema

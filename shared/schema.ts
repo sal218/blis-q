@@ -403,6 +403,49 @@ export const crisisContacts = pgTable("crisis_contacts", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
+// ── news ──────────────────────────────────────────────────────────────────────
+// Admin-curated LGBT+ news for Poland + the EU (P-31, pillar 3 "Support &
+// Education / News"; design refs assets/news-feed-*.png + news-details-*.png). Two
+// content modes in ONE table: our own editorial (a full `body`, no external link)
+// and externally-sourced items (a `summary` + a `sourceUrl` to read at the origin
+// — we never republish an outlet's full article: copyright + accuracy). ADMIN-
+// PUBLISHED ONLY — never user-generated (a "Zaproponuj temat"/suggest-a-story
+// moderated submission pipeline is a later slice; users read + suggest, never
+// author). `category` is plain text; the frozen NEWS_CATEGORIES tuple in
+// shared/types.ts is the source of truth, enforced by Zod (no pgEnum) — coarse
+// editorial topics, 🔒 never identity/orientation (Article-9-safe). `imageKey` is a
+// server-internal R2 object key (the admin image upload + signed `imageUrl` land in
+// a later slice — unplumbed here); it is NEVER exposed on the DTO. This is CONTENT,
+// not user personal data. `createdById` is the publishing admin (survives erasure,
+// anonymised). Soft-delete via `deletedAt`.
+export const news = pgTable("news", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: text("title").notNull(),
+  // Card excerpt / teaser; for an externally-sourced item this is the shown blurb.
+  summary: text("summary").notNull(),
+  // Full editorial article text. Null for an externally-sourced item (readers go
+  // to the source instead).
+  body: text("body"),
+  category: text("category").notNull(),
+  // Attribution label shown on the card/detail (e.g. "Blis-Q Redakcja" or an
+  // outlet name like "OKO.press").
+  source: text("source").notNull(),
+  // Optional external link ("Czytaj u źródła"). Null for our own editorial pieces.
+  sourceUrl: text("source_url"),
+  // Server-internal R2 key for the article image (admin upload is a later slice).
+  // NEVER on the DTO — the DTO exposes a signed `imageUrl` (also a later slice).
+  imageKey: text("image_key"),
+  // Whether this is the highlighted "NA TOPIE" top story. Admin-set.
+  featured: boolean("featured").notNull().default(false),
+  createdById: uuid("created_by_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
 // ── reports ───────────────────────────────────────────────────────────────────
 // Moderation queue. Reports are RETAINED for moderation audit; on erasure the
 // reporter is anonymised (reporterId SET NULL — §5.2). resourceType + resourceId
@@ -629,6 +672,8 @@ export type Resource = typeof resources.$inferSelect;
 export type NewResource = typeof resources.$inferInsert;
 export type CrisisContact = typeof crisisContacts.$inferSelect;
 export type NewCrisisContact = typeof crisisContacts.$inferInsert;
+export type News = typeof news.$inferSelect;
+export type NewNews = typeof news.$inferInsert;
 export type SafePlaceSave = typeof safePlaceSaves.$inferSelect;
 export type Report = typeof reports.$inferSelect;
 export type Block = typeof blocks.$inferSelect;

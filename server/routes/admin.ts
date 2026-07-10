@@ -10,6 +10,7 @@ import type {
   SafePlaceRow,
   ResourceRow,
   CrisisContactRow,
+  NewsRow,
 } from "../storage";
 import { supabaseClient, supabaseAdmin } from "../supabase";
 import {
@@ -31,6 +32,9 @@ import {
   resourcesListQuerySchema,
   createResourceSchema,
   updateResourceSchema,
+  newsListQuerySchema,
+  createNewsSchema,
+  updateNewsSchema,
   crisisContactsListQuerySchema,
   createCrisisContactSchema,
   updateCrisisContactSchema,
@@ -56,6 +60,8 @@ import type {
   SafePlaceCategory,
   ResourceDTO,
   ResourceCategory,
+  NewsDTO,
+  NewsCategory,
   CrisisContactDTO,
   CrisisContactCategory,
   OffsetPage,
@@ -145,6 +151,12 @@ export function registerAdminRoutes(app: Express): void {
   app.post("/api/admin/resources", ...admin, handleCreateResource);
   app.patch("/api/admin/resources/:id", ...admin, handleUpdateResource);
   app.delete("/api/admin/resources/:id", ...admin, handleDeleteResource);
+
+  // News (admin-curated pillar-3 News content, P-31).
+  app.get("/api/admin/news", ...admin, handleListNews);
+  app.post("/api/admin/news", ...admin, handleCreateNews);
+  app.patch("/api/admin/news/:id", ...admin, handleUpdateNews);
+  app.delete("/api/admin/news/:id", ...admin, handleDeleteNews);
 
   // Crisis contacts (admin-curated "Pomoc w kryzysie" safety helplines, P-37).
   // Reads are public (routes/crisisContacts.ts); writes are admin-only here.
@@ -1092,6 +1104,140 @@ async function handleDeleteResource(
     console.error("[DELETE /api/admin/resources/:id]", {
       code: safeErrorCode(err),
     });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// ── News (admin-curated pillar-3 News content, P-31) ──────────────────────────
+// Mirrors the resources admin CRUD: requireAdmin, rate-limit first, Zod → 400,
+// transactional + IDs-only audit in storage, soft-delete. imageUrl is null until
+// the admin image-upload slice (raw imageKey never serialised).
+
+function toNewsDTO(row: NewsRow): NewsDTO {
+  return {
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    body: row.body,
+    category: row.category as NewsCategory,
+    source: row.source,
+    sourceUrl: row.sourceUrl,
+    imageUrl: null,
+    featured: row.featured,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+async function handleListNews(req: Request, res: Response): Promise<Response> {
+  try {
+    const parsed = newsListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const q = parsed.data;
+    const { rows, total } = await storage.listNews({
+      page: q.page,
+      pageSize: q.pageSize,
+      category: q.category,
+      search: q.search,
+    });
+    const body: OffsetPage<NewsDTO> = {
+      data: rows.map(toNewsDTO),
+      page: q.page,
+      pageSize: q.pageSize,
+      total,
+      totalPages: Math.ceil(total / q.pageSize),
+    };
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[GET /api/admin/news]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleCreateNews(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = createNewsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const row = await storage.createNews(parsed.data, userId, req.ip ?? null);
+    return res.status(201).json(toNewsDTO(row));
+  } catch (err) {
+    console.error("[POST /api/admin/news]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleUpdateNews(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = updateNewsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const row = await storage.updateNews(
+      id,
+      parsed.data,
+      userId,
+      req.ip ?? null,
+    );
+    if (!row) return res.status(404).json({ error: "Not found" });
+    return res.status(200).json(toNewsDTO(row));
+  } catch (err) {
+    console.error("[PATCH /api/admin/news/:id]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleDeleteNews(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const result = await storage.softDeleteNews(id, userId, req.ip ?? null);
+    if (result === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/admin/news/:id]", { code: safeErrorCode(err) });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }

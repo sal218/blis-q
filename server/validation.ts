@@ -5,6 +5,7 @@ import {
   ACCESSIBILITY_FEATURES,
   RESOURCE_CATEGORIES,
   CRISIS_CONTACT_CATEGORIES,
+  NEWS_CATEGORIES,
 } from "@shared/types";
 import { ALLOWED_IMAGE_CONTENT_TYPES } from "./objectStorage";
 
@@ -314,6 +315,62 @@ export const updateResourceSchema = z
     body: z.string().trim().min(1).max(MAX_RESOURCE_BODY_LENGTH).optional(),
     // undefined = unchanged · null = REMOVE the link · string = set/replace.
     url: z.string().trim().url().max(MAX_URL_LENGTH).nullable().optional(),
+    featured: z.boolean().optional(),
+  })
+  .strict()
+  // PATCH must change something — an empty body is a 400, not a silent no-op.
+  .refine((d) => Object.values(d).some((v) => v !== undefined), {
+    message: "At least one field is required",
+  });
+
+// ── News (admin-curated pillar-3 News content, P-31) ──────────────────────────
+// Admin-published editorial (full body) + externally-sourced items (summary +
+// sourceUrl). category is a frozen predefined content topic (never identity —
+// Article-9-safe). Mirrors the resources schemas.
+const MAX_NEWS_TITLE_LENGTH = 200;
+const MAX_NEWS_SUMMARY_LENGTH = 500;
+const MAX_NEWS_BODY_LENGTH = 20000;
+const MAX_NEWS_SOURCE_LENGTH = 120;
+const MAX_NEWS_SEARCH_LENGTH = 100;
+
+export const newsCategorySchema = z.enum(NEWS_CATEGORIES);
+
+export const createNewsSchema = z
+  .object({
+    title: z.string().trim().min(1).max(MAX_NEWS_TITLE_LENGTH),
+    summary: z.string().trim().min(1).max(MAX_NEWS_SUMMARY_LENGTH),
+    // Full editorial text. Omitted = an externally-sourced item (read at source).
+    body: z.string().trim().min(1).max(MAX_NEWS_BODY_LENGTH).optional(),
+    category: newsCategorySchema,
+    source: z.string().trim().min(1).max(MAX_NEWS_SOURCE_LENGTH),
+    // Optional external link ("Czytaj u źródła").
+    sourceUrl: z.string().trim().url().max(MAX_URL_LENGTH).optional(),
+    featured: z.boolean().optional(),
+  })
+  .strict();
+
+export const updateNewsSchema = z
+  .object({
+    title: z.string().trim().min(1).max(MAX_NEWS_TITLE_LENGTH).optional(),
+    summary: z.string().trim().min(1).max(MAX_NEWS_SUMMARY_LENGTH).optional(),
+    // undefined = unchanged · null = clear the body · string = set/replace.
+    body: z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_NEWS_BODY_LENGTH)
+      .nullable()
+      .optional(),
+    category: newsCategorySchema.optional(),
+    source: z.string().trim().min(1).max(MAX_NEWS_SOURCE_LENGTH).optional(),
+    // undefined = unchanged · null = REMOVE the link · string = set/replace.
+    sourceUrl: z
+      .string()
+      .trim()
+      .url()
+      .max(MAX_URL_LENGTH)
+      .nullable()
+      .optional(),
     featured: z.boolean().optional(),
   })
   .strict()
@@ -690,6 +747,23 @@ export const resourcesListQuerySchema = z.object({
   search: z.string().trim().min(1).max(MAX_RESOURCE_SEARCH_LENGTH).optional(),
 });
 
+// News list (P-31): offset/page + an optional category filter + an optional
+// server-side search (case-insensitive substring over title+summary+body,
+// LIKE-escaped). Mirrors resourcesListQuerySchema.
+export const newsListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_OFFSET_PAGE_SIZE)
+    .default(DEFAULT_OFFSET_PAGE_SIZE),
+  category: newsCategorySchema.optional(),
+  // Optional case-insensitive substring over title + summary + body (LIKE-escaped
+  // in storage). Blank/whitespace is rejected by min(1) after trim.
+  search: z.string().trim().min(1).max(MAX_NEWS_SEARCH_LENGTH).optional(),
+});
+
 // Crisis contacts list (P-37): offset/page + an optional category filter. NO
 // search — the list is short and curated; the safety page uses category chips.
 export const crisisContactsListQuerySchema = z.object({
@@ -746,6 +820,9 @@ export type SafePlacesListQuery = z.infer<typeof safePlacesListQuerySchema>;
 export type CreateResourceInput = z.infer<typeof createResourceSchema>;
 export type UpdateResourceInput = z.infer<typeof updateResourceSchema>;
 export type ResourcesListQuery = z.infer<typeof resourcesListQuerySchema>;
+export type CreateNewsInput = z.infer<typeof createNewsSchema>;
+export type UpdateNewsInput = z.infer<typeof updateNewsSchema>;
+export type NewsListQuery = z.infer<typeof newsListQuerySchema>;
 export type CreateCrisisContactInput = z.infer<
   typeof createCrisisContactSchema
 >;

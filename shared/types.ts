@@ -309,6 +309,40 @@ export type CrisisContactDTO = {
   createdAt: string;
 };
 
+// Predefined news categories (P-31, pillar-3 News; design refs
+// assets/news-feed-*.png). Coarse editorial TOPICS for the feed's filter chips
+// (Prawa / Społeczność / Zdrowie / Świat) — 🔒 deliberately never
+// identity/orientation (Article-9-safe; a topic can't infer sexual orientation;
+// mirrors RESOURCE_CATEGORIES). The Zod validator enums over this tuple. FROZEN —
+// append, never rename.
+export const NEWS_CATEGORIES = [
+  "rights",
+  "community",
+  "health",
+  "world",
+] as const;
+
+export type NewsCategory = (typeof NEWS_CATEGORIES)[number];
+
+// A news article (P-31). Admin-published editorial CONTENT (not user data). Two
+// modes: our own editorial (a non-null `body`) and externally-sourced (a null
+// `body` + a `sourceUrl` to read at the origin). `summary` is always the card
+// blurb. `imageUrl` is a short-lived signed URL for the article image, or null —
+// the raw R2 key is NEVER exposed (the admin upload + signing land in a later
+// slice, so it is always null for now). `featured` backs the "NA TOPIE" top story.
+export type NewsDTO = {
+  id: string;
+  title: string;
+  summary: string;
+  body: string | null;
+  category: NewsCategory;
+  source: string;
+  sourceUrl: string | null;
+  imageUrl: string | null;
+  featured: boolean;
+  createdAt: string;
+};
+
 export type NotificationPreferencesDTO = {
   communityPosts: boolean;
   events: boolean;

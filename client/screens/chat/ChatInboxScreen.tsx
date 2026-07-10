@@ -68,18 +68,43 @@ export function ChatInboxScreen({ navigation }: Props) {
     return m.sender ? `${m.sender.displayName}: ${m.content}` : m.content;
   };
 
+  // The title row (with the crisis-help button) is rendered in EVERY state —
+  // loading, error and ready — so the app-wide safety affordance never
+  // disappears on a slow or failed chat load (the search box only makes sense
+  // once there's data, so it's ready-state only).
+  const titleRow = (
+    <View style={styles.titleRow}>
+      <Text style={styles.title}>{strings.chat.messagesTitle}</Text>
+      <CrisisHeaderButton
+        onPress={() => navigation.navigate("Resources", { screen: "Crisis" })}
+      />
+    </View>
+  );
+
   if (status === "loading" && chats.length === 0) {
-    return <ChatInboxSkeleton />;
+    return (
+      <View style={styles.root}>
+        <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+          {titleRow}
+        </View>
+        <ChatInboxSkeleton showHeader={false} />
+      </View>
+    );
   }
 
   if (status === "error" && chats.length === 0) {
     return (
-      <View style={[styles.root, styles.centered]}>
-        <Text style={styles.errorText}>
-          {errorMessage ?? strings.chat.loadError}
-        </Text>
-        <View style={styles.fullWidth}>
-          <PrimaryButton label={strings.chat.retry} onPress={retry} />
+      <View style={styles.root}>
+        <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+          {titleRow}
+        </View>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>
+            {errorMessage ?? strings.chat.loadError}
+          </Text>
+          <View style={styles.fullWidth}>
+            <PrimaryButton label={strings.chat.retry} onPress={retry} />
+          </View>
         </View>
       </View>
     );
@@ -88,14 +113,7 @@ export function ChatInboxScreen({ navigation }: Props) {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>{strings.chat.messagesTitle}</Text>
-          <CrisisHeaderButton
-            onPress={() =>
-              navigation.navigate("Resources", { screen: "Crisis" })
-            }
-          />
-        </View>
+        {titleRow}
         <View style={styles.searchBox}>
           <MagnifyingGlass size={18} color={colors.textMuted} />
           <TextInput

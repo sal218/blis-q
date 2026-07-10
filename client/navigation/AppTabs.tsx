@@ -25,6 +25,7 @@ import { BlockedUsersScreen } from "@/screens/BlockedUsersScreen";
 import { AboutScreen } from "@/screens/AboutScreen";
 import { ResourcesScreen } from "@/screens/resources/ResourcesScreen";
 import { ResourceDetailScreen } from "@/screens/resources/ResourceDetailScreen";
+import { CrisisScreen } from "@/screens/crisis/CrisisScreen";
 import { strings } from "@/i18n";
 
 // Authenticated app shell. Post-login IA: bottom tabs Home · Events · Wsparcie ·
@@ -60,6 +61,10 @@ export type AppTabsParamList = {
 export type ResourcesStackParamList = {
   ResourcesHome: undefined;
   ResourceDetail: { id: string };
+  // Crisis / safety page ("Pomoc w kryzysie", P-37) — reached from the Lifebuoy
+  // button in the Wsparcie header. Lives in this stack so the tab bar stays
+  // visible (per the light mockup); slice 3b adds the global entry points.
+  Crisis: undefined;
 };
 
 export type EventsStackParamList = {
@@ -173,6 +178,12 @@ function ResourcesStack() {
         name="ResourceDetail"
         component={ResourceDetailScreen}
         // Full-bleed: the screen renders its own floating back button.
+        options={{ headerShown: false }}
+      />
+      <ResourcesStackNav.Screen
+        name="Crisis"
+        component={CrisisScreen}
+        // The screen owns its header + back button (no native bar).
         options={{ headerShown: false }}
       />
     </ResourcesStackNav.Navigator>

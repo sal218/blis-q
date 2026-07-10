@@ -9,7 +9,11 @@
  * copying the regular-weight path `d` from that repo.
  */
 import Svg, { Path } from "react-native-svg";
-import type { EventCategory, ResourceCategory } from "@shared/types";
+import type {
+  EventCategory,
+  ResourceCategory,
+  CrisisContactCategory,
+} from "@shared/types";
 
 interface IconProps {
   size?: number;
@@ -304,6 +308,77 @@ export function GenderNeuter({ size = 24, color = "#000" }: IconProps) {
   return (
     <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
       <Path d="M208,104a80,80,0,1,0-88,79.6V232a8,8,0,0,0,16,0V183.6A80.11,80.11,0,0,0,208,104Zm-80,64a64,64,0,1,1,64-64A64.07,64.07,0,0,1,128,168Z" />
+    </Svg>
+  );
+}
+
+// ── Crisis / safety ("Pomoc w kryzysie", P-37) glyphs ───────────────────────────
+
+// phone-call (Phosphor v2 regular) — the tap-to-call button + the
+// emergency-category disc. Shared as a const so the CrisisCategoryIcon map reuses
+// it. The signal waves read clearly as "call".
+const PHONE_PATH =
+  "M144.27,45.93a8,8,0,0,1,9.8-5.66,86.22,86.22,0,0,1,61.66,61.66,8,8,0,0,1-5.66,9.8A8.23,8.23,0,0,1,208,112a8,8,0,0,1-7.73-5.94,70.35,70.35,0,0,0-50.33-50.33A8,8,0,0,1,144.27,45.93Zm-2.33,41.8c13.79,3.68,22.65,12.54,26.33,26.33A8,8,0,0,0,176,120a8.23,8.23,0,0,0,2.07-.27,8,8,0,0,0,5.66-9.8c-5.12-19.16-18.5-32.54-37.66-37.66a8,8,0,1,0-4.13,15.46Zm81.94,95.35A56.26,56.26,0,0,1,168,232C88.6,232,24,167.4,24,88A56.26,56.26,0,0,1,72.92,32.12a16,16,0,0,1,16.62,9.52l21.12,47.15,0,.12A16,16,0,0,1,109.39,104c-.18.27-.37.52-.57.77L88,129.45c7.49,15.22,23.41,31,38.83,38.51l24.34-20.71a8.12,8.12,0,0,1,.75-.56,16,16,0,0,1,15.17-1.4l.13.06,47.11,21.11A16,16,0,0,1,223.88,183.08Zm-15.88-2s-.07,0-.11,0h0l-47-21.05-24.35,20.71a8.44,8.44,0,0,1-.74.56,16,16,0,0,1-15.75,1.14c-18.73-9.05-37.4-27.58-46.46-46.11a16,16,0,0,1,1-15.7,6.13,6.13,0,0,1,.57-.77L96,95.15l-21-47a.61.61,0,0,1,0-.12A40.2,40.2,0,0,0,40,88,128.14,128.14,0,0,0,168,216,40.21,40.21,0,0,0,208,181.07Z";
+
+export function Phone({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d={PHONE_PATH} />
+    </Svg>
+  );
+}
+
+// lock — the confidentiality reassurance footer.
+export function Lock({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Zm-68-56a12,12,0,1,1-12-12A12,12,0,0,1,140,152Z" />
+    </Svg>
+  );
+}
+
+// shield-check — the 112 emergency banner icon. Reuses the rights glyph path.
+export function ShieldCheck({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d={RESOURCE_CATEGORY_ICON_PATHS.legal_rights} />
+    </Svg>
+  );
+}
+
+// lifebuoy — the crisis-help header button (Phosphor v2 regular).
+export function Lifebuoy({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm39.1,131.79a47.84,47.84,0,0,0,0-55.58l28.5-28.49a87.83,87.83,0,0,1,0,112.56ZM96,128a32,32,0,1,1,32,32A32,32,0,0,1,96,128Zm88.28-67.6L155.79,88.9a47.84,47.84,0,0,0-55.58,0L71.72,60.4a87.83,87.83,0,0,1,112.56,0ZM60.4,71.72l28.5,28.49a47.84,47.84,0,0,0,0,55.58L60.4,184.28a87.83,87.83,0,0,1,0-112.56ZM71.72,195.6l28.49-28.5a47.84,47.84,0,0,0,55.58,0l28.49,28.5a87.83,87.83,0,0,1-112.56,0Z" />
+    </Svg>
+  );
+}
+
+// Per-crisis-category glyph, keyed by CRISIS_CONTACT_CATEGORIES. Reuses existing
+// verified paths — phone (emergency), hand-heart (emotional support),
+// shield-check (legal), chats-teardrop (community). Coarse SERVICE-type glyphs,
+// never identity symbols. Exhaustive, so a new category key is a compile error
+// until its glyph is added here.
+const CRISIS_CONTACT_CATEGORY_ICON_PATHS: Record<
+  CrisisContactCategory,
+  string
+> = {
+  emergency: PHONE_PATH,
+  emotional_crisis: EVENT_CATEGORY_ICON_PATHS.support,
+  legal: RESOURCE_CATEGORY_ICON_PATHS.legal_rights,
+  community:
+    "M169.57,72.59A80,80,0,0,0,16,104v64a16,16,0,0,0,16,16H86.67A80.15,80.15,0,0,0,160,232h64a16,16,0,0,0,16-16V152A80,80,0,0,0,169.57,72.59ZM32,104a64,64,0,1,1,64,64H32ZM224,216H160a64.14,64.14,0,0,1-55.68-32.43A79.93,79.93,0,0,0,174.7,89.71,64,64,0,0,1,224,152Z",
+};
+
+export function CrisisCategoryIcon({
+  category,
+  size = 24,
+  color = "#000",
+}: IconProps & { category: CrisisContactCategory }) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d={CRISIS_CONTACT_CATEGORY_ICON_PATHS[category]} />
     </Svg>
   );
 }

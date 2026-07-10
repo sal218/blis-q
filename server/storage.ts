@@ -3356,10 +3356,16 @@ export class DatabaseStorage {
     page: number;
     pageSize: number;
     category?: string;
+    verifiedOnly?: boolean;
   }): Promise<{ rows: CrisisContactRow[]; total: number }> {
     const conditions: (SQL | undefined)[] = [isNull(crisisContacts.deletedAt)];
     if (input.category)
       conditions.push(eq(crisisContacts.category, input.category));
+    // The PUBLIC read passes verifiedOnly:true so unverified (not-yet-vetted)
+    // contacts never leave the server — `verified` is a real publish gate. The
+    // admin list omits it (admins see all, incl. unverified, to manage them).
+    if (input.verifiedOnly)
+      conditions.push(isNotNull(crisisContacts.verifiedAt));
     const where = and(...conditions);
 
     const rows = await db
@@ -3387,11 +3393,21 @@ export class DatabaseStorage {
     return { rows, total: Number(n) };
   }
 
-  async getCrisisContact(id: string): Promise<CrisisContactRow | null> {
+  async getCrisisContact(
+    id: string,
+    opts?: { verifiedOnly?: boolean },
+  ): Promise<CrisisContactRow | null> {
+    const conditions: (SQL | undefined)[] = [
+      eq(crisisContacts.id, id),
+      isNull(crisisContacts.deletedAt),
+    ];
+    // Public read: an unverified contact resolves to null → 404 (never exposed).
+    if (opts?.verifiedOnly)
+      conditions.push(isNotNull(crisisContacts.verifiedAt));
     const [row] = await db
       .select(this.crisisContactColumns())
       .from(crisisContacts)
-      .where(and(eq(crisisContacts.id, id), isNull(crisisContacts.deletedAt)))
+      .where(and(...conditions))
       .limit(1);
     return row ?? null;
   }

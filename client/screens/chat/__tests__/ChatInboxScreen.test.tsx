@@ -118,6 +118,42 @@ describe("ChatInboxScreen", () => {
     expect(screen.queryByText("Queer Creatives")).toBeNull();
   });
 
+  it("the crisis-help button cross-navigates to the Resources/Crisis screen", () => {
+    chatsMock.mockReturnValue(state({ chats: [] }));
+    const navigate = renderInbox();
+
+    fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
+    expect(navigate).toHaveBeenCalledWith("Resources", {
+      screen: "Crisis",
+      initial: false,
+    });
+  });
+
+  it("keeps the crisis-help button reachable during the loading state", () => {
+    chatsMock.mockReturnValue(state({ status: "loading", chats: [] }));
+    const navigate = renderInbox();
+    // The skeleton and the real (crisis-bearing) header both render — the safety
+    // affordance must not disappear while chats are loading.
+    expect(screen.getByTestId("chat-inbox-skeleton")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
+    expect(navigate).toHaveBeenCalledWith("Resources", {
+      screen: "Crisis",
+      initial: false,
+    });
+  });
+
+  it("keeps the crisis-help button reachable during the error state", () => {
+    chatsMock.mockReturnValue(
+      state({ status: "error", chats: [], errorMessage: "Błąd" }),
+    );
+    const navigate = renderInbox();
+    fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
+    expect(navigate).toHaveBeenCalledWith("Resources", {
+      screen: "Crisis",
+      initial: false,
+    });
+  });
+
   it("shows the search-empty state when nothing matches", () => {
     chatsMock.mockReturnValue(
       state({

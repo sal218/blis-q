@@ -168,6 +168,14 @@ describe("ResourcesScreen (directory)", () => {
     expect(screen.getByText(strings.resources.emptySearch)).toBeTruthy();
   });
 
+  it("the crisis-help button opens the Crisis screen (same stack)", () => {
+    rMock.mockReturnValue(state());
+    const nav = { navigate: jest.fn() };
+    renderScreen(nav);
+    fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
+    expect(nav.navigate).toHaveBeenCalledWith("Crisis");
+  });
+
   it("shows the error state with a retry", () => {
     const retry = jest.fn();
     rMock.mockReturnValue(

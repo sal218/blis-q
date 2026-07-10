@@ -61,9 +61,11 @@ export type AppTabsParamList = {
 export type ResourcesStackParamList = {
   ResourcesHome: undefined;
   ResourceDetail: { id: string };
-  // Crisis / safety page ("Pomoc w kryzysie", P-37) — reached from the Lifebuoy
-  // button in the Wsparcie header. Lives in this stack so the tab bar stays
-  // visible (per the light mockup); slice 3b adds the global entry points.
+  // Crisis / safety page ("Pomoc w kryzysie", P-37) — reached from the crisis-help
+  // (phone-call) button in each primary screen's header. Lives in this stack so the
+  // tab bar stays visible (per the light mockup); slice 3b rolled the header button
+  // out app-wide (Home/Events/Wsparcie/Chat/Profile) via the shared
+  // CrisisHeaderButton, cross-navigating here from the other tabs.
   Crisis: undefined;
 };
 
@@ -300,6 +302,17 @@ export function AppTabs() {
       <Tabs.Screen
         name="Resources"
         component={ResourcesStack}
+        listeners={({ navigation }) => ({
+          // Tapping the Wsparcie tab always lands on the Resources LIST — even
+          // after another tab cross-navigated into this stack's Crisis (safety)
+          // screen. Without this, that cross-tab navigate leaves the stack on
+          // Crisis (no pop-to-top fires across tabs), so the Wsparcie list
+          // becomes unreachable. Mirrors the Events tab's reset above.
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate("Resources", { screen: "ResourcesHome" });
+          },
+        })}
         options={{
           title: strings.tabs.resources,
           tabBarIcon: ({ color, size }) => (

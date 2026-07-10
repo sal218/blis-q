@@ -9,17 +9,23 @@ import {
   StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { CompositeScreenProps } from "@react-navigation/native";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Avatar } from "@/components/Avatar";
 import { MagnifyingGlass } from "@/components/icons/PhosphorIcons";
+import { CrisisHeaderButton } from "@/components/CrisisHeaderButton";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { ChatInboxSkeleton } from "@/components/skeleton/ChatInboxSkeleton";
 import { useChats } from "@/hooks/useChats";
 import { formatInboxTime } from "@/lib/relativeTime";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
-import type { ChatStackParamList } from "@/navigation/AppTabs";
+import type {
+  ChatStackParamList,
+  AppTabsParamList,
+} from "@/navigation/AppTabs";
 import type { ChatSummaryDTO } from "@shared/types";
 
 // Messages inbox = the Chat tab root (design ref: chat-screen.png — community
@@ -28,7 +34,10 @@ import type { ChatSummaryDTO } from "@shared/types";
 // HTTP-only (useChats refetches silently on focus); search filters the loaded
 // list client-side. Unread badges / presence / DM-Requests chips are P-24c/P-26.
 
-type Props = NativeStackScreenProps<ChatStackParamList, "ChatInbox">;
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<ChatStackParamList, "ChatInbox">,
+  BottomTabScreenProps<AppTabsParamList>
+>;
 
 const AVATAR_SIZE = 52;
 
@@ -59,18 +68,47 @@ export function ChatInboxScreen({ navigation }: Props) {
     return m.sender ? `${m.sender.displayName}: ${m.content}` : m.content;
   };
 
+  // The title row (with the crisis-help button) is rendered in EVERY state —
+  // loading, error and ready — so the app-wide safety affordance never
+  // disappears on a slow or failed chat load (the search box only makes sense
+  // once there's data, so it's ready-state only).
+  const titleRow = (
+    <View style={styles.titleRow}>
+      <Text style={styles.title}>{strings.chat.messagesTitle}</Text>
+      <CrisisHeaderButton
+        onPress={() =>
+          // initial: false keeps Wsparcie (ResourcesHome) beneath Crisis so Back
+          // from the safety page lands on the Wsparcie list.
+          navigation.navigate("Resources", { screen: "Crisis", initial: false })
+        }
+      />
+    </View>
+  );
+
   if (status === "loading" && chats.length === 0) {
-    return <ChatInboxSkeleton />;
+    return (
+      <View style={styles.root}>
+        <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+          {titleRow}
+        </View>
+        <ChatInboxSkeleton showHeader={false} />
+      </View>
+    );
   }
 
   if (status === "error" && chats.length === 0) {
     return (
-      <View style={[styles.root, styles.centered]}>
-        <Text style={styles.errorText}>
-          {errorMessage ?? strings.chat.loadError}
-        </Text>
-        <View style={styles.fullWidth}>
-          <PrimaryButton label={strings.chat.retry} onPress={retry} />
+      <View style={styles.root}>
+        <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+          {titleRow}
+        </View>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>
+            {errorMessage ?? strings.chat.loadError}
+          </Text>
+          <View style={styles.fullWidth}>
+            <PrimaryButton label={strings.chat.retry} onPress={retry} />
+          </View>
         </View>
       </View>
     );
@@ -79,7 +117,7 @@ export function ChatInboxScreen({ navigation }: Props) {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
-        <Text style={styles.title}>{strings.chat.messagesTitle}</Text>
+        {titleRow}
         <View style={styles.searchBox}>
           <MagnifyingGlass size={18} color={colors.textMuted} />
           <TextInput
@@ -179,11 +217,17 @@ function createStyles(colors: ThemeColors) {
       paddingHorizontal: spacing.lg,
       paddingBottom: spacing.md,
     },
+    titleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: spacing.md,
+      marginBottom: spacing.md,
+    },
     title: {
       color: colors.text,
       fontSize: 28,
       fontWeight: "800",
-      marginBottom: spacing.md,
     },
     searchBox: {
       flexDirection: "row",

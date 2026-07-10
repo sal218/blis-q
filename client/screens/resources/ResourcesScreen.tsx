@@ -13,7 +13,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
-import { MagnifyingGlass, X, Phone } from "@/components/icons/PhosphorIcons";
+import { MagnifyingGlass, X } from "@/components/icons/PhosphorIcons";
+import { CrisisHeaderButton } from "@/components/CrisisHeaderButton";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { ResourceCard } from "@/components/ResourceCard";
 import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
@@ -151,18 +152,7 @@ export function ResourcesScreen({ navigation }: Props) {
           <Text style={styles.title}>{strings.resources.title}</Text>
           <Text style={styles.subtitle}>{strings.resources.subtitle}</Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={strings.crisis.open}
-          hitSlop={8}
-          onPress={() => navigation.navigate("Crisis")}
-          style={({ pressed }) => [
-            styles.crisisBtn,
-            pressed && styles.crisisBtnPressed,
-          ]}
-        >
-          <Phone size={26} color={colors.primary} />
-        </Pressable>
+        <CrisisHeaderButton onPress={() => navigation.navigate("Crisis")} />
       </View>
 
       <View style={styles.searchBox}>
@@ -294,19 +284,6 @@ function createStyles(colors: ThemeColors) {
     },
     headerText: {
       flex: 1,
-    },
-    crisisBtn: {
-      width: 44,
-      height: 44,
-      borderRadius: radius.full,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    crisisBtnPressed: {
-      opacity: 0.7,
     },
     title: {
       color: colors.text,

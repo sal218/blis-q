@@ -8,8 +8,13 @@ import {
   StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { CompositeScreenProps } from "@react-navigation/native";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { ProfileStackParamList } from "@/navigation/AppTabs";
+import type {
+  ProfileStackParamList,
+  AppTabsParamList,
+} from "@/navigation/AppTabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { signOutGoogle } from "@/lib/googleAuth";
@@ -25,11 +30,15 @@ import {
   Question,
   SignOut,
 } from "@/components/icons/PhosphorIcons";
+import { CrisisHeaderButton } from "@/components/CrisisHeaderButton";
 import { SUPPORT_EMAIL, SUPPORT_EMAIL_CONFIGURED } from "@/constants/support";
 import { strings } from "@/i18n";
 import { spacing, radius, shadow, type ThemeColors } from "@/constants/theme";
 
-type Props = NativeStackScreenProps<ProfileStackParamList, "ProfileHome">;
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<ProfileStackParamList, "ProfileHome">,
+  BottomTabScreenProps<AppTabsParamList>
+>;
 
 // The profile stats row (Communities / Events) is intentionally hidden until the
 // real counts are wired — we never show fabricated numbers. Flip to true once a
@@ -66,7 +75,19 @@ export function ProfileScreen({ navigation }: Props) {
         paddingHorizontal: spacing.lg,
       }}
     >
-      <Text style={styles.title}>{strings.profile.title}</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>{strings.profile.title}</Text>
+        <CrisisHeaderButton
+          onPress={() =>
+            // initial: false keeps Wsparcie (ResourcesHome) beneath Crisis so
+            // Back from the safety page lands on the Wsparcie list.
+            navigation.navigate("Resources", {
+              screen: "Crisis",
+              initial: false,
+            })
+          }
+        />
+      </View>
 
       {/* Profile header — display-only for now. TODO: profile photos are a
           privacy decision (deferred); the plan is curated selectable avatars in
@@ -156,12 +177,18 @@ function createStyles(colors: ThemeColors) {
       // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
       backgroundColor: "transparent",
     },
+    titleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: spacing.md,
+      marginBottom: spacing.lg,
+    },
     title: {
       color: colors.text,
       fontSize: 32,
       fontWeight: "800",
       letterSpacing: -0.5,
-      marginBottom: spacing.lg,
     },
     identity: {
       flexDirection: "row",

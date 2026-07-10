@@ -1,23 +1,32 @@
 import { useMemo, useState } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { CompositeScreenProps } from "@react-navigation/native";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Bookmark } from "@/components/icons/PhosphorIcons";
+import { CrisisHeaderButton } from "@/components/CrisisHeaderButton";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { EventsList } from "@/screens/events/EventsList";
 import { SafePlacesList } from "@/screens/events/SafePlacesList";
 import { CommunitiesSection } from "@/screens/communities/CommunitiesSection";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
-import type { EventsStackParamList } from "@/navigation/AppTabs";
+import type {
+  EventsStackParamList,
+  AppTabsParamList,
+} from "@/navigation/AppTabs";
 
 // Events tab landing screen. A segmented control switches between three
 // subsections in this order: Events · Safe places · Communities. Events and
 // Communities are built; Safe places stays a themed placeholder (Sprint 7,
 // design refs: events-screen.png, event-safeplace-screen.png).
 
-type Props = NativeStackScreenProps<EventsStackParamList, "EventsHome">;
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<EventsStackParamList, "EventsHome">,
+  BottomTabScreenProps<AppTabsParamList>
+>;
 
 const SEGMENT_EVENTS = 0;
 const SEGMENT_SAFE_PLACES = 1;
@@ -39,15 +48,30 @@ export function EventsScreen({ navigation }: Props) {
     <View style={[styles.root, { paddingTop: insets.top + spacing.lg }]}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>{strings.events.title}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={strings.saved.title}
-          hitSlop={8}
-          onPress={() => navigation.navigate("Saved")}
-          style={({ pressed }) => [styles.savedBtn, pressed && styles.pressed]}
-        >
-          <Bookmark size={22} color={colors.primary} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={strings.saved.title}
+            hitSlop={8}
+            onPress={() => navigation.navigate("Saved")}
+            style={({ pressed }) => [
+              styles.savedBtn,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Bookmark size={22} color={colors.primary} />
+          </Pressable>
+          <CrisisHeaderButton
+            onPress={() =>
+              // initial: false keeps Wsparcie (ResourcesHome) beneath Crisis so
+              // Back from the safety page lands on the Wsparcie list.
+              navigation.navigate("Resources", {
+                screen: "Crisis",
+                initial: false,
+              })
+            }
+          />
+        </View>
       </View>
       <SegmentedControl
         segments={SEGMENTS}
@@ -94,6 +118,11 @@ function createStyles(colors: ThemeColors) {
       justifyContent: "space-between",
       paddingHorizontal: spacing.lg,
       marginBottom: spacing.lg,
+    },
+    headerActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
     },
     title: {
       color: colors.text,

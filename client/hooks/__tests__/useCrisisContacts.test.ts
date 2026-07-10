@@ -3,12 +3,15 @@ jest.mock("@/lib/api/crisisContacts", () => ({
 }));
 // useFocusEffect runs its callback once on mount (React.useEffect), so the hook
 // loads without a NavigationContainer.
-jest.mock("@react-navigation/native", () => ({
-  useFocusEffect: (cb: () => void) => {
-    const React = require("react");
-    React.useEffect(() => cb(), []);
-  },
-}));
+jest.mock("@react-navigation/native", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require("react");
+  return {
+    useFocusEffect: (cb: () => void) => {
+      React.useEffect(() => cb(), []);
+    },
+  };
+});
 
 import { renderHook, waitFor } from "@testing-library/react-native";
 import { listCrisisContacts } from "@/lib/api/crisisContacts";

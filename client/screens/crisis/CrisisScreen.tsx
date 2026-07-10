@@ -3,6 +3,7 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   Pressable,
   Linking,
   ActivityIndicator,
@@ -163,9 +164,14 @@ export function CrisisScreen({ navigation }: Props) {
               </View>
             ) : null}
 
-            {/* Category filter chips (wrap — all visible, no hidden scroll).
-                Emergency is excluded (it's the banner). */}
-            <View style={styles.chips}>
+            {/* Category filter chips — a horizontal scroller (single row; the
+                last chip peeks to hint more). Emergency is excluded (it's the
+                banner). */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chips}
+            >
               {renderPill(
                 strings.crisis.filterAll,
                 category === null,
@@ -180,7 +186,7 @@ export function CrisisScreen({ navigation }: Props) {
                   c,
                 ),
               )}
-            </View>
+            </ScrollView>
 
             {/* Section header + trust label. */}
             <View style={styles.sectionRow}>
@@ -337,10 +343,9 @@ function createStyles(colors: ThemeColors) {
       fontSize: 15,
       fontWeight: "800",
     },
-    // Filter chips — wrap so all are visible (no hidden horizontal scroll).
+    // Filter chips — a single horizontal scrolling row.
     chips: {
       flexDirection: "row",
-      flexWrap: "wrap",
       gap: spacing.sm,
       paddingVertical: spacing.md,
     },

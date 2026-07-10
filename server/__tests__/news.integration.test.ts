@@ -495,3 +495,16 @@ describe("DELETE /api/admin/news/:id", () => {
     );
   });
 });
+
+describe("erasure", () => {
+  it("nulls createdById on the news item (row survives, anonymised)", async () => {
+    const author = await seedUser();
+    const id = await seedNews(author, { title: "By author" });
+
+    await storage.eraseUser(author);
+
+    const [row] = await db.select().from(news).where(eq(news.id, id));
+    expect(row).toBeDefined(); // content survives
+    expect(row.createdById).toBeNull(); // de-linked from the erased author
+  });
+});

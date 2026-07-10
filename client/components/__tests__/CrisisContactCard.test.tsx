@@ -18,10 +18,12 @@ function contact(over: Partial<CrisisContactDTO> = {}): CrisisContactDTO {
 }
 
 describe("telUrl", () => {
-  it("strips formatting to digits and a leading +", () => {
+  it("strips formatting to digits and a single leading +", () => {
     expect(telUrl("800 70 2222")).toBe("tel:800702222");
     expect(telUrl("+48 22 628 52 22")).toBe("tel:+48226285222");
     expect(telUrl("112")).toBe("tel:112");
+    // A non-leading "+" is dropped (not a valid international prefix).
+    expect(telUrl("48+22 628")).toBe("tel:4822628");
   });
 });
 

@@ -12,10 +12,13 @@ import type { CrisisContactDTO } from "@shared/types";
 // optional hours pill, a short description, and a GREEN tap-to-call button. The
 // only action is calling — no per-user/identity surface. Article-9-safe.
 
-// Build a tel: URL — strip everything except digits and a leading +, so a display
-// value like "800 70 2222" dials correctly (dialers ignore spaces/formatting).
+// Build a tel: URL — digits only, plus a SINGLE leading "+" when the number
+// starts with one (an international prefix). Any other "+" is dropped, so a
+// display value like "800 70 2222" dials as "tel:800702222" and "+48 22 628"
+// dials as "tel:+4822628", while a stray mid-string "+" can't leak through.
 export function telUrl(phone: string): string {
-  return `tel:${phone.replace(/[^\d+]/g, "")}`;
+  const plus = phone.trimStart().startsWith("+") ? "+" : "";
+  return `tel:${plus}${phone.replace(/\D/g, "")}`;
 }
 
 type Props = { contact: CrisisContactDTO };

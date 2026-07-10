@@ -27,3 +27,9 @@ coverage/
 
 # Confidential client documents — keep local, NEVER commit (Article 9-adjacent).
 blis-Q_pitchdeck.pdf
+
+# Local dev-only artifacts — keep on disk, not tracked
+# Generated status snapshots / progress dashboards (go stale quickly)
+docs/reports/
+# One-off dev DB seeders (in prod, content is created/maintained in the admin portal)
+scripts/seed-*.ts

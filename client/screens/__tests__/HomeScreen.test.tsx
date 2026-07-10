@@ -154,6 +154,7 @@ describe("HomeScreen", () => {
     );
     expect(navigation.navigate).toHaveBeenCalledWith("Resources", {
       screen: "Crisis",
+      initial: false, // keep Wsparcie beneath so Back lands on the Wsparcie list
     });
   });
 

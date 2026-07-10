@@ -66,7 +66,10 @@ export function HomeScreen({ navigation }: Props) {
   const goToEvents = () =>
     navigation.navigate("Events", { screen: "EventsHome" });
   const openCrisis = () =>
-    navigation.navigate("Resources", { screen: "Crisis" });
+    // `initial: false` keeps the Resources-stack root (ResourcesHome / Wsparcie)
+    // BENEATH Crisis, so Back from the safety page lands on the Wsparcie list —
+    // not back on this tab (which would strand the Resources stack on Crisis).
+    navigation.navigate("Resources", { screen: "Crisis", initial: false });
 
   return (
     <ScrollView

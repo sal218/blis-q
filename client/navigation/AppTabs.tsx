@@ -302,6 +302,17 @@ export function AppTabs() {
       <Tabs.Screen
         name="Resources"
         component={ResourcesStack}
+        listeners={({ navigation }) => ({
+          // Tapping the Wsparcie tab always lands on the Resources LIST — even
+          // after another tab cross-navigated into this stack's Crisis (safety)
+          // screen. Without this, that cross-tab navigate leaves the stack on
+          // Crisis (no pop-to-top fires across tabs), so the Wsparcie list
+          // becomes unreachable. Mirrors the Events tab's reset above.
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate("Resources", { screen: "ResourcesHome" });
+          },
+        })}
         options={{
           title: strings.tabs.resources,
           tabBarIcon: ({ color, size }) => (

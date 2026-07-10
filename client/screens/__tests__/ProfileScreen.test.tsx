@@ -92,6 +92,7 @@ describe("ProfileScreen", () => {
     fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
     expect(navigation.navigate).toHaveBeenCalledWith("Resources", {
       screen: "Crisis",
+      initial: false,
     });
   });
 

@@ -63,7 +63,12 @@ export function EventsScreen({ navigation }: Props) {
           </Pressable>
           <CrisisHeaderButton
             onPress={() =>
-              navigation.navigate("Resources", { screen: "Crisis" })
+              // initial: false keeps Wsparcie (ResourcesHome) beneath Crisis so
+              // Back from the safety page lands on the Wsparcie list.
+              navigation.navigate("Resources", {
+                screen: "Crisis",
+                initial: false,
+              })
             }
           />
         </View>

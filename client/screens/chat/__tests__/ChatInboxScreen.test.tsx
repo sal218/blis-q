@@ -123,7 +123,10 @@ describe("ChatInboxScreen", () => {
     const navigate = renderInbox();
 
     fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
-    expect(navigate).toHaveBeenCalledWith("Resources", { screen: "Crisis" });
+    expect(navigate).toHaveBeenCalledWith("Resources", {
+      screen: "Crisis",
+      initial: false,
+    });
   });
 
   it("keeps the crisis-help button reachable during the loading state", () => {
@@ -133,7 +136,10 @@ describe("ChatInboxScreen", () => {
     // affordance must not disappear while chats are loading.
     expect(screen.getByTestId("chat-inbox-skeleton")).toBeTruthy();
     fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
-    expect(navigate).toHaveBeenCalledWith("Resources", { screen: "Crisis" });
+    expect(navigate).toHaveBeenCalledWith("Resources", {
+      screen: "Crisis",
+      initial: false,
+    });
   });
 
   it("keeps the crisis-help button reachable during the error state", () => {
@@ -142,7 +148,10 @@ describe("ChatInboxScreen", () => {
     );
     const navigate = renderInbox();
     fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
-    expect(navigate).toHaveBeenCalledWith("Resources", { screen: "Crisis" });
+    expect(navigate).toHaveBeenCalledWith("Resources", {
+      screen: "Crisis",
+      initial: false,
+    });
   });
 
   it("shows the search-empty state when nothing matches", () => {

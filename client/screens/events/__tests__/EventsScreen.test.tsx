@@ -42,6 +42,9 @@ describe("EventsScreen — crisis-help button", () => {
   it("cross-navigates to the Resources/Crisis screen", () => {
     const { navigate } = renderScreen();
     fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
-    expect(navigate).toHaveBeenCalledWith("Resources", { screen: "Crisis" });
+    expect(navigate).toHaveBeenCalledWith("Resources", {
+      screen: "Crisis",
+      initial: false,
+    });
   });
 });

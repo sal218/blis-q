@@ -78,7 +78,14 @@ export function ProfileScreen({ navigation }: Props) {
       <View style={styles.titleRow}>
         <Text style={styles.title}>{strings.profile.title}</Text>
         <CrisisHeaderButton
-          onPress={() => navigation.navigate("Resources", { screen: "Crisis" })}
+          onPress={() =>
+            // initial: false keeps Wsparcie (ResourcesHome) beneath Crisis so
+            // Back from the safety page lands on the Wsparcie list.
+            navigation.navigate("Resources", {
+              screen: "Crisis",
+              initial: false,
+            })
+          }
         />
       </View>
 

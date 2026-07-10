@@ -76,7 +76,11 @@ export function ChatInboxScreen({ navigation }: Props) {
     <View style={styles.titleRow}>
       <Text style={styles.title}>{strings.chat.messagesTitle}</Text>
       <CrisisHeaderButton
-        onPress={() => navigation.navigate("Resources", { screen: "Crisis" })}
+        onPress={() =>
+          // initial: false keeps Wsparcie (ResourcesHome) beneath Crisis so Back
+          // from the safety page lands on the Wsparcie list.
+          navigation.navigate("Resources", { screen: "Crisis", initial: false })
+        }
       />
     </View>
   );

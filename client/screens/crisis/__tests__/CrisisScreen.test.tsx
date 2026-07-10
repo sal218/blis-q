@@ -90,19 +90,23 @@ describe("CrisisScreen — safety behavior", () => {
     expect(screen.getByText(strings.crisis.filterAll)).toBeTruthy();
   });
 
-  it("shows the emergency contact in the list under 'Wszystkie'", () => {
+  it("shows the emergency contact ONLY in the banner, not duplicated as a card", () => {
     useMock.mockReturnValue(ready([emergency, legal]));
     render(<CrisisScreen navigation={nav} route={route} />);
-    // The emergency contact appears BOTH in the banner and as a list card (the
-    // card title carries the name; the banner shows only reassurance copy).
-    expect(screen.getByText(/Numer alarmowy/)).toBeTruthy();
+    // The banner is present (reassurance copy)…
+    expect(screen.getByText(strings.crisis.emergency.title)).toBeTruthy();
+    // …but the emergency contact is NOT also a list card (112 isn't duplicated).
+    expect(screen.queryByText(/Numer alarmowy/)).toBeNull();
+    // The non-emergency contact IS listed.
+    expect(screen.getByText(/Pomoc prawna/)).toBeTruthy();
   });
 
-  it("filters the list client-side when a category chip is tapped", () => {
+  it("filters the non-emergency list client-side when a category chip is tapped", () => {
     useMock.mockReturnValue(ready([emergency, legal, emo]));
     render(<CrisisScreen navigation={nav} route={route} />);
-    // Under "Wszystkie" every contact card is visible.
-    expect(screen.getByText(/Numer alarmowy/)).toBeTruthy();
+    // Under "Wszystkie" the list shows the non-emergency contacts; the emergency
+    // contact is in the banner only (never a list card).
+    expect(screen.queryByText(/Numer alarmowy/)).toBeNull();
     expect(screen.getByText(/Pomoc prawna/)).toBeTruthy();
     expect(screen.getByText(/Telefon zaufania/)).toBeTruthy();
 

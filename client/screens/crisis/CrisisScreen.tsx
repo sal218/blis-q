@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import {
   View,
   Text,
-  ScrollView,
+  FlatList,
   Pressable,
   Linking,
   ActivityIndicator,
@@ -31,13 +31,15 @@ import type { ResourcesStackParamList } from "@/navigation/AppTabs";
 
 // Crisis / safety page ("Pomoc w kryzysie", P-37, design refs:
 // assets/safety-page-darkmode.png + safety-page-lightmode.png). Reached from the
-// Lifebuoy button in the Wsparcie header. A PUBLIC read (works signed-out). Top to
-// bottom: an always-present 112 emergency banner (its number comes from the
-// admin-managed emergency contact — never hardcoded), category filter chips, a
-// "Polecane kontakty" section with a "Zweryfikowane i bezpłatne" trust label, the
-// contact cards (tap-to-call), and a confidentiality footer. Favorites/save (the
-// mockup's bookmark) is deferred. The categories are coarse SERVICE types, never
-// identity — Article-9-safe.
+// Lifebuoy button in the Wsparcie header. A PUBLIC read (works signed-out).
+//
+// Layout: the header, the 112 emergency banner and the filter chips are PINNED
+// (they never scroll out of sight — the banner is the fastest path to help); only
+// the contact list scrolls beneath them. The banner's number comes from the
+// admin-managed emergency contact (never hardcoded), and the emergency contact is
+// shown ONLY in the banner — it is excluded from the list so 112 isn't duplicated.
+// The categories are coarse SERVICE types, never identity — Article-9-safe.
+// Favorites/save (the mockup's bookmark) is deferred.
 
 type Props = NativeStackScreenProps<ResourcesStackParamList, "Crisis">;
 
@@ -62,9 +64,12 @@ export function CrisisScreen({ navigation }: Props) {
 
   // The emergency contact drives the banner; it's independent of the active chip.
   const emergency = items.find((c) => c.category === "emergency") ?? null;
-  // "Wszystkie" shows every contact (incl. the emergency one, per the mockup);
-  // a chip filters client-side.
-  const shown = category ? items.filter((c) => c.category === category) : items;
+  // The list is the non-emergency contacts (112 lives in the pinned banner only,
+  // so it isn't duplicated), filtered client-side by the active chip.
+  const nonEmergency = items.filter((c) => c.category !== "emergency");
+  const shown = category
+    ? nonEmergency.filter((c) => c.category === category)
+    : nonEmergency;
 
   const callEmergency = () => {
     if (emergency) void Linking.openURL(telUrl(emergency.phone));
@@ -91,8 +96,8 @@ export function CrisisScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing.sm }]}>
-      {/* Own header — no native bar. */}
-      <View style={styles.header}>
+      {/* Back button — always visible so you can leave from any state. */}
+      <View style={styles.backRow}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={strings.crisis.back}
@@ -123,129 +128,130 @@ export function CrisisScreen({ navigation }: Props) {
           </Pressable>
         </View>
       ) : (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + spacing.xl },
-          ]}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={refresh}
-              tintColor={colors.primary}
-            />
-          }
-        >
-          <Text style={styles.title}>{strings.crisis.title}</Text>
-          <Text style={styles.subtitle}>{strings.crisis.subtitle}</Text>
+        <>
+          {/* ── Pinned header: title, banner + chips never scroll away ── */}
+          <View style={styles.pinned}>
+            <Text style={styles.title}>{strings.crisis.title}</Text>
+            <Text style={styles.subtitle}>{strings.crisis.subtitle}</Text>
 
-          {/* 112 emergency banner — number from the emergency contact (data). */}
-          {emergency ? (
-            <View style={styles.banner}>
-              <View style={styles.bannerIcon}>
-                <ShieldCheck size={22} color={EMERGENCY_ACCENT} />
+            {/* 112 emergency banner — number from the emergency contact (data). */}
+            {emergency ? (
+              <View style={styles.banner}>
+                <View style={styles.bannerIcon}>
+                  <ShieldCheck size={22} color={EMERGENCY_ACCENT} />
+                </View>
+                <View style={styles.bannerText}>
+                  <Text style={styles.bannerTitle}>
+                    {strings.crisis.emergency.title}
+                  </Text>
+                  <Text style={styles.bannerBody}>
+                    {strings.crisis.emergency.body}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${strings.crisis.callAction}: ${emergency.phone}`}
+                  onPress={callEmergency}
+                  style={({ pressed }) => [
+                    styles.bannerCall,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Phone size={17} color="#FFFFFF" />
+                  <Text style={styles.bannerCallText}>{emergency.phone}</Text>
+                </Pressable>
               </View>
-              <View style={styles.bannerText}>
-                <Text style={styles.bannerTitle}>
-                  {strings.crisis.emergency.title}
-                </Text>
-                <Text style={styles.bannerBody}>
-                  {strings.crisis.emergency.body}
-                </Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`${strings.crisis.callAction}: ${emergency.phone}`}
-                onPress={callEmergency}
-                style={({ pressed }) => [
-                  styles.bannerCall,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Phone size={17} color="#FFFFFF" />
-                <Text style={styles.bannerCallText}>{emergency.phone}</Text>
-              </Pressable>
+            ) : null}
+
+            {/* Category filter chips (wrap — all visible, no hidden scroll).
+                Emergency is excluded (it's the banner). */}
+            <View style={styles.chips}>
+              {renderPill(
+                strings.crisis.filterAll,
+                category === null,
+                () => setCategory(null),
+                "all",
+              )}
+              {CHIP_CATEGORIES.map((c) =>
+                renderPill(
+                  strings.crisis.categories[c],
+                  category === c,
+                  () => setCategory(c),
+                  c,
+                ),
+              )}
             </View>
-          ) : null}
 
-          {/* Category filter chips (emergency excluded — it's the banner). */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chips}
-          >
-            {renderPill(
-              strings.crisis.filterAll,
-              category === null,
-              () => setCategory(null),
-              "all",
-            )}
-            {CHIP_CATEGORIES.map((c) =>
-              renderPill(
-                strings.crisis.categories[c],
-                category === c,
-                () => setCategory(c),
-                c,
-              ),
-            )}
-          </ScrollView>
-
-          {/* Section header + trust label. */}
-          <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>
-              {strings.crisis.recommendedTitle}
-            </Text>
-            <View style={styles.trust}>
-              <ShieldCheck size={15} color={colors.primary} />
-              <Text style={styles.trustText}>
-                {strings.crisis.verifiedLabel}
+            {/* Section header + trust label. */}
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>
+                {strings.crisis.recommendedTitle}
               </Text>
+              <View style={styles.trust}>
+                <ShieldCheck size={15} color={colors.primary} />
+                <Text style={styles.trustText}>
+                  {strings.crisis.verifiedLabel}
+                </Text>
+              </View>
             </View>
           </View>
 
-          {/* Contact list. */}
-          {shown.length === 0 ? (
-            <Text style={styles.emptyText}>
-              {category ? strings.crisis.emptyCategory : strings.crisis.empty}
-            </Text>
-          ) : (
-            <View style={styles.list}>
-              {shown.map((c) => (
-                <CrisisContactCard key={c.id} contact={c} />
-              ))}
-            </View>
-          )}
-
-          {/* Confidentiality reassurance footer (collapsible, expanded default). */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ expanded: safetyOpen }}
-            onPress={() => setSafetyOpen((v) => !v)}
-            style={styles.safety}
-          >
-            <View style={styles.safetyIcon}>
-              <Lock size={20} color={colors.primary} />
-            </View>
-            <View style={styles.safetyText}>
-              <Text style={styles.safetyTitle}>
-                {strings.crisis.safety.title}
+          {/* ── Only the contacts scroll ── */}
+          <FlatList
+            data={shown}
+            keyExtractor={(c) => c.id}
+            renderItem={({ item }) => <CrisisContactCard contact={item} />}
+            showsVerticalScrollIndicator={false}
+            style={styles.list}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: insets.bottom + spacing.xl },
+            ]}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={refresh}
+                tintColor={colors.primary}
+              />
+            }
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>
+                {category ? strings.crisis.emptyCategory : strings.crisis.empty}
               </Text>
-              {safetyOpen ? (
-                <Text style={styles.safetyBody}>
-                  {strings.crisis.safety.body}
-                </Text>
-              ) : null}
-            </View>
-            <View
-              style={{
-                transform: [{ rotate: safetyOpen ? "-90deg" : "90deg" }],
-              }}
-            >
-              <CaretRight size={18} color={colors.textMuted} />
-            </View>
-          </Pressable>
-        </ScrollView>
+            }
+            ListFooterComponent={
+              // Confidentiality reassurance footer (collapsible, expanded default).
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: safetyOpen }}
+                onPress={() => setSafetyOpen((v) => !v)}
+                style={styles.safety}
+              >
+                <View style={styles.safetyIcon}>
+                  <Lock size={20} color={colors.primary} />
+                </View>
+                <View style={styles.safetyText}>
+                  <Text style={styles.safetyTitle}>
+                    {strings.crisis.safety.title}
+                  </Text>
+                  {safetyOpen ? (
+                    <Text style={styles.safetyBody}>
+                      {strings.crisis.safety.body}
+                    </Text>
+                  ) : null}
+                </View>
+                <View
+                  style={{
+                    transform: [{ rotate: safetyOpen ? "-90deg" : "90deg" }],
+                  }}
+                >
+                  <CaretRight size={18} color={colors.textMuted} />
+                </View>
+              </Pressable>
+            }
+          />
+        </>
       )}
     </View>
   );
@@ -254,7 +260,7 @@ export function CrisisScreen({ navigation }: Props) {
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: "transparent" },
-    header: {
+    backRow: {
       paddingHorizontal: spacing.lg,
       marginBottom: spacing.xs,
     },
@@ -268,7 +274,8 @@ function createStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderColor: colors.border,
     },
-    content: {
+    // Pinned header block (title + banner + chips + section header).
+    pinned: {
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.sm,
     },
@@ -330,9 +337,10 @@ function createStyles(colors: ThemeColors) {
       fontSize: 15,
       fontWeight: "800",
     },
-    // Filter chips.
+    // Filter chips — wrap so all are visible (no hidden horizontal scroll).
     chips: {
       flexDirection: "row",
+      flexWrap: "wrap",
       gap: spacing.sm,
       paddingVertical: spacing.md,
     },
@@ -358,7 +366,7 @@ function createStyles(colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "space-between",
       marginTop: spacing.xs,
-      marginBottom: spacing.md,
+      marginBottom: spacing.sm,
     },
     sectionTitle: {
       color: colors.text,
@@ -376,7 +384,13 @@ function createStyles(colors: ThemeColors) {
       fontSize: 12.5,
       fontWeight: "700",
     },
-    list: { gap: spacing.md },
+    // Scrolling contact list.
+    list: { flex: 1 },
+    listContent: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+    },
+    separator: { height: spacing.md },
     emptyText: {
       color: colors.textMuted,
       fontSize: 15,

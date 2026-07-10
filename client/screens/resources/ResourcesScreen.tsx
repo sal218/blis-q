@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
-import { MagnifyingGlass, X, Lifebuoy } from "@/components/icons/PhosphorIcons";
+import { MagnifyingGlass, X, Phone } from "@/components/icons/PhosphorIcons";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { ResourceCard } from "@/components/ResourceCard";
 import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
@@ -144,8 +144,8 @@ export function ResourcesScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing.sm }]}>
-      {/* Own header — no native top bar. A Lifebuoy button (top-right) opens the
-          crisis / safety page ("Pomoc w kryzysie"). */}
+      {/* Own header — no native top bar. A phone-call button (top-right) opens
+          the crisis / safety page ("Pomoc w kryzysie"). */}
       <View style={styles.headerRow}>
         <View style={styles.headerText}>
           <Text style={styles.title}>{strings.resources.title}</Text>
@@ -161,7 +161,7 @@ export function ResourcesScreen({ navigation }: Props) {
             pressed && styles.crisisBtnPressed,
           ]}
         >
-          <Lifebuoy size={28} color={colors.primary} />
+          <Phone size={26} color={colors.primary} />
         </Pressable>
       </View>
 

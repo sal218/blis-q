@@ -16,6 +16,7 @@ import {
   RAIL_CARD_RADIUS,
 } from "@/components/CommunityRailCard";
 import { EventCard } from "@/components/EventCard";
+import { CrisisHeaderButton } from "@/components/CrisisHeaderButton";
 import { RailSkeleton } from "@/components/skeleton/RailSkeleton";
 import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
 import { strings, format } from "@/i18n";
@@ -64,6 +65,8 @@ export function HomeScreen({ navigation }: Props) {
     });
   const goToEvents = () =>
     navigation.navigate("Events", { screen: "EventsHome" });
+  const openCrisis = () =>
+    navigation.navigate("Resources", { screen: "Crisis" });
 
   return (
     <ScrollView
@@ -75,8 +78,11 @@ export function HomeScreen({ navigation }: Props) {
       }}
     >
       <View style={styles.header}>
-        <Text style={styles.greeting}>{greeting}</Text>
-        <Text style={styles.subtitle}>{strings.home.subtitle}</Text>
+        <View style={styles.headerText}>
+          <Text style={styles.greeting}>{greeting}</Text>
+          <Text style={styles.subtitle}>{strings.home.subtitle}</Text>
+        </View>
+        <CrisisHeaderButton onPress={openCrisis} />
       </View>
 
       <View style={styles.section}>
@@ -198,8 +204,15 @@ function createStyles(colors: ThemeColors) {
       backgroundColor: "transparent",
     },
     header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: spacing.md,
       paddingHorizontal: spacing.lg,
       marginBottom: spacing.lg,
+    },
+    headerText: {
+      flex: 1,
     },
     greeting: {
       color: colors.text,

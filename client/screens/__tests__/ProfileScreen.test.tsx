@@ -87,6 +87,14 @@ describe("ProfileScreen", () => {
     expect(navigation.navigate).toHaveBeenCalledWith("About");
   });
 
+  it("the crisis-help button cross-navigates to the Resources/Crisis screen", async () => {
+    const { navigation } = await renderScreen();
+    fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
+    expect(navigation.navigate).toHaveBeenCalledWith("Resources", {
+      screen: "Crisis",
+    });
+  });
+
   it("omits Help & Support when no support email is configured", async () => {
     // EXPO_PUBLIC_SUPPORT_EMAIL is unset in tests → SUPPORT_EMAIL_CONFIGURED is
     // false → no dead mailto row.

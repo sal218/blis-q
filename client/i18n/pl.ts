@@ -285,13 +285,14 @@ export const pl = {
 
   // Crisis / safety page ("Pomoc w kryzysie", P-37, design ref:
   // assets/safety-page-*.png): admin-curated crisis contacts with tap-to-call,
-  // reached from a Lifebuoy button in the Wsparcie header. Public (works signed
-  // out). Category label keys MUST match CRISIS_CONTACT_CATEGORIES.
+  // reached from the crisis-help (phone-call) button in each primary screen's
+  // header (slice 3b rolled it out app-wide). Public (works signed out).
+  // Category label keys MUST match CRISIS_CONTACT_CATEGORIES.
   crisis: {
     title: "Pomoc w kryzysie", // big header ("Crisis help")
     subtitle:
       "Poniższe kontakty są bezpłatne i poufne. Jeśli grozi Ci niebezpieczeństwo, zadzwoń pod 112.",
-    open: "Pomoc w kryzysie", // a11y label for the Lifebuoy header button
+    open: "Pomoc w kryzysie", // a11y label for the crisis-help (phone-call) header button
     back: "Wstecz", // a11y label for the back button
     callAction: "Zadzwoń", // "Call" — the green call button
     filterAll: "Wszystkie", // the "All" filter chip

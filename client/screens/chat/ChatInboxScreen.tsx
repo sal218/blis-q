@@ -9,17 +9,23 @@ import {
   StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { CompositeScreenProps } from "@react-navigation/native";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Avatar } from "@/components/Avatar";
 import { MagnifyingGlass } from "@/components/icons/PhosphorIcons";
+import { CrisisHeaderButton } from "@/components/CrisisHeaderButton";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
 import { ChatInboxSkeleton } from "@/components/skeleton/ChatInboxSkeleton";
 import { useChats } from "@/hooks/useChats";
 import { formatInboxTime } from "@/lib/relativeTime";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
-import type { ChatStackParamList } from "@/navigation/AppTabs";
+import type {
+  ChatStackParamList,
+  AppTabsParamList,
+} from "@/navigation/AppTabs";
 import type { ChatSummaryDTO } from "@shared/types";
 
 // Messages inbox = the Chat tab root (design ref: chat-screen.png — community
@@ -28,7 +34,10 @@ import type { ChatSummaryDTO } from "@shared/types";
 // HTTP-only (useChats refetches silently on focus); search filters the loaded
 // list client-side. Unread badges / presence / DM-Requests chips are P-24c/P-26.
 
-type Props = NativeStackScreenProps<ChatStackParamList, "ChatInbox">;
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<ChatStackParamList, "ChatInbox">,
+  BottomTabScreenProps<AppTabsParamList>
+>;
 
 const AVATAR_SIZE = 52;
 
@@ -79,7 +88,14 @@ export function ChatInboxScreen({ navigation }: Props) {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
-        <Text style={styles.title}>{strings.chat.messagesTitle}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{strings.chat.messagesTitle}</Text>
+          <CrisisHeaderButton
+            onPress={() =>
+              navigation.navigate("Resources", { screen: "Crisis" })
+            }
+          />
+        </View>
         <View style={styles.searchBox}>
           <MagnifyingGlass size={18} color={colors.textMuted} />
           <TextInput
@@ -179,11 +195,17 @@ function createStyles(colors: ThemeColors) {
       paddingHorizontal: spacing.lg,
       paddingBottom: spacing.md,
     },
+    titleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: spacing.md,
+      marginBottom: spacing.md,
+    },
     title: {
       color: colors.text,
       fontSize: 28,
       fontWeight: "800",
-      marginBottom: spacing.md,
     },
     searchBox: {
       flexDirection: "row",

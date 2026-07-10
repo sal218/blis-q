@@ -145,6 +145,18 @@ describe("HomeScreen", () => {
     });
   });
 
+  it("the crisis-help button cross-navigates to the Resources/Crisis screen", async () => {
+    listMock.mockResolvedValue(page([]));
+    const { navigation } = renderHome();
+
+    fireEvent.press(
+      await screen.findByRole("button", { name: strings.crisis.open }),
+    );
+    expect(navigation.navigate).toHaveBeenCalledWith("Resources", {
+      screen: "Crisis",
+    });
+  });
+
   describe("upcoming events section", () => {
     it("renders the caller's events and opens one on tap", async () => {
       listMock.mockResolvedValue(page([]));

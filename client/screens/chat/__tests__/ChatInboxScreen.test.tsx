@@ -118,6 +118,14 @@ describe("ChatInboxScreen", () => {
     expect(screen.queryByText("Queer Creatives")).toBeNull();
   });
 
+  it("the crisis-help button cross-navigates to the Resources/Crisis screen", () => {
+    chatsMock.mockReturnValue(state({ chats: [] }));
+    const navigate = renderInbox();
+
+    fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
+    expect(navigate).toHaveBeenCalledWith("Resources", { screen: "Crisis" });
+  });
+
   it("shows the search-empty state when nothing matches", () => {
     chatsMock.mockReturnValue(
       state({

@@ -21,9 +21,11 @@ import { EventsScreen } from "@/screens/events/EventsScreen";
 import { strings } from "@/i18n";
 
 function renderScreen() {
-  const navigation = { navigate: jest.fn() } as unknown as never;
+  const navigate = jest.fn();
+  const navigation = { navigate } as unknown as never;
   const route = { params: undefined } as unknown as never;
   render(<EventsScreen navigation={navigation} route={route} />);
+  return { navigate };
 }
 
 describe("EventsScreen — Safe places segment", () => {
@@ -33,5 +35,13 @@ describe("EventsScreen — Safe places segment", () => {
     fireEvent.press(screen.getByText(strings.events.tabSafePlaces));
     expect(screen.getByTestId("safe-places-list")).toBeTruthy();
     expect(screen.queryByText(strings.events.safePlacesComingSoon)).toBeNull();
+  });
+});
+
+describe("EventsScreen — crisis-help button", () => {
+  it("cross-navigates to the Resources/Crisis screen", () => {
+    const { navigate } = renderScreen();
+    fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
+    expect(navigate).toHaveBeenCalledWith("Resources", { screen: "Crisis" });
   });
 });

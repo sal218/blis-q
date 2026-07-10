@@ -30,7 +30,9 @@ function contact(over: Partial<CrisisContactDTO> = {}): CrisisContactDTO {
     description: "Opis.",
     hours: null,
     category: "emotional_crisis",
-    verified: false,
+    // Default VERIFIED so fixtures show under the verified-only gate; pass
+    // verified:false explicitly to exercise the gate.
+    verified: true,
     createdAt: "2026-07-01T00:00:00.000Z",
     ...over,
   };
@@ -116,5 +118,31 @@ describe("CrisisScreen — safety behavior", () => {
     expect(screen.getByText(/Pomoc prawna/)).toBeTruthy();
     expect(screen.queryByText(/Telefon zaufania/)).toBeNull();
     expect(screen.getByText(strings.crisis.emergency.title)).toBeTruthy();
+  });
+
+  it("hides an UNVERIFIED contact from the list (defense-in-depth)", () => {
+    const unverified = contact({
+      id: "u",
+      name: "Niezweryfikowany",
+      category: "legal",
+      verified: false,
+    });
+    useMock.mockReturnValue(ready([legal, unverified]));
+    render(<CrisisScreen navigation={nav} route={route} />);
+    expect(screen.getByText(/Pomoc prawna/)).toBeTruthy(); // verified → shown
+    expect(screen.queryByText(/Niezweryfikowany/)).toBeNull(); // unverified → hidden
+  });
+
+  it("hides the banner when the emergency contact is unverified", () => {
+    const unverifiedEmergency = contact({
+      id: "e2",
+      name: "Numer alarmowy",
+      phone: "112",
+      category: "emergency",
+      verified: false,
+    });
+    useMock.mockReturnValue(ready([unverifiedEmergency, legal]));
+    render(<CrisisScreen navigation={nav} route={route} />);
+    expect(screen.queryByText(strings.crisis.emergency.title)).toBeNull();
   });
 });

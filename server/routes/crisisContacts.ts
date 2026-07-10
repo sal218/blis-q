@@ -58,6 +58,8 @@ async function handleList(req: Request, res: Response): Promise<Response> {
       page: q.page,
       pageSize: q.pageSize,
       category: q.category,
+      // Public read: verified-only — unverified contacts never leave the server.
+      verifiedOnly: true,
     });
 
     const body: OffsetPage<CrisisContactDTO> = {
@@ -87,7 +89,8 @@ async function handleGet(req: Request, res: Response): Promise<Response> {
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return res.status(400).json({ error: "Invalid input" });
 
-    const row = await storage.getCrisisContact(id.data);
+    // Public read: an unverified contact is treated as not-found (404).
+    const row = await storage.getCrisisContact(id.data, { verifiedOnly: true });
     if (!row) return res.status(404).json({ error: "Not found" });
     return res.status(200).json(toCrisisContactDTO(row));
   } catch (err) {

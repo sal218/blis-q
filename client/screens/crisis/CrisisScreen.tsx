@@ -61,11 +61,17 @@ export function CrisisScreen({ navigation }: Props) {
 
   const [category, setCategory] = useState<CrisisContactCategory | null>(null);
 
+  // Only VERIFIED contacts are shown (the "Zweryfikowane" promise). The public
+  // API already filters unverified out; this client gate is defense-in-depth so
+  // an unverified contact can never surface even if the API ever returned one.
   // The emergency contact drives the banner; it's independent of the active chip.
-  const emergency = items.find((c) => c.category === "emergency") ?? null;
-  // The list is the non-emergency contacts (112 lives in the pinned banner only,
-  // so it isn't duplicated), filtered client-side by the active chip.
-  const nonEmergency = items.filter((c) => c.category !== "emergency");
+  const emergency =
+    items.find((c) => c.category === "emergency" && c.verified) ?? null;
+  // The list is the non-emergency verified contacts (112 lives in the pinned
+  // banner only, so it isn't duplicated), filtered client-side by the active chip.
+  const nonEmergency = items.filter(
+    (c) => c.category !== "emergency" && c.verified,
+  );
   const shown = category
     ? nonEmergency.filter((c) => c.category === category)
     : nonEmergency;

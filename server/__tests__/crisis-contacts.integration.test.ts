@@ -117,7 +117,9 @@ async function seedCrisisContact(
       description: over.description ?? "Wsparcie w kryzysie emocjonalnym.",
       hours: over.hours,
       category: over.category ?? "emotional_crisis",
-      verified: over.verified,
+      // Default VERIFIED so the public (verified-only) read shows seeded
+      // contacts; pass verified:false explicitly to exercise the gate.
+      verified: over.verified ?? true,
     },
     actorId,
     null,
@@ -219,6 +221,24 @@ describe("GET /api/v1/crisis-contacts (public)", () => {
     expect(res.body.data.some((c: { id: string }) => c.id === id)).toBe(false);
   });
 
+  it("excludes unverified contacts (the public read is verified-only)", async () => {
+    const admin = await seedUser();
+    const verified = await seedCrisisContact(admin, {
+      name: "Zweryfikowany",
+      category: "legal",
+    });
+    const unverified = await seedCrisisContact(admin, {
+      name: "Niezweryfikowany",
+      category: "legal",
+      verified: false,
+    });
+    const res = await request(app).get("/api/v1/crisis-contacts");
+    expect(res.status).toBe(200);
+    const ids = res.body.data.map((c: { id: string }) => c.id);
+    expect(ids).toContain(verified);
+    expect(ids).not.toContain(unverified);
+  });
+
   it("IP rate-limited → 429", async () => {
     readRl.mockResolvedValueOnce({ allowed: false, retryAfter: 60 });
     const res = await request(app).get("/api/v1/crisis-contacts");
@@ -259,10 +279,47 @@ describe("GET /api/v1/crisis-contacts/:id (public)", () => {
     ).toBe(404);
   });
 
+  it("404 for an unverified contact (the public read is verified-only)", async () => {
+    const admin = await seedUser();
+    const id = await seedCrisisContact(admin, { verified: false });
+    expect(
+      (await request(app).get(`/api/v1/crisis-contacts/${id}`)).status,
+    ).toBe(404);
+  });
+
   it("400 on a bad uuid", async () => {
     expect(
       (await request(app).get("/api/v1/crisis-contacts/not-a-uuid")).status,
     ).toBe(400);
+  });
+});
+
+describe("GET /api/admin/crisis-contacts", () => {
+  it("includes unverified contacts (admin sees all)", async () => {
+    const admin = await seedUser();
+    const unverified = await seedCrisisContact(admin, {
+      name: "Niezweryfikowany",
+      verified: false,
+    });
+    // The public read hides it…
+    const pub = await request(app).get("/api/v1/crisis-contacts");
+    expect(pub.body.data.map((c: { id: string }) => c.id)).not.toContain(
+      unverified,
+    );
+    // …but the admin list includes it (admins manage/verify unverified rows).
+    mockUser = { id: admin, isAdmin: true };
+    const res = await request(app).get("/api/admin/crisis-contacts");
+    expect(res.status).toBe(200);
+    expect(res.body.data.map((c: { id: string }) => c.id)).toContain(
+      unverified,
+    );
+  });
+
+  it("non-admin → 403", async () => {
+    mockUser = { id: await seedUser(), isAdmin: false };
+    expect((await request(app).get("/api/admin/crisis-contacts")).status).toBe(
+      403,
+    );
   });
 });
 

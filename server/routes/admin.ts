@@ -1127,10 +1127,13 @@ async function handleListCrisisContacts(
         .json({ error: "Invalid input", details: parsed.error.issues });
     }
     const q = parsed.data;
+    // Admin sees ALL non-deleted contacts (incl. unverified) so they can manage
+    // and verify them — only the PUBLIC read is verified-only.
     const { rows, total } = await storage.listCrisisContacts({
       page: q.page,
       pageSize: q.pageSize,
       category: q.category,
+      verifiedOnly: false,
     });
     const body: OffsetPage<CrisisContactDTO> = {
       data: rows.map(toCrisisContactDTO),

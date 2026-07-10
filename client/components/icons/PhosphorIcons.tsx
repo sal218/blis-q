@@ -8,7 +8,7 @@
  * Source: https://github.com/phosphor-icons/core (MIT). Add new glyphs here by
  * copying the regular-weight path `d` from that repo.
  */
-import Svg, { Path, Circle, Line } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 import type {
   EventCategory,
   ResourceCategory,
@@ -345,48 +345,11 @@ export function ShieldCheck({ size = 24, color = "#000" }: IconProps) {
   );
 }
 
-// lifebuoy — the global crisis-help header button. Hand-composed from primitives
-// (an outer ring + inner ring + four rope segments) rather than an inlined
-// Phosphor path, so it renders reliably for a safety-critical control; the exact
-// Phosphor glyph can be swapped in later. Uses stroke, so `color` outlines it.
+// lifebuoy — the crisis-help header button (Phosphor v2 regular).
 export function Lifebuoy({ size = 24, color = "#000" }: IconProps) {
-  const sw = 16;
   return (
-    <Svg viewBox="0 0 256 256" width={size} height={size}>
-      <Circle
-        cx={128}
-        cy={128}
-        r={92}
-        fill="none"
-        stroke={color}
-        strokeWidth={sw}
-      />
-      <Circle
-        cx={128}
-        cy={128}
-        r={40}
-        fill="none"
-        stroke={color}
-        strokeWidth={sw}
-      />
-      <Line x1={128} y1={36} x2={128} y2={88} stroke={color} strokeWidth={sw} />
-      <Line
-        x1={128}
-        y1={168}
-        x2={128}
-        y2={220}
-        stroke={color}
-        strokeWidth={sw}
-      />
-      <Line x1={36} y1={128} x2={88} y2={128} stroke={color} strokeWidth={sw} />
-      <Line
-        x1={168}
-        y1={128}
-        x2={220}
-        y2={128}
-        stroke={color}
-        strokeWidth={sw}
-      />
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm39.1,131.79a47.84,47.84,0,0,0,0-55.58l28.5-28.49a87.83,87.83,0,0,1,0,112.56ZM96,128a32,32,0,1,1,32,32A32,32,0,0,1,96,128Zm88.28-67.6L155.79,88.9a47.84,47.84,0,0,0-55.58,0L71.72,60.4a87.83,87.83,0,0,1,112.56,0ZM60.4,71.72l28.5,28.49a47.84,47.84,0,0,0,0,55.58L60.4,184.28a87.83,87.83,0,0,1,0-112.56ZM71.72,195.6l28.49-28.5a47.84,47.84,0,0,0,55.58,0l28.49,28.5a87.83,87.83,0,0,1-112.56,0Z" />
     </Svg>
   );
 }

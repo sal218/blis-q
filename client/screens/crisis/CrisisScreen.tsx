@@ -15,7 +15,6 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   CaretLeft,
-  CaretRight,
   ShieldCheck,
   Phone,
   Lock,
@@ -61,7 +60,6 @@ export function CrisisScreen({ navigation }: Props) {
   const { items, status, refreshing, refresh, retry } = useCrisisContacts();
 
   const [category, setCategory] = useState<CrisisContactCategory | null>(null);
-  const [safetyOpen, setSafetyOpen] = useState(true);
 
   // The emergency contact drives the banner; it's independent of the active chip.
   const emergency = items.find((c) => c.category === "emergency") ?? null;
@@ -227,13 +225,9 @@ export function CrisisScreen({ navigation }: Props) {
               </Text>
             }
             ListFooterComponent={
-              // Confidentiality reassurance footer (collapsible, expanded default).
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ expanded: safetyOpen }}
-                onPress={() => setSafetyOpen((v) => !v)}
-                style={styles.safety}
-              >
+              // Confidentiality reassurance footer — static (always visible; a
+              // safety message shouldn't be hidden behind a collapse).
+              <View style={styles.safety}>
                 <View style={styles.safetyIcon}>
                   <Lock size={20} color={colors.primary} />
                 </View>
@@ -241,20 +235,11 @@ export function CrisisScreen({ navigation }: Props) {
                   <Text style={styles.safetyTitle}>
                     {strings.crisis.safety.title}
                   </Text>
-                  {safetyOpen ? (
-                    <Text style={styles.safetyBody}>
-                      {strings.crisis.safety.body}
-                    </Text>
-                  ) : null}
+                  <Text style={styles.safetyBody}>
+                    {strings.crisis.safety.body}
+                  </Text>
                 </View>
-                <View
-                  style={{
-                    transform: [{ rotate: safetyOpen ? "-90deg" : "90deg" }],
-                  }}
-                >
-                  <CaretRight size={18} color={colors.textMuted} />
-                </View>
-              </Pressable>
+              </View>
             }
           />
         </>

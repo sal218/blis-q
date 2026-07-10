@@ -283,6 +283,44 @@ export const pl = {
     },
   },
 
+  // Crisis / safety page ("Pomoc w kryzysie", P-37, design ref:
+  // assets/safety-page-*.png): admin-curated crisis contacts with tap-to-call,
+  // reached from a Lifebuoy button in the Wsparcie header. Public (works signed
+  // out). Category label keys MUST match CRISIS_CONTACT_CATEGORIES.
+  crisis: {
+    title: "Pomoc w kryzysie", // big header ("Crisis help")
+    subtitle:
+      "Poniższe kontakty są bezpłatne i poufne. Jeśli grozi Ci niebezpieczeństwo, zadzwoń pod 112.",
+    open: "Pomoc w kryzysie", // a11y label for the Lifebuoy header button
+    back: "Wstecz", // a11y label for the back button
+    callAction: "Zadzwoń", // "Call" — the green call button
+    filterAll: "Wszystkie", // the "All" filter chip
+    recommendedTitle: "Polecane kontakty", // "Recommended contacts"
+    verifiedLabel: "Zweryfikowane i bezpłatne", // trust label by the section header
+    // The emergency banner: fixed reassurance copy; the number itself comes from
+    // the admin-managed emergency contact (never hardcoded).
+    emergency: {
+      title: "W sytuacji zagrożenia życia lub zdrowia",
+      body: "Zadzwoń pod numer alarmowy lub udaj się w bezpieczne miejsce.",
+    },
+    // The reassurance footer.
+    safety: {
+      title: "Twoje bezpieczeństwo jest najważniejsze",
+      body: "Wszystkie rozmowy są poufne i anonimowe. Nikt nie zostanie poinformowany bez Twojej zgody.",
+    },
+    loadError: "Nie udało się załadować kontaktów.", // "Couldn't load contacts."
+    retry: "Spróbuj ponownie", // "Try again"
+    empty: "Brak kontaktów.", // "No contacts."
+    emptyCategory: "Brak kontaktów w tej kategorii.", // "No contacts in this category."
+    // Category labels — keys MUST match CRISIS_CONTACT_CATEGORIES (shared/types).
+    categories: {
+      emergency: "Pomoc alarmowa", // "Emergency"
+      emotional_crisis: "Kryzys emocjonalny", // "Emotional crisis"
+      legal: "Prawne", // "Legal"
+      community: "Społeczność", // "Community"
+    },
+  },
+
   // The "Zapisane" (Saved) screen — a 2-tab view over saved events + places.
   saved: {
     title: "Zapisane", // "Saved" (screen/header title)

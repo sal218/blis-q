@@ -8,8 +8,12 @@
  * Source: https://github.com/phosphor-icons/core (MIT). Add new glyphs here by
  * copying the regular-weight path `d` from that repo.
  */
-import Svg, { Path } from "react-native-svg";
-import type { EventCategory, ResourceCategory } from "@shared/types";
+import Svg, { Path, Circle, Line } from "react-native-svg";
+import type {
+  EventCategory,
+  ResourceCategory,
+  CrisisContactCategory,
+} from "@shared/types";
 
 interface IconProps {
   size?: number;
@@ -304,6 +308,113 @@ export function GenderNeuter({ size = 24, color = "#000" }: IconProps) {
   return (
     <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
       <Path d="M208,104a80,80,0,1,0-88,79.6V232a8,8,0,0,0,16,0V183.6A80.11,80.11,0,0,0,208,104Zm-80,64a64,64,0,1,1,64-64A64.07,64.07,0,0,1,128,168Z" />
+    </Svg>
+  );
+}
+
+// ── Crisis / safety ("Pomoc w kryzysie", P-37) glyphs ───────────────────────────
+
+// phone — the tap-to-call button + the emergency-category disc. Shared as a const
+// so the CrisisCategoryIcon map can reuse it.
+const PHONE_PATH =
+  "M222.37,158.46l-47.11-21.11-.13-.06a16,16,0,0,0-15.17,1.4,8.12,8.12,0,0,0-.75.56L134.87,160c-15.42-7.49-31.34-23.29-38.83-38.51l20.78-24.71c.2-.25.39-.5.57-.77a16,16,0,0,0,1.32-15.06l0-.12L97.54,33.64a16,16,0,0,0-16.62-9.52A56.26,56.26,0,0,0,32,80c0,79.4,64.6,144,144,144a56.26,56.26,0,0,0,55.88-48.92A16,16,0,0,0,222.37,158.46Zm-6.15,15A40.23,40.23,0,0,1,176,208,128.14,128.14,0,0,1,48,80,40.2,40.2,0,0,1,82.87,40a.61.61,0,0,0,0,.12l21,47L83.2,111.86a6.13,6.13,0,0,0-.57.77,16,16,0,0,0-1,15.7c9.06,18.53,27.73,37.06,46.46,46.11a16,16,0,0,0,15.75-1.14,8.44,8.44,0,0,0,.74-.55L168.89,152l47,21.05h0S216.16,173.34,216.22,173.45Z";
+
+export function Phone({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d={PHONE_PATH} />
+    </Svg>
+  );
+}
+
+// lock — the confidentiality reassurance footer.
+export function Lock({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Zm-68-56a12,12,0,1,1-12-12A12,12,0,0,1,140,152Z" />
+    </Svg>
+  );
+}
+
+// shield-check — the 112 emergency banner icon. Reuses the rights glyph path.
+export function ShieldCheck({ size = 24, color = "#000" }: IconProps) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d={RESOURCE_CATEGORY_ICON_PATHS.legal_rights} />
+    </Svg>
+  );
+}
+
+// lifebuoy — the global crisis-help header button. Hand-composed from primitives
+// (an outer ring + inner ring + four rope segments) rather than an inlined
+// Phosphor path, so it renders reliably for a safety-critical control; the exact
+// Phosphor glyph can be swapped in later. Uses stroke, so `color` outlines it.
+export function Lifebuoy({ size = 24, color = "#000" }: IconProps) {
+  const sw = 16;
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size}>
+      <Circle
+        cx={128}
+        cy={128}
+        r={92}
+        fill="none"
+        stroke={color}
+        strokeWidth={sw}
+      />
+      <Circle
+        cx={128}
+        cy={128}
+        r={40}
+        fill="none"
+        stroke={color}
+        strokeWidth={sw}
+      />
+      <Line x1={128} y1={36} x2={128} y2={88} stroke={color} strokeWidth={sw} />
+      <Line
+        x1={128}
+        y1={168}
+        x2={128}
+        y2={220}
+        stroke={color}
+        strokeWidth={sw}
+      />
+      <Line x1={36} y1={128} x2={88} y2={128} stroke={color} strokeWidth={sw} />
+      <Line
+        x1={168}
+        y1={128}
+        x2={220}
+        y2={128}
+        stroke={color}
+        strokeWidth={sw}
+      />
+    </Svg>
+  );
+}
+
+// Per-crisis-category glyph, keyed by CRISIS_CONTACT_CATEGORIES. Reuses existing
+// verified paths — phone (emergency), hand-heart (emotional support),
+// shield-check (legal), chats-teardrop (community). Coarse SERVICE-type glyphs,
+// never identity symbols. Exhaustive, so a new category key is a compile error
+// until its glyph is added here.
+const CRISIS_CONTACT_CATEGORY_ICON_PATHS: Record<
+  CrisisContactCategory,
+  string
+> = {
+  emergency: PHONE_PATH,
+  emotional_crisis: EVENT_CATEGORY_ICON_PATHS.support,
+  legal: RESOURCE_CATEGORY_ICON_PATHS.legal_rights,
+  community:
+    "M169.57,72.59A80,80,0,0,0,16,104v64a16,16,0,0,0,16,16H86.67A80.15,80.15,0,0,0,160,232h64a16,16,0,0,0,16-16V152A80,80,0,0,0,169.57,72.59ZM32,104a64,64,0,1,1,64,64H32ZM224,216H160a64.14,64.14,0,0,1-55.68-32.43A79.93,79.93,0,0,0,174.7,89.71,64,64,0,0,1,224,152Z",
+};
+
+export function CrisisCategoryIcon({
+  category,
+  size = 24,
+  color = "#000",
+}: IconProps & { category: CrisisContactCategory }) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d={CRISIS_CONTACT_CATEGORY_ICON_PATHS[category]} />
     </Svg>
   );
 }

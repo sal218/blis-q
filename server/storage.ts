@@ -34,6 +34,7 @@ import {
   safePlaceSaves,
   resources,
   crisisContacts,
+  news,
   adCampaigns,
   blocks,
   reports,
@@ -272,6 +273,22 @@ export type ResourceRow = {
   category: string;
   body: string;
   url: string | null;
+  featured: boolean;
+  createdAt: Date;
+};
+
+// A news row as returned by newsColumns() (P-31). `category` is a DB text column;
+// the route narrows it to the NewsCategory union on the DTO. `imageKey` is NOT
+// projected (the signed imageUrl lands in a later slice). `body`/`sourceUrl` are
+// nullable (the two content modes: editorial full body vs external + link).
+export type NewsRow = {
+  id: string;
+  title: string;
+  summary: string;
+  body: string | null;
+  category: string;
+  source: string;
+  sourceUrl: string | null;
   featured: boolean;
   createdAt: Date;
 };
@@ -888,6 +905,10 @@ export class DatabaseStorage {
         .update(crisisContacts)
         .set({ createdById: null })
         .where(eq(crisisContacts.createdById, userId));
+      await tx
+        .update(news)
+        .set({ createdById: null })
+        .where(eq(news.createdById, userId));
       await tx
         .update(adCampaigns)
         .set({ createdById: null })
@@ -3324,6 +3345,184 @@ export class DatabaseStorage {
         actorId,
         action: "resource.deleted",
         resourceType: "resource",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return "deleted";
+    });
+  }
+
+  // ── News (admin-curated pillar-3 News content, P-31) ─────────────────────────
+  // Admin-published content (never user data); audit rows for news mutations carry
+  // IDs only — NEVER title/summary/body/source. `imageKey` is not projected yet
+  // (the signed imageUrl + admin upload are a later slice).
+
+  private newsColumns() {
+    return {
+      id: news.id,
+      title: news.title,
+      summary: news.summary,
+      body: news.body,
+      category: news.category,
+      source: news.source,
+      sourceUrl: news.sourceUrl,
+      featured: news.featured,
+      createdAt: news.createdAt,
+    };
+  }
+
+  // One page of visible (non-deleted) news + the total. Optional category filter
+  // (exact) + optional search (title + summary + body). Featured first, then
+  // newest, then id — a deterministic total order so offset pagination can't drift.
+  async listNews(input: {
+    page: number;
+    pageSize: number;
+    category?: string;
+    search?: string;
+  }): Promise<{ rows: NewsRow[]; total: number }> {
+    const conditions: (SQL | undefined)[] = [isNull(news.deletedAt)];
+    if (input.category) conditions.push(eq(news.category, input.category));
+    // Case-insensitive substring over title + summary + body. likeEscape() keeps a
+    // literal %/_ in the term from acting as a wildcard (mirrors listResources).
+    if (input.search) {
+      const term = `%${likeEscape(input.search)}%`;
+      conditions.push(
+        or(
+          ilike(news.title, term),
+          ilike(news.summary, term),
+          ilike(news.body, term),
+        ),
+      );
+    }
+    const where = and(...conditions);
+
+    const rows = await db
+      .select(this.newsColumns())
+      .from(news)
+      .where(where)
+      .orderBy(
+        sql`${news.featured} desc`,
+        sql`${news.createdAt} desc`,
+        sql`${news.id} asc`,
+      )
+      .limit(input.pageSize)
+      .offset((input.page - 1) * input.pageSize);
+
+    const [{ n }] = await db.select({ n: count() }).from(news).where(where);
+
+    return { rows, total: Number(n) };
+  }
+
+  async getNews(id: string): Promise<NewsRow | null> {
+    const [row] = await db
+      .select(this.newsColumns())
+      .from(news)
+      .where(and(eq(news.id, id), isNull(news.deletedAt)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  // Admin create. Insert + news.created audit commit together (§7).
+  async createNews(
+    input: {
+      title: string;
+      summary: string;
+      body?: string;
+      category: string;
+      source: string;
+      sourceUrl?: string;
+      featured?: boolean;
+    },
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<NewsRow> {
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(news)
+        .values({
+          title: input.title,
+          summary: input.summary,
+          body: input.body ?? null,
+          category: input.category,
+          source: input.source,
+          sourceUrl: input.sourceUrl ?? null,
+          featured: input.featured ?? false,
+          createdById: actorId,
+        })
+        .returning(this.newsColumns());
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "news.created",
+        resourceType: "news",
+        resourceId: row.id,
+        ipAddress: ipAddress ?? null,
+      });
+      return row;
+    });
+  }
+
+  // Admin partial update (guarded to non-deleted). Only provided fields written
+  // (undefined = untouched; body/sourceUrl null = clear). Returns null if
+  // missing/deleted.
+  async updateNews(
+    id: string,
+    input: {
+      title?: string;
+      summary?: string;
+      body?: string | null;
+      category?: string;
+      source?: string;
+      sourceUrl?: string | null;
+      featured?: boolean;
+    },
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<NewsRow | null> {
+    const fields: Partial<typeof news.$inferInsert> = {};
+    if (input.title !== undefined) fields.title = input.title;
+    if (input.summary !== undefined) fields.summary = input.summary;
+    if (input.body !== undefined) fields.body = input.body;
+    if (input.category !== undefined) fields.category = input.category;
+    if (input.source !== undefined) fields.source = input.source;
+    if (input.sourceUrl !== undefined) fields.sourceUrl = input.sourceUrl;
+    if (input.featured !== undefined) fields.featured = input.featured;
+
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(news)
+        .set(fields)
+        .where(and(eq(news.id, id), isNull(news.deletedAt)))
+        .returning(this.newsColumns());
+      if (!row) return null;
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "news.updated",
+        resourceType: "news",
+        resourceId: id,
+        ipAddress: ipAddress ?? null,
+      });
+      return row;
+    });
+  }
+
+  // Admin soft-delete (guarded UPDATE ... WHERE deletedAt IS NULL). Idempotent-
+  // safe: "not_found" if missing/already deleted. Audited news.deleted.
+  async softDeleteNews(
+    id: string,
+    actorId: string,
+    ipAddress?: string | null,
+  ): Promise<"deleted" | "not_found"> {
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(news)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(news.id, id), isNull(news.deletedAt)))
+        .returning({ id: news.id });
+      if (!row) return "not_found";
+      await tx.insert(auditLog).values({
+        actorId,
+        action: "news.deleted",
+        resourceType: "news",
         resourceId: id,
         ipAddress: ipAddress ?? null,
       });

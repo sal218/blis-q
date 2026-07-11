@@ -140,6 +140,52 @@ export type ResourceDTO = {
   createdAt: string;
 };
 
+// News (docs/API.md §11/§14 — P-31 pillar-3 News). Mirrors shared/types.ts
+// NewsDTO + NEWS_CATEGORIES (the admin app has no @shared alias). Category is a
+// frozen predefined editorial TOPIC — coarse, Article-9-safe, never an
+// identity/orientation label. Admin-published only (a "suggest a story"
+// moderated pipeline is a later slice).
+export const NEWS_CATEGORIES = [
+  "rights",
+  "community",
+  "health",
+  "world",
+] as const;
+
+export type NewsCategory = (typeof NEWS_CATEGORIES)[number];
+
+// Polish label + a distinct chip colour per category (admin display + picker) —
+// matches the mobile feed's filter chips (Prawa / Społeczność / Zdrowie / Świat).
+export const NEWS_CATEGORY_META: Record<
+  NewsCategory,
+  { label: string; color: string }
+> = {
+  rights: { label: "Prawa", color: "#2563EB" }, // blue
+  community: { label: "Społeczność", color: "#F97316" }, // orange
+  health: { label: "Zdrowie", color: "#EC4899" }, // pink
+  world: { label: "Świat", color: "#10B981" }, // emerald
+};
+
+export type NewsDTO = {
+  id: string;
+  title: string;
+  // Card excerpt / teaser (shown on the feed + as the external-item blurb).
+  summary: string;
+  // Full editorial text, or null for an externally-sourced item.
+  body: string | null;
+  category: NewsCategory;
+  // Attribution label ("Blis-Q Redakcja" or an outlet name).
+  source: string;
+  // Optional external "read at source" link, or null.
+  sourceUrl: string | null;
+  // Signed image URL, or null (always null until the image slice; never edited
+  // here — kept for DTO faithfulness with the server).
+  imageUrl: string | null;
+  // Whether it's the highlighted "NA TOPIE" top story.
+  featured: boolean;
+  createdAt: string;
+};
+
 // Crisis contacts (docs/API.md §11/§14 — P-37 "Pomoc w kryzysie" safety page).
 // Mirrors shared/types.ts CrisisContactDTO + CRISIS_CONTACT_CATEGORIES (the admin
 // app has no @shared alias). Category is a frozen predefined SERVICE type —

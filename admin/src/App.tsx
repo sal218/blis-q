@@ -16,6 +16,7 @@ import { ModerationPage } from "./pages/ModerationPage";
 import { UsersPage } from "./pages/UsersPage";
 import { SafePlacesPage } from "./pages/SafePlacesPage";
 import { ResourcesPage } from "./pages/ResourcesPage";
+import { NewsPage } from "./pages/NewsPage";
 import { CrisisContactsPage } from "./pages/CrisisContactsPage";
 import { EventsPage } from "./pages/EventsPage";
 import { AdCampaignsPage } from "./pages/AdCampaignsPage";
@@ -88,6 +89,12 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         label: "Materiały",
         icon: "book",
         element: <ResourcesPage />,
+      },
+      {
+        path: "/news",
+        label: "Aktualności",
+        icon: "newspaper",
+        element: <NewsPage />,
       },
       {
         path: "/crisis-contacts",

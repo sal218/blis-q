@@ -1,5 +1,6 @@
 jest.mock("@/lib/api/communities", () => ({ listCommunities: jest.fn() }));
 jest.mock("@/hooks/useHomeEvents", () => ({ useHomeEvents: jest.fn() }));
+jest.mock("@/hooks/useHomeNews", () => ({ useHomeNews: jest.fn() }));
 jest.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { displayName: "Sal" } }),
 }));
@@ -8,11 +9,28 @@ import { render, screen, fireEvent } from "@testing-library/react-native";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { listCommunities } from "@/lib/api/communities";
 import { useHomeEvents } from "@/hooks/useHomeEvents";
+import { useHomeNews } from "@/hooks/useHomeNews";
 import { strings, format } from "@/i18n";
-import type { CommunityDTO, EventDTO } from "@shared/types";
+import type { CommunityDTO, EventDTO, NewsDTO } from "@shared/types";
 
 const listMock = listCommunities as unknown as jest.Mock;
 const eventsMock = useHomeEvents as unknown as jest.Mock;
+const newsMock = useHomeNews as unknown as jest.Mock;
+
+function newsArticle(id: string, title: string): NewsDTO {
+  return {
+    id,
+    title,
+    summary: "…",
+    body: "Treść",
+    category: "world",
+    source: "Blis-Q Redakcja",
+    sourceUrl: null,
+    imageUrl: null,
+    featured: false,
+    createdAt: "2026-06-01T00:00:00.000Z",
+  };
+}
 
 function community(over: Partial<CommunityDTO>): CommunityDTO {
   return {
@@ -78,6 +96,8 @@ beforeEach(() => {
   listMock.mockReset();
   eventsMock.mockReset();
   eventsMock.mockReturnValue({ events: [], status: "ready" });
+  newsMock.mockReset();
+  newsMock.mockReturnValue({ news: [], status: "ready" });
 });
 
 describe("HomeScreen", () => {
@@ -97,8 +117,8 @@ describe("HomeScreen", () => {
       await screen.findByText(format(strings.home.greeting, { name: "Sal" })),
     ).toBeTruthy();
     expect(screen.getByText(strings.home.upcomingEvents)).toBeTruthy();
+    expect(screen.getByText(strings.home.news)).toBeTruthy();
     expect(screen.getByText(strings.home.nearbyPlaces)).toBeTruthy();
-    expect(screen.getByText(strings.home.latestActivity)).toBeTruthy();
   });
 
   it("shows only JOINED communities in the rail", async () => {
@@ -182,6 +202,46 @@ describe("HomeScreen", () => {
       eventsMock.mockReturnValue({ events: [], status: "ready" });
       renderHome();
       expect(screen.getByText(strings.home.noUpcomingEvents)).toBeTruthy();
+    });
+  });
+
+  describe("news section", () => {
+    it("renders the latest news and cross-navigates into an article on tap", async () => {
+      listMock.mockResolvedValue(page([]));
+      newsMock.mockReturnValue({
+        news: [newsArticle("n1", "Parlament UE")],
+        status: "ready",
+      });
+      const { navigation } = renderHome();
+
+      fireEvent.press(await screen.findByText("Parlament UE"));
+      expect(navigation.navigate).toHaveBeenCalledWith("Resources", {
+        screen: "NewsArticle",
+        params: { id: "n1" },
+        initial: false, // keep the Wsparcie root beneath so Back is sane
+      });
+    });
+
+    it("'See all' cross-navigates to the News feed", async () => {
+      listMock.mockResolvedValue(page([]));
+      const { navigation } = renderHome();
+
+      // Three "See all" headers render: communities, events, news (in order).
+      const seeAll = await screen.findAllByRole("button", {
+        name: strings.home.seeAll,
+      });
+      fireEvent.press(seeAll[seeAll.length - 1]);
+      expect(navigation.navigate).toHaveBeenCalledWith("Resources", {
+        screen: "NewsFeed",
+        initial: false,
+      });
+    });
+
+    it("shows the empty message when there is no news", () => {
+      listMock.mockResolvedValue(page([]));
+      newsMock.mockReturnValue({ news: [], status: "ready" });
+      renderHome();
+      expect(screen.getByText(strings.home.noNews)).toBeTruthy();
     });
   });
 });

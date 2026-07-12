@@ -8,6 +8,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useHomeCommunities } from "@/hooks/useHomeCommunities";
 import { useHomeEvents } from "@/hooks/useHomeEvents";
+import { useHomeNews } from "@/hooks/useHomeNews";
 import { SectionHeader } from "@/components/SectionHeader";
 import {
   CommunityRailCard,
@@ -16,6 +17,7 @@ import {
   RAIL_CARD_RADIUS,
 } from "@/components/CommunityRailCard";
 import { EventCard } from "@/components/EventCard";
+import { NewsCard } from "@/components/NewsCard";
 import { CrisisHeaderButton } from "@/components/CrisisHeaderButton";
 import { RailSkeleton } from "@/components/skeleton/RailSkeleton";
 import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
@@ -39,6 +41,7 @@ export function HomeScreen({ navigation }: Props) {
   const { user } = useAuth();
   const { communities, status } = useHomeCommunities();
   const { events, status: eventsStatus } = useHomeEvents();
+  const { news, status: newsStatus } = useHomeNews();
 
   const name = user?.displayName?.trim();
   const greeting = name
@@ -65,6 +68,14 @@ export function HomeScreen({ navigation }: Props) {
     });
   const goToEvents = () =>
     navigation.navigate("Events", { screen: "EventsHome" });
+  const goToNews = () =>
+    navigation.navigate("Resources", { screen: "NewsFeed", initial: false });
+  const openArticle = (id: string) =>
+    navigation.navigate("Resources", {
+      screen: "NewsArticle",
+      params: { id },
+      initial: false,
+    });
   const openCrisis = () =>
     // `initial: false` keeps the Resources-stack root (ResourcesHome / Wsparcie)
     // BENEATH Crisis, so Back from the safety page lands on the Wsparcie list —
@@ -155,17 +166,36 @@ export function HomeScreen({ navigation }: Props) {
         )}
       </View>
 
+      <View style={styles.section}>
+        <SectionHeader title={strings.home.news} onSeeAll={goToNews} />
+        {newsStatus === "loading" ? (
+          <CardListSkeleton count={2} padded={false} />
+        ) : news.length === 0 ? (
+          <View style={styles.placeholderCard}>
+            <Ionicons
+              name="newspaper-outline"
+              size={28}
+              color={colors.textMuted}
+            />
+            <Text style={styles.placeholderText}>{strings.home.noNews}</Text>
+          </View>
+        ) : (
+          <View style={styles.eventsList}>
+            {news.slice(0, 3).map((a) => (
+              <NewsCard
+                key={a.id}
+                article={a}
+                onPress={(x) => openArticle(x.id)}
+              />
+            ))}
+          </View>
+        )}
+      </View>
+
       <PlaceholderSection
         title={strings.home.nearbyPlaces}
         icon="location-outline"
         message={strings.home.placesEmpty}
-        styles={styles}
-        colors={colors}
-      />
-      <PlaceholderSection
-        title={strings.home.latestActivity}
-        icon="newspaper-outline"
-        message={strings.home.activityEmpty}
         styles={styles}
         colors={colors}
       />

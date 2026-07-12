@@ -13,6 +13,7 @@ import type {
   EventCategory,
   ResourceCategory,
   CrisisContactCategory,
+  NewsCategory,
 } from "@shared/types";
 
 interface IconProps {
@@ -255,6 +256,30 @@ export function ResourceCategoryIcon({
   return (
     <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
       <Path d={RESOURCE_CATEGORY_ICON_PATHS[category]} />
+    </Svg>
+  );
+}
+
+// News category glyphs (P-31, design ref: assets/news-feed-*.png), keyed by
+// NEWS_CATEGORIES. Phosphor v2 "regular" paths — scales/shield (rights), users
+// (community), heartbeat (health), globe (world). Article-9-safe editorial-topic
+// glyphs, never identity symbols. Exhaustive over NewsCategory.
+const NEWS_CATEGORY_ICON_PATHS: Record<NewsCategory, string> = {
+  rights: RESOURCE_CATEGORY_ICON_PATHS.legal_rights,
+  community: RESOURCE_CATEGORY_ICON_PATHS.community_orgs,
+  health: EVENT_CATEGORY_ICON_PATHS.health,
+  world:
+    "M128,24A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm88,104a87.61,87.61,0,0,1-3.33,24H174.16a157.44,157.44,0,0,0,0-48h38.51A87.61,87.61,0,0,1,216,128ZM102,168H154a115.11,115.11,0,0,1-26,45A115.27,115.27,0,0,1,102,168Zm-3.9-16a140.84,140.84,0,0,1,0-48h59.88a140.84,140.84,0,0,1,0,48ZM40,128a87.61,87.61,0,0,1,3.33-24H81.84a157.44,157.44,0,0,0,0,48H43.33A87.61,87.61,0,0,1,40,128ZM154,88H102a115.11,115.11,0,0,1,26-45A115.27,115.27,0,0,1,154,88Zm52.33,0H170.71a135.28,135.28,0,0,0-22.3-45.6A88.29,88.29,0,0,1,206.37,88ZM107.59,42.4A135.28,135.28,0,0,0,85.29,88H49.63A88.29,88.29,0,0,1,107.59,42.4ZM49.63,168H85.29a135.28,135.28,0,0,0,22.3,45.6A88.29,88.29,0,0,1,49.63,168Zm98.78,45.6a135.28,135.28,0,0,0,22.3-45.6h35.66A88.29,88.29,0,0,1,148.41,213.6Z",
+};
+
+export function NewsCategoryIcon({
+  category,
+  size = 24,
+  color = "#000",
+}: IconProps & { category: NewsCategory }) {
+  return (
+    <Svg viewBox="0 0 256 256" width={size} height={size} fill={color}>
+      <Path d={NEWS_CATEGORY_ICON_PATHS[category]} />
     </Svg>
   );
 }

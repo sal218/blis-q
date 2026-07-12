@@ -25,6 +25,8 @@ import { BlockedUsersScreen } from "@/screens/BlockedUsersScreen";
 import { AboutScreen } from "@/screens/AboutScreen";
 import { ResourcesScreen } from "@/screens/resources/ResourcesScreen";
 import { ResourceDetailScreen } from "@/screens/resources/ResourceDetailScreen";
+import { NewsFeedScreen } from "@/screens/news/NewsFeedScreen";
+import { NewsArticleScreen } from "@/screens/news/NewsArticleScreen";
 import { CrisisScreen } from "@/screens/crisis/CrisisScreen";
 import { strings } from "@/i18n";
 
@@ -61,6 +63,11 @@ export type AppTabsParamList = {
 export type ResourcesStackParamList = {
   ResourcesHome: undefined;
   ResourceDetail: { id: string };
+  // News feed + article detail (P-31) — LGBT+ news. Live in this stack (like
+  // Crisis); the front door is the Home "Aktualności" section, which cross-navigates
+  // here via navigate("Resources", { screen: "NewsFeed" | "NewsArticle" }).
+  NewsFeed: undefined;
+  NewsArticle: { id: string };
   // Crisis / safety page ("Pomoc w kryzysie", P-37) — reached from the crisis-help
   // (phone-call) button in each primary screen's header. Lives in this stack so the
   // tab bar stays visible (per the light mockup); slice 3b rolled the header button
@@ -179,6 +186,18 @@ function ResourcesStack() {
       <ResourcesStackNav.Screen
         name="ResourceDetail"
         component={ResourceDetailScreen}
+        // Full-bleed: the screen renders its own floating back button.
+        options={{ headerShown: false }}
+      />
+      <ResourcesStackNav.Screen
+        name="NewsFeed"
+        component={NewsFeedScreen}
+        // The feed owns its header + search + filters, so no native bar.
+        options={{ headerShown: false }}
+      />
+      <ResourcesStackNav.Screen
+        name="NewsArticle"
+        component={NewsArticleScreen}
         // Full-bleed: the screen renders its own floating back button.
         options={{ headerShown: false }}
       />

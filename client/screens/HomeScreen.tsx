@@ -83,15 +83,10 @@ export function HomeScreen({ navigation }: Props) {
     navigation.navigate("Resources", { screen: "Crisis", initial: false });
 
   return (
-    <ScrollView
-      style={styles.root}
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={{
-        paddingTop: insets.top + spacing.lg,
-        paddingBottom: insets.bottom + spacing.xl,
-      }}
-    >
-      <View style={styles.header}>
+    <View style={styles.root}>
+      {/* Pinned header — the greeting + the crisis-help button stay visible while
+          everything below scrolls. */}
+      <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
         <View style={styles.headerText}>
           <Text style={styles.greeting}>{greeting}</Text>
           <Text style={styles.subtitle}>{strings.home.subtitle}</Text>
@@ -99,107 +94,115 @@ export function HomeScreen({ navigation }: Props) {
         <CrisisHeaderButton onPress={openCrisis} />
       </View>
 
-      <View style={styles.section}>
-        <SectionHeader
-          title={strings.home.yourCommunities}
-          onSeeAll={goToCommunities}
-        />
-        {status === "loading" ? (
-          <RailSkeleton />
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.rail}
-          >
-            {communities.map((c) => (
-              <CommunityRailCard
-                key={c.id}
-                community={c}
-                onPress={openCommunity}
-              />
-            ))}
-            {status === "ready" && communities.length === 0 ? (
-              <Text style={styles.emptyText}>{strings.home.noCommunities}</Text>
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={strings.home.yourCommunities}
-              onPress={goToCommunities}
-              style={({ pressed }) => [
-                styles.addCard,
-                pressed && styles.pressed,
-              ]}
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
+      >
+        <View style={styles.section}>
+          <SectionHeader
+            title={strings.home.yourCommunities}
+            onSeeAll={goToCommunities}
+          />
+          {status === "loading" ? (
+            <RailSkeleton />
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.rail}
             >
-              <View style={styles.addButton}>
-                <Ionicons name="add" size={28} color="#FFFFFF" />
-              </View>
-            </Pressable>
-          </ScrollView>
-        )}
-      </View>
+              {communities.map((c) => (
+                <CommunityRailCard
+                  key={c.id}
+                  community={c}
+                  onPress={openCommunity}
+                />
+              ))}
+              {status === "ready" && communities.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  {strings.home.noCommunities}
+                </Text>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={strings.home.yourCommunities}
+                onPress={goToCommunities}
+                style={({ pressed }) => [
+                  styles.addCard,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.addButton}>
+                  <Ionicons name="add" size={28} color="#FFFFFF" />
+                </View>
+              </Pressable>
+            </ScrollView>
+          )}
+        </View>
 
-      <View style={styles.section}>
-        <SectionHeader
-          title={strings.home.upcomingEvents}
-          onSeeAll={goToEvents}
-        />
-        {eventsStatus === "loading" ? (
-          <CardListSkeleton variant="event" count={2} padded={false} />
-        ) : events.length === 0 ? (
-          <View style={styles.placeholderCard}>
-            <Ionicons
-              name="calendar-outline"
-              size={28}
-              color={colors.textMuted}
-            />
-            <Text style={styles.placeholderText}>
-              {strings.home.noUpcomingEvents}
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.eventsList}>
-            {events.slice(0, 3).map((e) => (
-              <EventCard key={e.id} event={e} onPress={openEvent} />
-            ))}
-          </View>
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <SectionHeader title={strings.home.news} onSeeAll={goToNews} />
-        {newsStatus === "loading" ? (
-          <CardListSkeleton count={2} padded={false} />
-        ) : news.length === 0 ? (
-          <View style={styles.placeholderCard}>
-            <Ionicons
-              name="newspaper-outline"
-              size={28}
-              color={colors.textMuted}
-            />
-            <Text style={styles.placeholderText}>{strings.home.noNews}</Text>
-          </View>
-        ) : (
-          <View style={styles.eventsList}>
-            {news.slice(0, 3).map((a) => (
-              <NewsCard
-                key={a.id}
-                article={a}
-                onPress={(x) => openArticle(x.id)}
+        <View style={styles.section}>
+          <SectionHeader
+            title={strings.home.upcomingEvents}
+            onSeeAll={goToEvents}
+          />
+          {eventsStatus === "loading" ? (
+            <CardListSkeleton variant="event" count={2} padded={false} />
+          ) : events.length === 0 ? (
+            <View style={styles.placeholderCard}>
+              <Ionicons
+                name="calendar-outline"
+                size={28}
+                color={colors.textMuted}
               />
-            ))}
-          </View>
-        )}
-      </View>
+              <Text style={styles.placeholderText}>
+                {strings.home.noUpcomingEvents}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.eventsList}>
+              {events.slice(0, 3).map((e) => (
+                <EventCard key={e.id} event={e} onPress={openEvent} />
+              ))}
+            </View>
+          )}
+        </View>
 
-      <PlaceholderSection
-        title={strings.home.nearbyPlaces}
-        icon="location-outline"
-        message={strings.home.placesEmpty}
-        styles={styles}
-        colors={colors}
-      />
-    </ScrollView>
+        <View style={styles.section}>
+          <SectionHeader title={strings.home.news} onSeeAll={goToNews} />
+          {newsStatus === "loading" ? (
+            <CardListSkeleton count={2} padded={false} />
+          ) : news.length === 0 ? (
+            <View style={styles.placeholderCard}>
+              <Ionicons
+                name="newspaper-outline"
+                size={28}
+                color={colors.textMuted}
+              />
+              <Text style={styles.placeholderText}>{strings.home.noNews}</Text>
+            </View>
+          ) : (
+            <View style={styles.eventsList}>
+              {news.slice(0, 3).map((a) => (
+                <NewsCard
+                  key={a.id}
+                  article={a}
+                  onPress={(x) => openArticle(x.id)}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+
+        <PlaceholderSection
+          title={strings.home.nearbyPlaces}
+          icon="location-outline"
+          message={strings.home.placesEmpty}
+          styles={styles}
+          colors={colors}
+        />
+      </ScrollView>
+    </View>
   );
 }
 
@@ -235,6 +238,10 @@ function createStyles(colors: ThemeColors) {
       flex: 1,
       // Transparent so the app-wide ScreenBackground shows through (see App.tsx).
       backgroundColor: "transparent",
+    },
+    // The scrolling region below the pinned header.
+    scroll: {
+      flex: 1,
     },
     header: {
       flexDirection: "row",

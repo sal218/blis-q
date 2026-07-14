@@ -47,6 +47,8 @@ export const pl = {
     noUpcomingEvents: "Nie wybierasz się jeszcze na żadne wydarzenia.", // "You're not going to any events yet."
     nearbyPlaces: "Bezpieczne miejsca w pobliżu", // "Nearby safe places"
     latestActivity: "Najnowsze ze społeczności", // "Latest from your communities"
+    news: "Aktualności", // "News" — the Home news section title
+    noNews: "Aktualności pojawią się wkrótce.", // "News will appear soon."
     // Polished empty states for the sections whose data doesn't exist yet.
     eventsEmpty: "Wydarzenia pojawią się wkrótce.", // "Events will appear soon."
     placesEmpty: "Bezpieczne miejsca pojawią się wkrótce.", // "Safe places will appear soon."
@@ -280,6 +282,41 @@ export const pl = {
       education_careers: "Edukacja i kariera", // "Education & Careers"
       health_services: "Usługi zdrowotne", // "Health Services"
       housing_support: "Wsparcie mieszkaniowe", // "Housing Support"
+    },
+  },
+
+  // News feed (P-31, pillar-3 News, design refs: assets/news-feed-*.png +
+  // news-details-*.png). Admin-curated LGBT+ news for Poland + the EU. Two content
+  // modes: our editorial (full body) and externally-sourced (summary + a "read at
+  // source" link). Category label keys MUST match NEWS_CATEGORIES (shared/types).
+  news: {
+    title: "Aktualności", // big header ("News")
+    subtitle: "Wiadomości LGBT+ z Polski i UE.", // "LGBT+ news from Poland and the EU."
+    searchPlaceholder: "Szukaj wiadomości", // "Search news"
+    filterAll: "Wszystkie", // "All" — the category filter chip that clears
+    featuredTitle: "Na topie", // feed section header above the featured item
+    featuredBadge: "NA TOPIE", // "TRENDING" — the hero-card badge
+    allTitle: "Najnowsze", // section header above the non-featured list
+    empty: "Nie ma jeszcze żadnych wiadomości.", // "No news yet."
+    emptyCategory: "Brak wiadomości w tej kategorii.", // "No news in this category."
+    emptySearch: "Brak wyników dla tego wyszukiwania.", // "No results for this search."
+    loadError: "Nie udało się załadować wiadomości.", // "Couldn't load the news."
+    retry: "Spróbuj ponownie", // "Try again"
+    clear: "Wyczyść wyszukiwanie", // "Clear search" (a11y label for the ✕)
+    detailLoadError: "Nie udało się załadować wiadomości.", // detail load failure
+    openSource: "Czytaj u źródła", // "Read at source" — external-link CTA on the detail
+    readTime: "{count} min czytania", // "{count} min read"
+    // The inline "need support?" callout on the article detail → the crisis page.
+    support: {
+      title: "Potrzebujesz wsparcia?", // "Need support?"
+      body: "Jeśli jesteś w trudnej sytuacji, skorzystaj z pomocy.", // "If you're in a difficult situation, get help."
+    },
+    // Category labels — keys MUST match NEWS_CATEGORIES (shared/types.ts).
+    categories: {
+      rights: "Prawa", // "Rights"
+      community: "Społeczność", // "Community"
+      health: "Zdrowie", // "Health"
+      world: "Świat", // "World"
     },
   },
 

@@ -23,7 +23,10 @@ const article = (over: Partial<NewsDTO> = {}): NewsDTO => ({
   ...over,
 });
 
-function renderScreen(over: Partial<ReturnType<typeof useArticle>> = {}): {
+function renderScreen(
+  over: Partial<ReturnType<typeof useArticle>> = {},
+  routeParams: { id: string; fromHome?: boolean } = { id: "n1" },
+): {
   navigate: jest.Mock;
   goBack: jest.Mock;
 } {
@@ -37,7 +40,7 @@ function renderScreen(over: Partial<ReturnType<typeof useArticle>> = {}): {
   render(
     <NewsArticleScreen
       navigation={navigation as never}
-      route={{ params: { id: "n1" } } as never}
+      route={{ params: routeParams } as never}
     />,
   );
   return navigation;
@@ -88,10 +91,18 @@ describe("NewsArticleScreen", () => {
     expect(nav.navigate).toHaveBeenCalledWith("Crisis");
   });
 
-  it("the back button goes back", () => {
-    const nav = renderScreen();
+  it("the back button goes back to the feed when not opened from Home", () => {
+    const nav = renderScreen(); // route params: { id } — fromHome unset
     fireEvent.press(screen.getByRole("button", { name: strings.crisis.back }));
     expect(nav.goBack).toHaveBeenCalled();
+    expect(nav.navigate).not.toHaveBeenCalledWith("Home");
+  });
+
+  it("Back returns to Home when opened from Home (fromHome)", () => {
+    const nav = renderScreen({}, { id: "n1", fromHome: true });
+    fireEvent.press(screen.getByRole("button", { name: strings.crisis.back }));
+    expect(nav.navigate).toHaveBeenCalledWith("Home");
+    expect(nav.goBack).not.toHaveBeenCalled();
   });
 
   it("renders the real banner image when imageUrl is set (no gradient placeholder)", () => {

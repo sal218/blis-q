@@ -11,6 +11,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Stop, Rect } from "react-native-svg";
+import type { CompositeScreenProps } from "@react-navigation/native";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
@@ -26,17 +28,26 @@ import { formatRelativeTime } from "@/lib/relativeTime";
 import { NEWS_CATEGORY_COLORS } from "@/constants/newsCategories";
 import { strings, format } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
-import type { ResourcesStackParamList } from "@/navigation/AppTabs";
+import type {
+  ResourcesStackParamList,
+  AppTabsParamList,
+} from "@/navigation/AppTabs";
 
 // News article detail (P-31, design ref: assets/news-details-*.png). Full-bleed:
-// a category-gradient hero (imageUrl is null this slice — no photo), a floating
-// back button, then the category chip + a "NA TOPIE" badge (if featured), the
+// a hero (the real photo when imageUrl is set, else a category gradient), a
+// floating back button, then the category chip + a "NA TOPIE" badge (if featured), the
 // title, a source · date · read-time meta row, and the content. TWO modes: our
 // editorial (a non-null body → the full text) and externally-sourced (null body →
 // the summary + a "Czytaj u źródła" link). An inline "Potrzebujesz wsparcia?"
 // callout links to the crisis page. Read-time shows only when there's a body.
 
-type Props = NativeStackScreenProps<ResourcesStackParamList, "NewsArticle">;
+// Composite props so the Back button can address the Home tab (news is opened
+// from Home; see the fromHome handling below) — same pattern as the crisis
+// button on Events/Chat/Profile.
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<ResourcesStackParamList, "NewsArticle">,
+  BottomTabScreenProps<AppTabsParamList>
+>;
 
 const BANNER_HEIGHT = 210;
 const SCRIM = "rgba(0,0,0,0.5)";
@@ -71,12 +82,20 @@ export function NewsArticleScreen({ route, navigation }: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { article, status, retry } = useArticle(route.params.id);
 
+  // Opened directly from Home → Back returns to Home (its origin), not the
+  // Wsparcie root sitting beneath in the Resources stack. When opened from the
+  // feed (fromHome unset), a normal goBack() returns to the feed.
+  const onBack = () => {
+    if (route.params.fromHome) navigation.navigate("Home");
+    else navigation.goBack();
+  };
+
   const backButton = (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={strings.crisis.back}
       hitSlop={8}
-      onPress={() => navigation.goBack()}
+      onPress={onBack}
       style={[styles.backBtn, { top: insets.top + spacing.sm }]}
     >
       <CaretLeft size={22} color="#fff" />

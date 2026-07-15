@@ -699,8 +699,9 @@ export const safePlacesListQuerySchema = z.object({
   category: safePlaceCategorySchema.optional(),
   city: z.string().trim().min(1).max(MAX_SAFE_PLACE_CITY_LENGTH).optional(),
   // Free-text search: case-insensitive substring over name + city + address
-  // (the mobile type-ahead box). LIKE metachars are escaped in storage. Blank
-  // is dropped to `undefined` (min 1 after trim → treated as "no filter").
+  // (the mobile type-ahead box). LIKE metachars are escaped in storage. An
+  // ABSENT search is "no filter" (undefined); a blank/whitespace one trims to ""
+  // and fails min(1) → 400 (it never reaches storage as an empty filter).
   search: z.string().trim().min(1).max(MAX_SAFE_PLACE_NAME_LENGTH).optional(),
   // "lat,lng" → a validated { lat, lng } tuple (or a 400).
   near: z
@@ -735,6 +736,18 @@ export const safePlacesListQuerySchema = z.object({
       }
       return { lat, lng };
     }),
+});
+
+// Safe-place map markers (P-40 SP-4): the map plots pins for EVERY curated venue
+// at once, so this feed is UNPAGINATED (capped) and returns a trimmed marker
+// projection. Same filter fields as the list (so the map matches the active feed
+// filters) but NO page/pageSize/near. An absent search/city is "no filter"; a
+// blank/whitespace one → 400 (trim + min(1)). An out-of-set category → 400.
+export const MAX_SAFE_PLACE_MARKERS = 1000;
+export const safePlaceMarkersQuerySchema = z.object({
+  category: safePlaceCategorySchema.optional(),
+  city: z.string().trim().min(1).max(MAX_SAFE_PLACE_CITY_LENGTH).optional(),
+  search: z.string().trim().min(1).max(MAX_SAFE_PLACE_NAME_LENGTH).optional(),
 });
 
 // Resources list (P-37): offset/page + an optional category filter + an optional

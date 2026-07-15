@@ -249,6 +249,21 @@ export type SafePlaceDTO = {
   saved: boolean;
 };
 
+// A trimmed safe-place shape for the map (P-40 SP-4). The map plots pins for
+// EVERY curated venue at once, so it fetches this lightweight projection —
+// id/name/category + non-null coordinates only — instead of the paginated,
+// heavier SafePlaceDTO. Tapping a pin opens the detail screen, which fetches the
+// full SafePlaceDTO. `latitude`/`longitude` are non-nullable here (the markers
+// query returns only rows that have BOTH). No description/address/city/image/
+// saved/accessibility — smaller payload + a tight leakage boundary.
+export type SafePlaceMarkerDTO = {
+  id: string;
+  name: string;
+  category: SafePlaceCategory;
+  latitude: number;
+  longitude: number;
+};
+
 // Predefined Support & Education resource categories (P-37, from
 // assets/profile-resources.png). Coarse CONTENT topics for browsing/filtering —
 // admin-curated, 🔒 deliberately never identity/orientation labels (a category

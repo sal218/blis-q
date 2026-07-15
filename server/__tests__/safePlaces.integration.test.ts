@@ -377,6 +377,146 @@ describe("GET /api/v1/safe-places", () => {
   });
 });
 
+describe("GET /api/v1/safe-places/markers (SP-4)", () => {
+  const WAW = { latitude: 52.23, longitude: 21.01 };
+
+  it("unauth → 401", async () => {
+    const res = await request(app).get("/api/v1/safe-places/markers");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns coord-bearing markers; EXCLUDES null-coord + soft-deleted places", async () => {
+    const admin = await seedUser();
+    const withCoords = await seedPlace(admin, { name: "Ma pin", ...WAW });
+    const noCoords = await seedPlace(admin, { name: "Bez pinu" }); // null lat/lng
+    const deleted = await seedPlace(admin, { name: "Usunięte", ...WAW });
+    await storage.softDeleteSafePlace(deleted, admin, null);
+    mockUser = { id: admin, isAdmin: false };
+
+    const res = await request(app).get("/api/v1/safe-places/markers");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    const ids = res.body.map((m: { id: string }) => m.id);
+    expect(ids).toContain(withCoords);
+    expect(ids).not.toContain(noCoords);
+    expect(ids).not.toContain(deleted);
+  });
+
+  it("each marker is the trimmed shape — no description/address/city/imageUrl/saved", async () => {
+    const admin = await seedUser();
+    await seedPlace(admin, {
+      name: "Pełne dane",
+      category: "bar",
+      city: "Kraków",
+      address: "ul. Testowa 1",
+      ...WAW,
+    });
+    mockUser = { id: admin, isAdmin: false };
+
+    const res = await request(app).get("/api/v1/safe-places/markers");
+    const marker = res.body.find(
+      (m: { name: string }) => m.name === "Pełne dane",
+    );
+    expect(marker).toBeDefined();
+    expect(Object.keys(marker).sort()).toEqual(
+      ["category", "id", "latitude", "longitude", "name"].sort(),
+    );
+    expect(typeof marker.latitude).toBe("number");
+    expect(typeof marker.longitude).toBe("number");
+    expect(marker.category).toBe("bar");
+    // Leakage boundary: heavier fields must NOT be present.
+    for (const k of ["description", "address", "city", "imageUrl", "saved"]) {
+      expect(marker).not.toHaveProperty(k);
+    }
+  });
+
+  it("filters by category; an out-of-set category → 400", async () => {
+    const admin = await seedUser();
+    const cafe = await seedPlace(admin, {
+      name: "Kawa",
+      category: "cafe",
+      ...WAW,
+    });
+    const bar = await seedPlace(admin, {
+      name: "Drink",
+      category: "bar",
+      ...WAW,
+    });
+    mockUser = { id: admin, isAdmin: false };
+
+    const res = await request(app).get(
+      "/api/v1/safe-places/markers?category=cafe",
+    );
+    const ids = res.body.map((m: { id: string }) => m.id);
+    expect(ids).toContain(cafe);
+    expect(ids).not.toContain(bar);
+
+    const bad = await request(app).get(
+      "/api/v1/safe-places/markers?category=not_a_category",
+    );
+    expect(bad.status).toBe(400);
+  });
+
+  it("filters by city (case-insensitive exact)", async () => {
+    const admin = await seedUser();
+    const krk = await seedPlace(admin, { name: "KRK", city: "Kraków", ...WAW });
+    const waw = await seedPlace(admin, {
+      name: "WAW",
+      city: "Warszawa",
+      ...WAW,
+    });
+    mockUser = { id: admin, isAdmin: false };
+
+    const res = await request(app).get(
+      "/api/v1/safe-places/markers?city=kraków",
+    );
+    const ids = res.body.map((m: { id: string }) => m.id);
+    expect(ids).toContain(krk);
+    expect(ids).not.toContain(waw);
+  });
+
+  it("search: case-insensitive substring; LIKE metachars are literal; blank → 400", async () => {
+    const admin = await seedUser();
+    const stamp = Date.now();
+    const literal = await seedPlace(admin, { name: `Tęcza_${stamp}`, ...WAW });
+    const wildcard = await seedPlace(admin, { name: `TęczaX${stamp}`, ...WAW });
+    mockUser = { id: admin, isAdmin: false };
+
+    // "_" must match a literal underscore, NOT any character → only `literal`.
+    const res = await request(app).get(
+      `/api/v1/safe-places/markers?search=${encodeURIComponent(`tęcza_${stamp}`)}`,
+    );
+    const ids = res.body.map((m: { id: string }) => m.id);
+    expect(ids).toContain(literal);
+    expect(ids).not.toContain(wildcard);
+
+    const blank = await request(app).get(
+      "/api/v1/safe-places/markers?search=%20%20",
+    );
+    expect(blank.status).toBe(400);
+  });
+
+  it("cap + order boundary: limit truncates deterministically (city, name, id)", async () => {
+    const admin = await seedUser();
+    // Same city so ordering falls to name, then id.
+    const city = `Miasto${Date.now()}`;
+    const bId = await seedPlace(admin, { name: "Bravo", city, ...WAW });
+    const aId = await seedPlace(admin, { name: "Alpha", city, ...WAW });
+    const cId = await seedPlace(admin, { name: "Charlie", city, ...WAW });
+
+    // Route (default cap) returns all three in city/name/id order.
+    mockUser = { id: admin, isAdmin: false };
+    const res = await request(app).get(
+      `/api/v1/safe-places/markers?city=${encodeURIComponent(city)}`,
+    );
+    expect(res.body.map((m: { id: string }) => m.id)).toEqual([aId, bId, cId]);
+
+    // Storage-level boundary (AR-2): limit:2 → the first two in the same order.
+    const two = await storage.listSafePlaceMarkers({ city, limit: 2 });
+    expect(two.map((m) => m.id)).toEqual([aId, bId]);
+  });
+});
+
 describe("GET /api/v1/safe-places/:id", () => {
   it("200 with the DTO; 404 missing/deleted; bad uuid → 400", async () => {
     const admin = await seedUser();

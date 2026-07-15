@@ -6,10 +6,15 @@ import { storage } from "../storage";
 import type { SafePlaceReadRow } from "../storage";
 import { getDownloadUrl } from "../objectStorage";
 import { checkRsvpRateLimit, checkReportRateLimit } from "../rateLimit";
-import { safePlacesListQuerySchema, postReportSchema } from "../validation";
+import {
+  safePlacesListQuerySchema,
+  safePlaceMarkersQuerySchema,
+  postReportSchema,
+} from "../validation";
 import {
   isAccessibilityFeature,
   type SafePlaceDTO,
+  type SafePlaceMarkerDTO,
   type SafePlaceCategory,
   type OffsetPage,
 } from "@shared/types";
@@ -23,8 +28,10 @@ import {
 
 export function registerSafePlaceRoutes(app: Express): void {
   app.get("/api/v1/safe-places", isAuthenticated, handleList);
-  // "/saved" must be registered BEFORE "/:id" so it isn't swallowed as an id.
+  // "/saved" and "/markers" must be registered BEFORE "/:id" so they aren't
+  // swallowed as an id.
   app.get("/api/v1/safe-places/saved", isAuthenticated, handleListSaved);
+  app.get("/api/v1/safe-places/markers", isAuthenticated, handleListMarkers);
   app.get("/api/v1/safe-places/:id", isAuthenticated, handleGet);
   app.post("/api/v1/safe-places/:id/save", isAuthenticated, handleSave);
   app.delete("/api/v1/safe-places/:id/save", isAuthenticated, handleUnsave);
@@ -93,6 +100,48 @@ async function handleList(req: Request, res: Response): Promise<Response> {
     return res.status(200).json(body);
   } catch (err) {
     console.error("[GET /api/v1/safe-places]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// GET /api/v1/safe-places/markers — a trimmed, UNPAGINATED (capped) marker feed
+// for the map (P-40 SP-4): every visible venue that has BOTH coordinates, as
+// id/name/category/lat/lng only. Same filters as the list (category/city/search)
+// so the map matches the active feed filters. A plain array (mirrors /saved);
+// authenticated read, no rate limit (matches the list + :id reads).
+async function handleListMarkers(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const parsed = safePlaceMarkersQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const q = parsed.data;
+
+    const rows = await storage.listSafePlaceMarkers({
+      category: q.category,
+      city: q.city,
+      search: q.search,
+    });
+
+    // category is DB text; only validated categories are ever written, so the
+    // narrow to the union is safe (mirrors toSafePlaceDTO).
+    const body: SafePlaceMarkerDTO[] = rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      category: r.category as SafePlaceCategory,
+      latitude: r.latitude,
+      longitude: r.longitude,
+    }));
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[GET /api/v1/safe-places/markers]", {
+      code: safeErrorCode(err),
+    });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }

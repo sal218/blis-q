@@ -70,10 +70,15 @@ export function HomeScreen({ navigation }: Props) {
     navigation.navigate("Events", { screen: "EventsHome" });
   const goToNews = () =>
     navigation.navigate("Resources", { screen: "NewsFeed", initial: false });
+  // `fromHome` tells NewsArticle that Home is the origin, so its Back button
+  // returns to Home (not the Wsparcie root beneath). News is only ever opened
+  // from Home; the in-feed tap (NewsFeed → NewsArticle) omits it, so Back there
+  // returns to the feed. `initial: false` still keeps ResourcesHome beneath as a
+  // coherent fallback and so the Wsparcie tab isn't stranded on a detail.
   const openArticle = (id: string) =>
     navigation.navigate("Resources", {
       screen: "NewsArticle",
-      params: { id },
+      params: { id, fromHome: true },
       initial: false,
     });
   const openCrisis = () =>

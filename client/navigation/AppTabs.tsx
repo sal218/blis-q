@@ -67,7 +67,9 @@ export type ResourcesStackParamList = {
   // Crisis); the front door is the Home "Aktualności" section, which cross-navigates
   // here via navigate("Resources", { screen: "NewsFeed" | "NewsArticle" }).
   NewsFeed: undefined;
-  NewsArticle: { id: string };
+  // `fromHome` (set when opened directly from the Home "Aktualności" section)
+  // makes the Back button return to Home rather than the Wsparcie root beneath.
+  NewsArticle: { id: string; fromHome?: boolean };
   // Crisis / safety page ("Pomoc w kryzysie", P-37) — reached from the crisis-help
   // (phone-call) button in each primary screen's header. Lives in this stack so the
   // tab bar stays visible (per the light mockup); slice 3b rolled the header button

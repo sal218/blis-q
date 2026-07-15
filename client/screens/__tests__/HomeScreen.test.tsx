@@ -217,8 +217,9 @@ describe("HomeScreen", () => {
       fireEvent.press(await screen.findByText("Parlament UE"));
       expect(navigation.navigate).toHaveBeenCalledWith("Resources", {
         screen: "NewsArticle",
-        params: { id: "n1" },
-        initial: false, // keep the Wsparcie root beneath so Back is sane
+        // fromHome so the article's Back returns to Home, not the Wsparcie root.
+        params: { id: "n1", fromHome: true },
+        initial: false,
       });
     });
 

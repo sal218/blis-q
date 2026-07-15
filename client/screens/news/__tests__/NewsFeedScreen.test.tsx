@@ -148,6 +148,53 @@ describe("NewsFeedScreen", () => {
     openURL.mockRestore();
   });
 
+  it("regular card: gradient placeholder when null, real thumbnail when set", () => {
+    // null imageUrl → the category-gradient placeholder, no <Image>.
+    nMock.mockReturnValue(
+      state({ items: [article({ id: "n1", featured: false })] }),
+    );
+    const { rerender } = renderScreen({ navigate: jest.fn() });
+    expect(screen.queryByTestId("news-thumb-image")).toBeNull();
+    expect(screen.getByTestId("news-thumb")).toBeTruthy();
+
+    // A signed imageUrl → the real photo.
+    nMock.mockReturnValue(
+      state({
+        items: [
+          article({
+            id: "n1",
+            featured: false,
+            imageUrl: "https://signed.example/t.jpg",
+          }),
+        ],
+      }),
+    );
+    rerender(
+      <NewsFeedScreen
+        navigation={{ navigate: jest.fn() } as never}
+        route={{} as never}
+      />,
+    );
+    expect(screen.getByTestId("news-thumb-image")).toBeTruthy();
+  });
+
+  it("renders a real hero image on a featured card when imageUrl is set", () => {
+    nMock.mockReturnValue(
+      state({
+        items: [
+          article({
+            id: "n1",
+            title: "Wyróżniona",
+            featured: true,
+            imageUrl: "https://signed.example/h.jpg",
+          }),
+        ],
+      }),
+    );
+    renderScreen({ navigate: jest.fn() });
+    expect(screen.getByTestId("news-hero-image")).toBeTruthy();
+  });
+
   it("empty-copy precedence: plain / category / search", () => {
     nMock.mockReturnValue(state({ items: [] }));
     const nav = { navigate: jest.fn() };

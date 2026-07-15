@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ChangeEvent,
   type FormEvent,
 } from "react";
 import { adminFetch } from "../lib/api";
@@ -97,6 +98,14 @@ export function NewsPage() {
   const [featured, setFeatured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Article photo. undefined = leave unchanged · null = remove · string = a
+  // freshly-uploaded R2 key (confirmed server-side on save).
+  const [imageKey, setImageKey] = useState<string | null | undefined>(
+    undefined,
+  );
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const load = useCallback(
     async (targetPage: number, cat: "" | NewsCategory) => {
@@ -129,6 +138,50 @@ export function NewsPage() {
     load(1, filterCategory);
   }, [load, filterCategory]);
 
+  const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+  // Upload a chosen file straight to R2 via a presigned PUT, then hold its key.
+  async function onPickImage(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setImageError("Dozwolone formaty: JPG, PNG, WebP.");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setImageError("Maksymalny rozmiar to 5 MB.");
+      return;
+    }
+    setImageBusy(true);
+    setImageError(null);
+    try {
+      const { uploadUrl, key } = await adminFetch<{
+        uploadUrl: string;
+        key: string;
+      }>("POST", "/api/admin/news/upload-url", { contentType: file.type });
+      const put = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!put.ok) throw new Error(`upload failed: ${put.status}`);
+      setImageKey(key);
+      setImagePreview(URL.createObjectURL(file));
+    } catch {
+      setImageError("Nie udało się przesłać zdjęcia. Spróbuj ponownie.");
+    } finally {
+      setImageBusy(false);
+    }
+  }
+
+  function removeImage() {
+    setImageKey(null);
+    setImagePreview(null);
+    setImageError(null);
+  }
+
   function resetFormState() {
     setEditingId(null);
     setTitle("");
@@ -138,6 +191,9 @@ export function NewsPage() {
     setBody("");
     setSourceUrl("");
     setFeatured(false);
+    setImageKey(undefined);
+    setImagePreview(null);
+    setImageError(null);
     setFormError(null);
   }
 
@@ -160,6 +216,9 @@ export function NewsPage() {
     setBody(item.body ?? "");
     setSourceUrl(item.sourceUrl ?? "");
     setFeatured(item.featured);
+    setImageKey(undefined); // unchanged unless the admin picks/removes a photo
+    setImagePreview(item.imageUrl);
+    setImageError(null);
     setFormError(null);
     setFormOpen(true);
   }
@@ -207,6 +266,9 @@ export function NewsPage() {
           body: trimmedBody ? trimmedBody : null,
           sourceUrl: trimmedUrl ? trimmedUrl : null,
         };
+        // uuid = set/replace · null = remove · omit (undefined) = unchanged.
+        if (typeof imageKey === "string") body_.imageKey = imageKey;
+        else if (imageKey === null) body_.imageKey = null;
         await adminFetch("PATCH", `/api/admin/news/${editingId}`, body_);
       } else {
         const body_: Record<string, unknown> = {
@@ -220,6 +282,7 @@ export function NewsPage() {
         // sourced item; omitting the link = our own editorial piece.
         if (trimmedBody) body_.body = trimmedBody;
         if (trimmedUrl) body_.sourceUrl = trimmedUrl;
+        if (typeof imageKey === "string") body_.imageKey = imageKey;
         await adminFetch("POST", "/api/admin/news", body_);
       }
       closeForm();
@@ -254,7 +317,14 @@ export function NewsPage() {
     {
       key: "title",
       header: "Tytuł",
-      render: (r) => <span className="bq-td-strong">{r.title}</span>,
+      render: (r) => (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+          {r.imageUrl ? (
+            <img src={r.imageUrl} alt="" className="bq-thumb" />
+          ) : null}
+          <span className="bq-td-strong">{r.title}</span>
+        </span>
+      ),
     },
     {
       key: "category",
@@ -505,6 +575,62 @@ export function NewsPage() {
               maxLength={MAX_URL}
             />
           </Field>
+
+          <div className="bq-field">
+            <span className="bq-label">
+              Zdjęcie (opcjonalnie — JPG/PNG/WebP, do 5 MB)
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {imagePreview ? (
+                <img
+                  src={imagePreview}
+                  alt=""
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 12,
+                    objectFit: "cover",
+                    border: "1px solid var(--gray-200)",
+                  }}
+                />
+              ) : (
+                <div
+                  className="bq-thumb-empty"
+                  style={{ width: 72, height: 72, borderRadius: 12 }}
+                >
+                  <Icon name="image" size={22} />
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label className="bq-btn bq-btn-secondary bq-btn-sm">
+                  <Icon name="downloadSimple" size={13} />
+                  {imageBusy
+                    ? "Przesyłanie…"
+                    : imagePreview
+                      ? "Zmień zdjęcie"
+                      : "Dodaj zdjęcie"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={onPickImage}
+                    disabled={imageBusy}
+                    style={{ display: "none" }}
+                  />
+                </label>
+                {imagePreview ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={imageBusy}
+                    onClick={removeImage}
+                  >
+                    Usuń zdjęcie
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            {imageError ? <Alert tone="error">{imageError}</Alert> : null}
+          </div>
 
           <label
             style={{

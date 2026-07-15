@@ -153,6 +153,7 @@ export function registerAdminRoutes(app: Express): void {
   app.delete("/api/admin/resources/:id", ...admin, handleDeleteResource);
 
   // News (admin-curated pillar-3 News content, P-31).
+  app.post("/api/admin/news/upload-url", ...admin, handleNewsUploadUrl);
   app.get("/api/admin/news", ...admin, handleListNews);
   app.post("/api/admin/news", ...admin, handleCreateNews);
   app.patch("/api/admin/news/:id", ...admin, handleUpdateNews);
@@ -1113,7 +1114,7 @@ async function handleDeleteResource(
 // transactional + IDs-only audit in storage, soft-delete. imageUrl is null until
 // the admin image-upload slice (raw imageKey never serialised).
 
-function toNewsDTO(row: NewsRow): NewsDTO {
+async function toNewsDTO(row: NewsRow): Promise<NewsDTO> {
   return {
     id: row.id,
     title: row.title,
@@ -1122,10 +1123,47 @@ function toNewsDTO(row: NewsRow): NewsDTO {
     category: row.category as NewsCategory,
     source: row.source,
     sourceUrl: row.sourceUrl,
-    imageUrl: null,
+    // Signed GET url for the admin-uploaded photo (or null); the raw R2 key never
+    // leaves us (private bucket, signed reads only).
+    imageUrl: row.imageKey ? await getDownloadUrl("news", row.imageKey) : null,
     featured: row.featured,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+// Presigned R2 upload URL for a news article photo (mirrors the safe-place
+// upload-url). The admin PUTs the file directly to R2, then passes the returned
+// key on create/update where it's confirmed (SW-1) before the row references it.
+async function handleNewsUploadUrl(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const parsed = uploadUrlSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const { uploadUrl, key } = await createUploadUrl(
+      "news",
+      userId,
+      parsed.data.contentType,
+    );
+    return res.status(200).json({ uploadUrl, key });
+  } catch (err) {
+    console.error("[POST /api/admin/news/upload-url]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 }
 
 async function handleListNews(req: Request, res: Response): Promise<Response> {
@@ -1144,7 +1182,7 @@ async function handleListNews(req: Request, res: Response): Promise<Response> {
       search: q.search,
     });
     const body: OffsetPage<NewsDTO> = {
-      data: rows.map(toNewsDTO),
+      data: await Promise.all(rows.map(toNewsDTO)),
       page: q.page,
       pageSize: q.pageSize,
       total,
@@ -1175,8 +1213,16 @@ async function handleCreateNews(
         .status(400)
         .json({ error: "Invalid input", details: parsed.error.issues });
     }
+    // Confirm the R2 upload (owner claim + HEAD size/type re-check, SW-1) BEFORE
+    // the row references the key. A bad/absent claim → 400, object untouched.
+    if (
+      parsed.data.imageKey &&
+      !(await confirmUpload("news", parsed.data.imageKey, userId))
+    ) {
+      return res.status(400).json({ error: "Invalid image upload" });
+    }
     const row = await storage.createNews(parsed.data, userId, req.ip ?? null);
-    return res.status(201).json(toNewsDTO(row));
+    return res.status(201).json(await toNewsDTO(row));
   } catch (err) {
     console.error("[POST /api/admin/news]", { code: safeErrorCode(err) });
     return res.status(500).json({ error: "Internal Server Error" });
@@ -1203,6 +1249,14 @@ async function handleUpdateNews(
         .status(400)
         .json({ error: "Invalid input", details: parsed.error.issues });
     }
+    // Only a NEW upload (a string key) is confirmed; null (remove) / undefined
+    // (unchanged) skip confirm. A bad claim → 400, object untouched (SW-1).
+    if (
+      typeof parsed.data.imageKey === "string" &&
+      !(await confirmUpload("news", parsed.data.imageKey, userId))
+    ) {
+      return res.status(400).json({ error: "Invalid image upload" });
+    }
     const row = await storage.updateNews(
       id,
       parsed.data,
@@ -1210,7 +1264,7 @@ async function handleUpdateNews(
       req.ip ?? null,
     );
     if (!row) return res.status(404).json({ error: "Not found" });
-    return res.status(200).json(toNewsDTO(row));
+    return res.status(200).json(await toNewsDTO(row));
   } catch (err) {
     console.error("[PATCH /api/admin/news/:id]", { code: safeErrorCode(err) });
     return res.status(500).json({ error: "Internal Server Error" });

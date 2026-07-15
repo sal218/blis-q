@@ -7,6 +7,7 @@ import {
   Pressable,
   StyleSheet,
   Linking,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Stop, Rect } from "react-native-svg";
@@ -122,14 +123,25 @@ export function NewsArticleScreen({ route, navigation }: Props) {
         contentInsetAdjustmentBehavior="never"
       >
         <View style={styles.bannerClip}>
-          <ArticleBanner accent={accent} />
-          <View style={styles.bannerIcon} pointerEvents="none">
-            <NewsCategoryIcon
-              category={article.category}
-              size={48}
-              color="#fff"
+          {article.imageUrl ? (
+            <Image
+              testID="news-banner"
+              source={{ uri: article.imageUrl }}
+              style={styles.bannerMedia}
+              resizeMode="cover"
             />
-          </View>
+          ) : (
+            <>
+              <ArticleBanner accent={accent} />
+              <View style={styles.bannerIcon} pointerEvents="none">
+                <NewsCategoryIcon
+                  category={article.category}
+                  size={48}
+                  color="#fff"
+                />
+              </View>
+            </>
+          )}
         </View>
 
         <View style={styles.body}>
@@ -214,6 +226,7 @@ function createStyles(colors: ThemeColors) {
       borderBottomRightRadius: 28,
       overflow: "hidden",
     },
+    bannerMedia: { width: "100%", height: BANNER_HEIGHT },
     bannerIcon: {
       ...StyleSheet.absoluteFillObject,
       alignItems: "center",

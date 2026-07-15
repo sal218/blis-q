@@ -47,6 +47,7 @@ import {
 } from "@shared/schema";
 import { invalidateProfileCache } from "./auth";
 import { likeEscape } from "./likeEscape";
+import { MAX_SAFE_PLACE_MARKERS } from "./validation";
 
 // Input for the transactional signup write (server/routes/auth.ts). `id` is the
 // Supabase auth user id so users.id === the JWT `sub` the middleware resolves.
@@ -3051,6 +3052,74 @@ export class DatabaseStorage {
       .where(where);
 
     return { rows, total: Number(n) };
+  }
+
+  // Trimmed marker projection for the map (P-40 SP-4): EVERY visible venue that
+  // has BOTH coordinates, as id/name/category/lat/lng only — no caller-saved
+  // join, no offset/count/near. Same filters as listSafePlaces (so the map
+  // matches the active feed filters). UNPAGINATED but capped (default
+  // MAX_SAFE_PLACE_MARKERS; a curated Poland set stays well under it) with a
+  // deterministic `city, name, id` order so the cap truncates consistently. The
+  // `isNotNull` guards on both coords mean the returned lat/lng are non-null
+  // (narrowed below); `limit` is injectable so the boundary is testable.
+  async listSafePlaceMarkers(input: {
+    category?: string;
+    city?: string;
+    search?: string;
+    limit?: number;
+  }): Promise<
+    {
+      id: string;
+      name: string;
+      category: string;
+      latitude: number;
+      longitude: number;
+    }[]
+  > {
+    const conditions: (SQL | undefined)[] = [
+      isNull(safePlaces.deletedAt),
+      isNotNull(safePlaces.latitude),
+      isNotNull(safePlaces.longitude),
+    ];
+    if (input.category)
+      conditions.push(eq(safePlaces.category, input.category));
+    if (input.city)
+      conditions.push(ilike(safePlaces.city, likeEscape(input.city)));
+    if (input.search) {
+      const term = `%${likeEscape(input.search)}%`;
+      conditions.push(
+        or(
+          ilike(safePlaces.name, term),
+          ilike(safePlaces.city, term),
+          ilike(safePlaces.address, term),
+        ),
+      );
+    }
+
+    const rows = await db
+      .select({
+        id: safePlaces.id,
+        name: safePlaces.name,
+        category: safePlaces.category,
+        latitude: safePlaces.latitude,
+        longitude: safePlaces.longitude,
+      })
+      .from(safePlaces)
+      .where(and(...conditions))
+      .orderBy(
+        sql`${safePlaces.city} asc nulls last`,
+        sql`${safePlaces.name} asc`,
+        sql`${safePlaces.id} asc`,
+      )
+      .limit(input.limit ?? MAX_SAFE_PLACE_MARKERS);
+
+    // The WHERE guarantees both coordinates are present — narrow the nullable
+    // column types to the non-null marker shape.
+    return rows.map((r) => ({
+      ...r,
+      latitude: r.latitude as number,
+      longitude: r.longitude as number,
+    }));
   }
 
   async getSafePlace(

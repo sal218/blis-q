@@ -15,7 +15,13 @@ import { redis } from "./redis";
 // buckets are PRIVATE: files are only ever reachable via presigned URLs, and
 // every uploaded object is renamed to a random UUID to prevent enumeration.
 
-export type AssetType = "avatar" | "community" | "event" | "post" | "safeplace";
+export type AssetType =
+  | "avatar"
+  | "community"
+  | "event"
+  | "post"
+  | "safeplace"
+  | "news";
 
 // The only content types an upload may declare / an object may hold (SW-1). The
 // content type is signed into the presigned PUT (the client must match it) AND
@@ -44,6 +50,7 @@ function bucketForAsset(type: AssetType): string {
     event: process.env.R2_BUCKET_EVENT_IMAGES,
     post: process.env.R2_BUCKET_POST_IMAGES,
     safeplace: process.env.R2_BUCKET_SAFE_PLACE_IMAGES,
+    news: process.env.R2_BUCKET_NEWS_IMAGES,
   }[type];
 
   if (!bucket) {

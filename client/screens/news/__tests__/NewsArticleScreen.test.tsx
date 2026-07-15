@@ -94,6 +94,20 @@ describe("NewsArticleScreen", () => {
     expect(nav.goBack).toHaveBeenCalled();
   });
 
+  it("renders the real banner image when imageUrl is set (no gradient placeholder)", () => {
+    renderScreen({
+      article: article({ imageUrl: "https://signed.example/pic.jpg" }),
+    });
+    expect(screen.getByTestId("news-banner")).toBeTruthy();
+    expect(screen.queryByTestId("news-banner-placeholder")).toBeNull();
+  });
+
+  it("falls back to the category gradient banner when imageUrl is null", () => {
+    renderScreen({ article: article({ imageUrl: null }) });
+    expect(screen.getByTestId("news-banner-placeholder")).toBeTruthy();
+    expect(screen.queryByTestId("news-banner")).toBeNull();
+  });
+
   it("error state: shows the load error + a retry", () => {
     const retry = jest.fn();
     renderScreen({ article: null, status: "error", retry });

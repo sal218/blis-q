@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, Image } from "react-native";
 import Svg, { Defs, LinearGradient, Stop, Rect } from "react-native-svg";
 import { useTheme } from "@/contexts/ThemeContext";
 import { NewsCategoryIcon } from "@/components/icons/PhosphorIcons";
@@ -98,19 +98,30 @@ export function NewsCard({ article, onPress, featured = false }: Props) {
         ]}
       >
         <View style={styles.heroBanner}>
-          <CategoryGradient
-            id={`news-hero-${article.id}`}
-            accent={accent}
-            width="100%"
-            height={HERO_BANNER}
-          />
-          <View style={styles.heroIcon}>
-            <NewsCategoryIcon
-              category={article.category}
-              size={40}
-              color="#fff"
+          {article.imageUrl ? (
+            <Image
+              testID="news-hero-image"
+              source={{ uri: article.imageUrl }}
+              style={styles.heroMedia}
+              resizeMode="cover"
             />
-          </View>
+          ) : (
+            <>
+              <CategoryGradient
+                id={`news-hero-${article.id}`}
+                accent={accent}
+                width="100%"
+                height={HERO_BANNER}
+              />
+              <View style={styles.heroIcon}>
+                <NewsCategoryIcon
+                  category={article.category}
+                  size={40}
+                  color="#fff"
+                />
+              </View>
+            </>
+          )}
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{strings.news.featuredBadge}</Text>
           </View>
@@ -130,19 +141,30 @@ export function NewsCard({ article, onPress, featured = false }: Props) {
       ]}
     >
       <View style={styles.thumb} testID="news-thumb">
-        <CategoryGradient
-          id={`news-thumb-${article.id}`}
-          accent={accent}
-          width={THUMB}
-          height={THUMB}
-        />
-        <View style={styles.thumbIcon}>
-          <NewsCategoryIcon
-            category={article.category}
-            size={30}
-            color="#fff"
+        {article.imageUrl ? (
+          <Image
+            testID="news-thumb-image"
+            source={{ uri: article.imageUrl }}
+            style={styles.thumbMedia}
+            resizeMode="cover"
           />
-        </View>
+        ) : (
+          <>
+            <CategoryGradient
+              id={`news-thumb-${article.id}`}
+              accent={accent}
+              width={THUMB}
+              height={THUMB}
+            />
+            <View style={styles.thumbIcon}>
+              <NewsCategoryIcon
+                category={article.category}
+                size={30}
+                color="#fff"
+              />
+            </View>
+          </>
+        )}
       </View>
       <View style={styles.content}>{textBlock}</View>
     </Pressable>
@@ -174,6 +196,7 @@ function createStyles(colors: ThemeColors) {
       alignItems: "center",
       justifyContent: "center",
     },
+    thumbMedia: { width: THUMB, height: THUMB },
     content: { flex: 1, gap: 3 },
     // ── Featured hero ──
     hero: {
@@ -186,6 +209,7 @@ function createStyles(colors: ThemeColors) {
       shadowOpacity: 0.06,
     },
     heroBanner: { height: HERO_BANNER },
+    heroMedia: { width: "100%", height: HERO_BANNER },
     heroIcon: {
       ...StyleSheet.absoluteFillObject,
       alignItems: "center",

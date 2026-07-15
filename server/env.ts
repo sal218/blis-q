@@ -63,6 +63,7 @@ const envSchema = z.object({
   R2_BUCKET_EVENT_IMAGES: z.string().optional(),
   R2_BUCKET_POST_IMAGES: z.string().optional(),
   R2_BUCKET_SAFE_PLACE_IMAGES: z.string().optional(),
+  R2_BUCKET_NEWS_IMAGES: z.string().optional(),
 
   // RevenueCat webhook — optional in dev/test, required in production.
   // Used to verify the Authorization header on incoming RevenueCat webhooks
@@ -95,6 +96,7 @@ const PRODUCTION_REQUIRED_KEYS: ReadonlyArray<{
   { key: "R2_BUCKET_EVENT_IMAGES", reason: "object storage" },
   { key: "R2_BUCKET_POST_IMAGES", reason: "object storage" },
   { key: "R2_BUCKET_SAFE_PLACE_IMAGES", reason: "object storage" },
+  { key: "R2_BUCKET_NEWS_IMAGES", reason: "object storage" },
   { key: "REVENUECAT_WEBHOOK_SECRET", reason: "RevenueCat webhooks" },
 ];
 

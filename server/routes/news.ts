@@ -4,6 +4,7 @@ import { isAuthenticated } from "../auth";
 import { safeErrorCode } from "./auth";
 import { storage } from "../storage";
 import type { NewsRow } from "../storage";
+import { getDownloadUrl } from "../objectStorage";
 import { newsListQuerySchema } from "../validation";
 import {
   type NewsDTO,
@@ -24,9 +25,10 @@ export function registerNewsRoutes(app: Express): void {
 }
 
 // category is DB text; only validated categories are ever written, so the narrow
-// to the NewsCategory union is safe. imageUrl is null until the admin image-upload
-// + signed-URL slice (the raw imageKey is never projected/serialised).
-function toNewsDTO(row: NewsRow): NewsDTO {
+// to the NewsCategory union is safe. imageUrl is a short-lived SIGNED GET url for
+// the admin-uploaded photo (or null); the raw imageKey is NEVER serialised
+// (private bucket, UUID key, signed reads only — CLAUDE.md §3).
+async function toNewsDTO(row: NewsRow): Promise<NewsDTO> {
   return {
     id: row.id,
     title: row.title,
@@ -35,7 +37,7 @@ function toNewsDTO(row: NewsRow): NewsDTO {
     category: row.category as NewsCategory,
     source: row.source,
     sourceUrl: row.sourceUrl,
-    imageUrl: null,
+    imageUrl: row.imageKey ? await getDownloadUrl("news", row.imageKey) : null,
     featured: row.featured,
     createdAt: row.createdAt.toISOString(),
   };
@@ -59,7 +61,7 @@ async function handleList(req: Request, res: Response): Promise<Response> {
     });
 
     const body: OffsetPage<NewsDTO> = {
-      data: rows.map(toNewsDTO),
+      data: await Promise.all(rows.map(toNewsDTO)),
       page: q.page,
       pageSize: q.pageSize,
       total,
@@ -79,7 +81,7 @@ async function handleGet(req: Request, res: Response): Promise<Response> {
 
     const row = await storage.getNews(id.data);
     if (!row) return res.status(404).json({ error: "Not found" });
-    return res.status(200).json(toNewsDTO(row));
+    return res.status(200).json(await toNewsDTO(row));
   } catch (err) {
     console.error("[GET /api/v1/news/:id]", { code: safeErrorCode(err) });
     return res.status(500).json({ error: "Internal Server Error" });

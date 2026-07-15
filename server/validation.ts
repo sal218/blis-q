@@ -346,6 +346,9 @@ export const createNewsSchema = z
     // Optional external link ("Czytaj u źródła").
     sourceUrl: z.string().trim().url().max(MAX_URL_LENGTH).optional(),
     featured: z.boolean().optional(),
+    // A confirmed R2 upload key (the article photo). `null` is meaningless on
+    // create, so it's uuid-or-omit; the route confirms it before persisting.
+    imageKey: z.string().uuid().optional(),
   })
   .strict();
 
@@ -372,6 +375,9 @@ export const updateNewsSchema = z
       .nullable()
       .optional(),
     featured: z.boolean().optional(),
+    // undefined = unchanged · null = REMOVE the photo · uuid = set/replace (a
+    // confirmed R2 upload key; the route confirms it before persisting).
+    imageKey: z.string().uuid().nullable().optional(),
   })
   .strict()
   // PATCH must change something — an empty body is a 400, not a silent no-op.

@@ -61,6 +61,11 @@ jest.mock("../objectStorage", () => ({
 import { registerNewsRoutes } from "../routes/news";
 import { registerAdminRoutes } from "../routes/admin";
 import { checkAdminMutationRateLimit } from "../rateLimit";
+import {
+  createUploadUrl,
+  confirmUpload,
+  getDownloadUrl,
+} from "../objectStorage";
 import { storage } from "../storage";
 import { db, pool } from "../db";
 import { users, news, auditLog } from "@shared/schema";
@@ -74,6 +79,9 @@ registerAdminRoutes(app);
 jest.setTimeout(30000);
 
 const mutationRl = checkAdminMutationRateLimit as unknown as jest.Mock;
+const createUploadUrlMock = createUploadUrl as unknown as jest.Mock;
+const confirmUploadMock = confirmUpload as unknown as jest.Mock;
+const getDownloadUrlMock = getDownloadUrl as unknown as jest.Mock;
 
 const POLICY_VERSION = "2026-06-10";
 const createdUserIds: string[] = [];
@@ -129,6 +137,14 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockUser = null;
   mutationRl.mockResolvedValue({ allowed: true });
+  confirmUploadMock.mockResolvedValue(true);
+  getDownloadUrlMock.mockImplementation(
+    async (_asset: string, key: string) => `https://signed.example/${key}`,
+  );
+  createUploadUrlMock.mockResolvedValue({
+    uploadUrl: "https://r2.example/put",
+    key: randomUUID(),
+  });
 });
 
 afterEach(async () => {
@@ -493,6 +509,128 @@ describe("DELETE /api/admin/news/:id", () => {
     expect((await request(app).delete(`/api/admin/news/${id}`)).status).toBe(
       403,
     );
+  });
+});
+
+describe("POST /api/admin/news/upload-url", () => {
+  it("admin → 200 + { uploadUrl, key }; signs a news image PUT", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+
+    const res = await request(app)
+      .post("/api/admin/news/upload-url")
+      .send({ contentType: "image/png" });
+    expect(res.status).toBe(200);
+    expect(res.body.uploadUrl).toBe("https://r2.example/put");
+    expect(typeof res.body.key).toBe("string");
+    expect(createUploadUrlMock).toHaveBeenCalledWith(
+      "news",
+      admin,
+      "image/png",
+    );
+  });
+
+  it("rejects a disallowed content type → 400", async () => {
+    mockUser = { id: await seedUser(), isAdmin: true };
+    const res = await request(app)
+      .post("/api/admin/news/upload-url")
+      .send({ contentType: "application/pdf" });
+    expect(res.status).toBe(400);
+    expect(createUploadUrlMock).not.toHaveBeenCalled();
+  });
+
+  it("non-admin → 403", async () => {
+    mockUser = { id: await seedUser(), isAdmin: false };
+    const res = await request(app)
+      .post("/api/admin/news/upload-url")
+      .send({ contentType: "image/png" });
+    expect(res.status).toBe(403);
+  });
+
+  it("rate-limited → 429", async () => {
+    mockUser = { id: await seedUser(), isAdmin: true };
+    mutationRl.mockResolvedValueOnce({ allowed: false, retryAfter: 60 });
+    const res = await request(app)
+      .post("/api/admin/news/upload-url")
+      .send({ contentType: "image/png" });
+    expect(res.status).toBe(429);
+  });
+});
+
+describe("news image on create / update", () => {
+  const base = {
+    title: "Z obrazem",
+    summary: "Streszczenie z obrazkiem.",
+    body: "Treść.",
+    category: "world",
+    source: "Blis-Q Redakcja",
+  };
+
+  it("create with a confirmed imageKey → signed imageUrl, key never serialised", async () => {
+    const admin = await seedUser();
+    const key = randomUUID();
+    mockUser = { id: admin, isAdmin: true };
+
+    const res = await request(app)
+      .post("/api/admin/news")
+      .send({ ...base, imageKey: key });
+    expect(res.status).toBe(201);
+    createdNewsIds.push(res.body.id);
+    expect(confirmUploadMock).toHaveBeenCalledWith("news", key, admin);
+    expect(res.body.imageUrl).toBe(`https://signed.example/${key}`);
+    expect(res.body.imageKey).toBeUndefined();
+  });
+
+  it("create with an UNconfirmed imageKey → 400, no row written", async () => {
+    const admin = await seedUser();
+    mockUser = { id: admin, isAdmin: true };
+    confirmUploadMock.mockResolvedValueOnce(false);
+
+    const before = await db.select().from(news);
+    const res = await request(app)
+      .post("/api/admin/news")
+      .send({ ...base, imageKey: randomUUID() });
+    expect(res.status).toBe(400);
+    const after = await db.select().from(news);
+    expect(after.length).toBe(before.length);
+  });
+
+  it("update sets a new confirmed imageKey", async () => {
+    const admin = await seedUser();
+    const id = await seedNews(admin);
+    const key = randomUUID();
+    mockUser = { id: admin, isAdmin: true };
+
+    const res = await request(app)
+      .patch(`/api/admin/news/${id}`)
+      .send({ imageKey: key });
+    expect(res.status).toBe(200);
+    expect(confirmUploadMock).toHaveBeenCalledWith("news", key, admin);
+    expect(res.body.imageUrl).toBe(`https://signed.example/${key}`);
+  });
+
+  it("update with imageKey:null removes the image", async () => {
+    const admin = await seedUser();
+    const id = await seedNews(admin);
+    mockUser = { id: admin, isAdmin: true };
+
+    const res = await request(app)
+      .patch(`/api/admin/news/${id}`)
+      .send({ imageKey: null });
+    expect(res.status).toBe(200);
+    expect(res.body.imageUrl).toBeNull();
+    expect(confirmUploadMock).not.toHaveBeenCalled();
+  });
+
+  it("no image → imageUrl null, getDownloadUrl not called", async () => {
+    const admin = await seedUser();
+    const id = await seedNews(admin);
+    mockUser = { id: await seedUser(), isAdmin: false };
+
+    const res = await request(app).get(`/api/v1/news/${id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.imageUrl).toBeNull();
+    expect(getDownloadUrlMock).not.toHaveBeenCalled();
   });
 });
 

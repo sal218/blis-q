@@ -278,9 +278,10 @@ export type ResourceRow = {
 };
 
 // A news row as returned by newsColumns() (P-31). `category` is a DB text column;
-// the route narrows it to the NewsCategory union on the DTO. `imageKey` is NOT
-// projected (the signed imageUrl lands in a later slice). `body`/`sourceUrl` are
-// nullable (the two content modes: editorial full body vs external + link).
+// the route narrows it to the NewsCategory union on the DTO. `imageKey` is
+// server-internal (the article photo's R2 key) — the route signs it into
+// `imageUrl` and NEVER serialises the raw key. `body`/`sourceUrl` are nullable
+// (the two content modes: editorial full body vs external + link).
 export type NewsRow = {
   id: string;
   title: string;
@@ -289,6 +290,7 @@ export type NewsRow = {
   category: string;
   source: string;
   sourceUrl: string | null;
+  imageKey: string | null;
   featured: boolean;
   createdAt: Date;
 };
@@ -3354,8 +3356,8 @@ export class DatabaseStorage {
 
   // ── News (admin-curated pillar-3 News content, P-31) ─────────────────────────
   // Admin-published content (never user data); audit rows for news mutations carry
-  // IDs only — NEVER title/summary/body/source. `imageKey` is not projected yet
-  // (the signed imageUrl + admin upload are a later slice).
+  // IDs only — NEVER title/summary/body/source. `imageKey` is projected
+  // server-internal (the route signs it into `imageUrl`, never serialises the key).
 
   private newsColumns() {
     return {
@@ -3366,6 +3368,7 @@ export class DatabaseStorage {
       category: news.category,
       source: news.source,
       sourceUrl: news.sourceUrl,
+      imageKey: news.imageKey,
       featured: news.featured,
       createdAt: news.createdAt,
     };
@@ -3432,6 +3435,7 @@ export class DatabaseStorage {
       source: string;
       sourceUrl?: string;
       featured?: boolean;
+      imageKey?: string; // already confirmed by the route before we're called
     },
     actorId: string,
     ipAddress?: string | null,
@@ -3446,6 +3450,7 @@ export class DatabaseStorage {
           category: input.category,
           source: input.source,
           sourceUrl: input.sourceUrl ?? null,
+          imageKey: input.imageKey ?? null,
           featured: input.featured ?? false,
           createdById: actorId,
         })
@@ -3474,6 +3479,7 @@ export class DatabaseStorage {
       source?: string;
       sourceUrl?: string | null;
       featured?: boolean;
+      imageKey?: string | null; // confirmed by the route; null = remove the photo
     },
     actorId: string,
     ipAddress?: string | null,
@@ -3485,6 +3491,7 @@ export class DatabaseStorage {
     if (input.category !== undefined) fields.category = input.category;
     if (input.source !== undefined) fields.source = input.source;
     if (input.sourceUrl !== undefined) fields.sourceUrl = input.sourceUrl;
+    if (input.imageKey !== undefined) fields.imageKey = input.imageKey;
     if (input.featured !== undefined) fields.featured = input.featured;
 
     return db.transaction(async (tx) => {

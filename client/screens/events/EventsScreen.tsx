@@ -87,6 +87,7 @@ export function EventsScreen({ navigation }: Props) {
         {segment === SEGMENT_SAFE_PLACES && (
           <SafePlacesList
             onOpenPlace={(id) => navigation.navigate("SafePlaceDetail", { id })}
+            onOpenMap={() => navigation.navigate("SafePlacesMap")}
           />
         )}
         {segment === SEGMENT_COMMUNITIES && (

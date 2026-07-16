@@ -14,6 +14,7 @@ import { HomeScreen } from "@/screens/HomeScreen";
 import { EventsScreen } from "@/screens/events/EventsScreen";
 import { EventDetailScreen } from "@/screens/events/EventDetailScreen";
 import { SafePlaceDetailScreen } from "@/screens/events/SafePlaceDetailScreen";
+import { SafePlacesMapScreen } from "@/screens/events/SafePlacesMapScreen";
 import { SavedScreen } from "@/screens/events/SavedScreen";
 import { CreateEventScreen } from "@/screens/events/CreateEventScreen";
 import { CommunityDetailScreen } from "@/screens/communities/CommunityDetailScreen";
@@ -82,6 +83,7 @@ export type EventsStackParamList = {
   EventsHome: undefined;
   EventDetail: { id: string };
   SafePlaceDetail: { id: string };
+  SafePlacesMap: undefined; // full-screen Safe Places map (P-40 SP-4b)
   Saved: undefined;
   CreateEvent: { communityId: string };
   CommunityDetail: { id: string };
@@ -137,6 +139,12 @@ function EventsStack() {
         name="SafePlaceDetail"
         component={SafePlaceDetailScreen}
         // Full-bleed banner like EventDetail — the screen owns its back button.
+        options={{ headerShown: false }}
+      />
+      <EventsStackNav.Screen
+        name="SafePlacesMap"
+        component={SafePlacesMapScreen}
+        // Full-screen map (SP-4b) — owns its floating back button.
         options={{ headerShown: false }}
       />
       <EventsStackNav.Screen

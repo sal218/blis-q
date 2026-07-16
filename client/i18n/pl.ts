@@ -232,7 +232,17 @@ export const pl = {
     // Map placeholder (P-40 / SP-4). The interactive map isn't built yet; the
     // list reserves a rounded panel that renders this hint and a "view map" CTA.
     mapComingSoon: "Mapa już wkrótce", // "Map coming soon"
-    viewMap: "Zobacz mapę", // "View map" (reserved expand CTA — inert until SP-4)
+    viewMap: "Zobacz mapę", // "View map" (the entry that opens the map screen)
+    // Map screen (P-40 SP-4b) — the full-screen Safe Places map.
+    map: {
+      open: "Zobacz na mapie", // entry CTA + a11y ("View on the map")
+      openHint: "Przeglądaj bezpieczne miejsca na mapie", // entry subtitle
+      loadError: "Nie udało się załadować mapy.", // markers fetch failed
+      unavailable: "Mapa jest chwilowo niedostępna.", // basemap not configured
+      empty: "Brak miejsc do pokazania na mapie.", // no coord-bearing places
+      attribution: "© OpenStreetMap contributors", // ODbL on-map credit
+      back: "Wstecz", // a11y label for the floating back button
+    },
     // Curation framing (COMPLIANCE §5.8 / P-40): present as team-curated
     // LGBT-friendly places, NOT an absolute safety guarantee.
     disclaimer:

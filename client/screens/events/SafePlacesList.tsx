@@ -26,9 +26,12 @@ import { SAFE_PLACE_CATEGORIES, type SafePlaceCategory } from "@shared/types";
 // footer satisfies the ODbL licence. Proximity ("near me") ordering ships with
 // the map (SP-4). No coordinates are shown to the user.
 
-type Props = { onOpenPlace?: (id: string) => void };
+type Props = {
+  onOpenPlace?: (id: string) => void;
+  onOpenMap?: () => void; // opens the full-screen map (P-40 SP-4b)
+};
 
-export function SafePlacesList({ onOpenPlace }: Props = {}) {
+export function SafePlacesList({ onOpenPlace, onOpenMap }: Props = {}) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const {
@@ -167,23 +170,30 @@ export function SafePlacesList({ onOpenPlace }: Props = {}) {
         keyExtractor={(p) => p.id}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          // Map placeholder — reserves the panel the interactive map fills in
-          // SP-4 (P-40). It scrolls with the cards, matching the reference. The
-          // "Zobacz mapę" affordance is inert until the map lands.
-          <View
-            testID="safe-places-map-placeholder"
-            style={styles.mapPlaceholder}
+          // Map entry (P-40 SP-4b) — opens the full-screen Safe Places map. A
+          // dedicated screen (not an interactive map embedded here) avoids
+          // FlatList pan/scroll gesture conflicts; a compact live preview is
+          // slice 2. It scrolls with the cards, matching the reference.
+          <Pressable
+            testID="safe-places-map-entry"
+            accessibilityRole="button"
+            accessibilityLabel={strings.safePlaces.map.open}
+            onPress={onOpenMap}
+            style={({ pressed }) => [
+              styles.mapPlaceholder,
+              pressed && styles.mapEntryPressed,
+            ]}
           >
             <View style={styles.mapExpand}>
               <Text style={styles.mapExpandText}>
-                {strings.safePlaces.viewMap}
+                {strings.safePlaces.map.open}
               </Text>
             </View>
             <MapPin size={34} color={colors.primary} />
             <Text style={styles.mapHint}>
-              {strings.safePlaces.mapComingSoon}
+              {strings.safePlaces.map.openHint}
             </Text>
-          </View>
+          </Pressable>
         }
         renderItem={({ item }) => (
           <SafePlaceCard
@@ -308,6 +318,7 @@ function createStyles(colors: ThemeColors) {
       gap: spacing.sm,
       marginBottom: spacing.md,
     },
+    mapEntryPressed: { opacity: 0.7 },
     mapExpand: {
       position: "absolute",
       top: spacing.sm,

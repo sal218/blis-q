@@ -1,6 +1,7 @@
 import type {
   OffsetPage,
   SafePlaceDTO,
+  SafePlaceMarkerDTO,
   SafePlaceCategory,
 } from "@shared/types";
 import {
@@ -39,6 +40,34 @@ export function listSafePlaces(params: {
     `/api/v1/safe-places${query}`,
     undefined,
     (res) => res.json() as Promise<OffsetPage<SafePlaceDTO>>,
+    commonApiError,
+  );
+}
+
+// GET /api/v1/safe-places/markers — every visible venue that has coordinates, as
+// a trimmed marker projection, for the map (SP-4). Unpaginated (capped 1000) +
+// the same category/city/search filters as the list. Plain array.
+export function listSafePlaceMarkers(
+  params: {
+    category?: SafePlaceCategory;
+    city?: string;
+    search?: string;
+  } = {},
+): Promise<SafePlacesResult<SafePlaceMarkerDTO[]>> {
+  const parts: string[] = [];
+  if (params.category) {
+    parts.push(`category=${encodeURIComponent(params.category)}`);
+  }
+  const city = params.city?.trim();
+  if (city) parts.push(`city=${encodeURIComponent(city)}`);
+  const search = params.search?.trim();
+  if (search) parts.push(`search=${encodeURIComponent(search)}`);
+  const query = parts.length ? `?${parts.join("&")}` : "";
+  return request(
+    "GET",
+    `/api/v1/safe-places/markers${query}`,
+    undefined,
+    (res) => res.json() as Promise<SafePlaceMarkerDTO[]>,
     commonApiError,
   );
 }

@@ -4,6 +4,7 @@ jest.mock("@/lib/auth", () => ({ fetchWithAuth: jest.fn() }));
 import { fetchWithAuth } from "@/lib/auth";
 import {
   listSafePlaces,
+  listSafePlaceMarkers,
   listSavedSafePlaces,
   getSafePlace,
   reportSafePlace,
@@ -87,6 +88,55 @@ describe("listSafePlaces", () => {
 
     fetchMock.mockRejectedValueOnce(new Error("offline"));
     expect(await listSafePlaces({})).toEqual({
+      ok: false,
+      error: { kind: "network" },
+    });
+  });
+
+  it("listSafePlaceMarkers → GET /safe-places/markers (no params)", async () => {
+    const markers = [
+      { id: "s1", name: "A", category: "cafe", latitude: 52.2, longitude: 21 },
+    ];
+    fetchMock.mockResolvedValue(res(200, markers));
+    expect(await listSafePlaceMarkers()).toEqual({ ok: true, data: markers });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "GET",
+      "/api/v1/safe-places/markers",
+      undefined,
+    );
+  });
+
+  it("listSafePlaceMarkers composes category + city + (encoded) search", async () => {
+    fetchMock.mockResolvedValue(res(200, []));
+    await listSafePlaceMarkers({
+      category: "club",
+      city: "Kraków",
+      search: "Tęcza",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "GET",
+      "/api/v1/safe-places/markers?category=club&city=Krak%C3%B3w&search=T%C4%99cza",
+      undefined,
+    );
+  });
+
+  it("listSafePlaceMarkers omits blank city/search + maps errors", async () => {
+    fetchMock.mockResolvedValueOnce(res(200, []));
+    await listSafePlaceMarkers({ city: "   ", search: "  " });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "GET",
+      "/api/v1/safe-places/markers",
+      undefined,
+    );
+
+    fetchMock.mockResolvedValueOnce(res(400, {}));
+    expect(await listSafePlaceMarkers()).toEqual({
+      ok: false,
+      error: { kind: "validation" },
+    });
+
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    expect(await listSafePlaceMarkers()).toEqual({
       ok: false,
       error: { kind: "network" },
     });

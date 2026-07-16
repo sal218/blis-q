@@ -79,12 +79,14 @@ describe("SafePlacesList", () => {
     expect(screen.getByText(strings.safePlaces.disclaimer)).toBeTruthy();
   });
 
-  it("renders the map placeholder (interactive map deferred to SP-4)", () => {
+  it("renders the map entry and opens the map on press (SP-4b)", () => {
     spMock.mockReturnValue(state({ items: [] }));
-    render(<SafePlacesList />);
-    expect(screen.getByTestId("safe-places-map-placeholder")).toBeTruthy();
-    expect(screen.getByText(strings.safePlaces.mapComingSoon)).toBeTruthy();
-    expect(screen.getByText(strings.safePlaces.viewMap)).toBeTruthy();
+    const onOpenMap = jest.fn();
+    render(<SafePlacesList onOpenMap={onOpenMap} />);
+    expect(screen.getByTestId("safe-places-map-entry")).toBeTruthy();
+    expect(screen.getByText(strings.safePlaces.map.open)).toBeTruthy();
+    fireEvent.press(screen.getByTestId("safe-places-map-entry"));
+    expect(onOpenMap).toHaveBeenCalled();
   });
 
   it("marks the active category filter pill as selected", () => {

@@ -2,7 +2,7 @@
 jest.mock("@/lib/auth", () => ({ fetchWithAuth: jest.fn() }));
 
 import { fetchWithAuth } from "@/lib/auth";
-import { listNews, getArticle } from "@/lib/api/news";
+import { listNews, getArticle, getRelatedNews } from "@/lib/api/news";
 
 const fetchMock = fetchWithAuth as unknown as jest.Mock;
 
@@ -98,6 +98,26 @@ describe("getArticle", () => {
     expect(await getArticle("n1")).toEqual({
       ok: false,
       error: { kind: "server" },
+    });
+  });
+});
+
+describe("getRelatedNews", () => {
+  it("GET /:id/related → the array", async () => {
+    fetchMock.mockResolvedValue(res(200, [ARTICLE]));
+    expect(await getRelatedNews("n1")).toEqual({ ok: true, data: [ARTICLE] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "GET",
+      "/api/v1/news/n1/related",
+      undefined,
+    );
+  });
+
+  it("maps a network failure to a network error", async () => {
+    fetchMock.mockRejectedValue(new Error("offline"));
+    expect(await getRelatedNews("n1")).toEqual({
+      ok: false,
+      error: { kind: "network" },
     });
   });
 });

@@ -316,6 +316,7 @@ export const pl = {
     detailLoadError: "Nie udało się załadować wiadomości.", // detail load failure
     openSource: "Czytaj u źródła", // "Read at source" — external-link CTA on the detail
     readTime: "{count} min czytania", // "{count} min read"
+    relatedTitle: "Więcej wiadomości", // "More news" — related-articles section heading
     // The inline "need support?" callout on the article detail → the crisis page.
     support: {
       title: "Potrzebujesz wsparcia?", // "Need support?"

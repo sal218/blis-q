@@ -23,7 +23,9 @@ import {
   Phone,
   NewsCategoryIcon,
 } from "@/components/icons/PhosphorIcons";
+import { NewsCard } from "@/components/NewsCard";
 import { useArticle } from "@/hooks/useArticle";
+import { useRelatedNews } from "@/hooks/useRelatedNews";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { NEWS_CATEGORY_COLORS } from "@/constants/newsCategories";
 import { strings, format } from "@/i18n";
@@ -81,6 +83,7 @@ export function NewsArticleScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { article, status, retry } = useArticle(route.params.id);
+  const related = useRelatedNews(route.params.id);
 
   // Opened directly from Home → Back returns to Home (its origin), not the
   // Wsparcie root sitting beneath in the Resources stack. When opened from the
@@ -196,6 +199,24 @@ export function NewsArticleScreen({ route, navigation }: Props) {
             </>
           )}
 
+          {/* "More news" — related articles (same-category first). Hidden while
+              loading / on error / when empty (secondary, non-blocking content).
+              Tapping a card PUSHES a new article so Back returns here. */}
+          {related.status === "ready" && related.items.length > 0 ? (
+            <View style={styles.related} testID="news-related">
+              <Text style={styles.relatedTitle}>
+                {strings.news.relatedTitle}
+              </Text>
+              {related.items.map((item) => (
+                <NewsCard
+                  key={item.id}
+                  article={item}
+                  onPress={(a) => navigation.push("NewsArticle", { id: a.id })}
+                />
+              ))}
+            </View>
+          ) : null}
+
           {/* Inline crisis-support callout → the "Pomoc w kryzysie" page. */}
           <Pressable
             accessibilityRole="button"
@@ -304,6 +325,16 @@ function createStyles(colors: ThemeColors) {
       marginTop: spacing.lg,
       borderRadius: radius.lg,
       overflow: "hidden",
+    },
+    related: {
+      marginTop: spacing.xl,
+      gap: spacing.md,
+    },
+    relatedTitle: {
+      color: colors.text,
+      fontSize: 18,
+      fontWeight: "800",
+      letterSpacing: -0.2,
     },
     support: {
       flexDirection: "row",

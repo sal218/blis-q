@@ -372,6 +372,95 @@ describe("GET /api/v1/news/:id", () => {
   });
 });
 
+describe("GET /api/v1/news/:id/related", () => {
+  // Force distinct createdAt so recency ordering is deterministic (later ts =
+  // newer). AR-2: tests may touch the DB directly.
+  async function setCreatedAt(id: string, iso: string): Promise<void> {
+    await db
+      .update(news)
+      .set({ createdAt: new Date(iso) })
+      .where(eq(news.id, id));
+  }
+
+  it("401 without auth", async () => {
+    const res = await request(app).get(`/api/v1/news/${randomUUID()}/related`);
+    expect(res.status).toBe(401);
+  });
+
+  it("returns same-category others FIRST, excludes self, newest-first", async () => {
+    const admin = await seedUser();
+    const self = await seedNews(admin, { title: "Self", category: "rights" });
+    const r1 = await seedNews(admin, { title: "Rights A", category: "rights" });
+    const r2 = await seedNews(admin, { title: "Rights B", category: "rights" });
+    const w1 = await seedNews(admin, { title: "World A", category: "world" });
+    await setCreatedAt(r1, "2026-01-01T00:00:00.000Z"); // older
+    await setCreatedAt(r2, "2026-02-01T00:00:00.000Z"); // newer
+    await setCreatedAt(w1, "2026-03-01T00:00:00.000Z"); // newest overall
+    mockUser = { id: await seedUser(), isAdmin: false };
+
+    const res = await request(app).get(`/api/v1/news/${self}/related`);
+    expect(res.status).toBe(200);
+    const ids = res.body.map((n: { id: string }) => n.id);
+    expect(ids).not.toContain(self); // self excluded
+    // Same-category (rights) first — newest rights before older — THEN world.
+    expect(ids).toEqual([r2, r1, w1]);
+  });
+
+  it("tops up with other categories when same-category has no others", async () => {
+    const admin = await seedUser();
+    const self = await seedNews(admin, { title: "Lonely", category: "health" });
+    const w1 = await seedNews(admin, { title: "W1", category: "world" });
+    const w2 = await seedNews(admin, { title: "W2", category: "community" });
+    mockUser = { id: await seedUser(), isAdmin: false };
+
+    const res = await request(app).get(`/api/v1/news/${self}/related`);
+    const ids = res.body.map((n: { id: string }) => n.id);
+    expect(ids).toContain(w1);
+    expect(ids).toContain(w2);
+    expect(ids).not.toContain(self);
+  });
+
+  it("excludes soft-deleted articles", async () => {
+    const admin = await seedUser();
+    const self = await seedNews(admin, { category: "rights" });
+    const gone = await seedNews(admin, { title: "Gone", category: "rights" });
+    await storage.softDeleteNews(gone, admin, null);
+    mockUser = { id: await seedUser(), isAdmin: false };
+
+    const res = await request(app).get(`/api/v1/news/${self}/related`);
+    expect(res.body.map((n: { id: string }) => n.id)).not.toContain(gone);
+  });
+
+  it("caps at 5 related", async () => {
+    const admin = await seedUser();
+    const self = await seedNews(admin, { category: "rights" });
+    for (let i = 0; i < 7; i++) {
+      await seedNews(admin, { title: `R${i}`, category: "rights" });
+    }
+    mockUser = { id: await seedUser(), isAdmin: false };
+
+    const res = await request(app).get(`/api/v1/news/${self}/related`);
+    expect(res.body.length).toBe(5);
+  });
+
+  it("404 for a missing / soft-deleted article; 400 on a bad uuid", async () => {
+    const admin = await seedUser();
+    const gone = await seedNews(admin);
+    await storage.softDeleteNews(gone, admin, null);
+    mockUser = { id: await seedUser(), isAdmin: false };
+
+    expect(
+      (await request(app).get(`/api/v1/news/${gone}/related`)).status,
+    ).toBe(404);
+    expect(
+      (await request(app).get(`/api/v1/news/${randomUUID()}/related`)).status,
+    ).toBe(404);
+    expect(
+      (await request(app).get(`/api/v1/news/not-a-uuid/related`)).status,
+    ).toBe(400);
+  });
+});
+
 describe("POST /api/admin/news", () => {
   const body = {
     title: "  Parlament Europejski  ",

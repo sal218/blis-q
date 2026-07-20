@@ -3494,6 +3494,29 @@ export class DatabaseStorage {
     return row ?? null;
   }
 
+  // Related news for the article-detail "Więcej wiadomości" section (P-31): up to
+  // `limit` OTHER visible articles, SAME-CATEGORY FIRST then newest overall. A
+  // single query does the priority: `(category = :cat) desc` sorts same-category
+  // rows (true=1) ahead, then `createdAt desc, id asc` orders by recency — so the
+  // section stays populated even when the article's category has few others. Not
+  // featured-first (avoids resurfacing the same "NA TOPIE" story on every article).
+  async listRelatedNews(input: {
+    excludeId: string;
+    category: string;
+    limit: number;
+  }): Promise<NewsRow[]> {
+    return db
+      .select(this.newsColumns())
+      .from(news)
+      .where(and(isNull(news.deletedAt), sql`${news.id} <> ${input.excludeId}`))
+      .orderBy(
+        sql`(${news.category} = ${input.category}) desc`,
+        sql`${news.createdAt} desc`,
+        sql`${news.id} asc`,
+      )
+      .limit(input.limit);
+  }
+
   // Admin create. Insert + news.created audit commit together (§7).
   async createNews(
     input: {

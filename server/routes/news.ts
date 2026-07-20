@@ -22,7 +22,11 @@ import {
 export function registerNewsRoutes(app: Express): void {
   app.get("/api/v1/news", isAuthenticated, handleList);
   app.get("/api/v1/news/:id", isAuthenticated, handleGet);
+  app.get("/api/v1/news/:id/related", isAuthenticated, handleGetRelated);
 }
+
+// How many related articles the "Więcej wiadomości" section shows.
+const RELATED_NEWS_LIMIT = 5;
 
 // category is DB text; only validated categories are ever written, so the narrow
 // to the NewsCategory union is safe. imageUrl is a short-lived SIGNED GET url for
@@ -84,6 +88,35 @@ async function handleGet(req: Request, res: Response): Promise<Response> {
     return res.status(200).json(await toNewsDTO(row));
   } catch (err) {
     console.error("[GET /api/v1/news/:id]", { code: safeErrorCode(err) });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// GET /api/v1/news/:id/related — up to RELATED_NEWS_LIMIT other visible articles
+// for the article-detail "Więcej wiadomości" section (same-category first, then
+// newest). 404 if the article itself is missing/soft-deleted. A plain array.
+async function handleGetRelated(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return res.status(400).json({ error: "Invalid input" });
+
+    const article = await storage.getNews(id.data);
+    if (!article) return res.status(404).json({ error: "Not found" });
+
+    const rows = await storage.listRelatedNews({
+      excludeId: id.data,
+      category: article.category,
+      limit: RELATED_NEWS_LIMIT,
+    });
+    const body: NewsDTO[] = await Promise.all(rows.map(toNewsDTO));
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[GET /api/v1/news/:id/related]", {
+      code: safeErrorCode(err),
+    });
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }

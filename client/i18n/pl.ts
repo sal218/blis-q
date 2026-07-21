@@ -242,6 +242,10 @@ export const pl = {
       empty: "Brak miejsc do pokazania na mapie.", // no coord-bearing places
       attribution: "© OpenStreetMap contributors", // ODbL on-map credit
       back: "Wstecz", // a11y label for the floating back button
+      // Shown in Expo Go, where the MapLibre native module isn't available.
+      devBuildTitle: "Mapa niedostępna", // "Map unavailable"
+      devBuildBody:
+        "Mapa działa tylko w pełnej wersji aplikacji, nie w Expo Go.", // "The map only works in the full app build, not in Expo Go."
     },
     // Curation framing (COMPLIANCE §5.8 / P-40): present as team-curated
     // LGBT-friendly places, NOT an absolute safety guarantee.

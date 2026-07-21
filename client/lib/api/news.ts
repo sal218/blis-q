@@ -50,3 +50,16 @@ export function getArticle(id: string): Promise<NewsResult<NewsDTO>> {
     commonApiError,
   );
 }
+
+// GET /api/v1/news/:id/related — up to a few other articles for the detail
+// screen's "Więcej wiadomości" section (same-category first, then newest). A
+// plain array; 404 if the article itself is gone.
+export function getRelatedNews(id: string): Promise<NewsResult<NewsDTO[]>> {
+  return request(
+    "GET",
+    `/api/v1/news/${id}/related`,
+    undefined,
+    (res) => res.json() as Promise<NewsDTO[]>,
+    commonApiError,
+  );
+}

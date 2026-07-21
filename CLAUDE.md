@@ -505,6 +505,13 @@ RevenueCat (and any future payment provider) webhook signature verification requ
 2. **Client env**: set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` + `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`.
 3. **app.json**: replace the `iosUrlScheme` placeholder (`com.googleusercontent.apps.REPLACE_WITH_IOS_CLIENT_ID`) in the google-signin plugin with the real reversed iOS client ID.
 
+### Native-Module Screens Must Be Lazy-Loaded + Expo-Go-Guarded
+
+A native module absent from Expo Go (MapLibre, Google Sign-In, …) that runs an eager `TurboModuleRegistry.getEnforcing(...)` at **import evaluation** will crash **the whole app at boot in Expo Go** if it is reachable from a **static import chain off the root navigator** (`AppTabs`). This happened with the Safe Places map: `AppTabs` statically imported `SafePlacesMapScreen` → `@maplibre/maplibre-react-native` → `MLRNCameraModule could not be found` at launch (fixed in `fix/map-lazy-expo-go`). Rules for any screen/feature that pulls a non-Expo-Go native module:
+1. **Lazy-load the screen** in `AppTabs` via React Navigation `getComponent={() => require("...").Screen}` (NOT a static `import` + `component`) — so the native module only evaluates when the user navigates there, not at boot.
+2. **Guard the entry** with `isExpoGo()` (`client/lib/expoGo.ts`, `Constants.executionEnvironment === StoreClient`) — in Expo Go, show a "needs a dev build" message instead of navigating (navigating would trigger the lazy require → crash). Mirrors `client/lib/googleAuth.ts` (which lazy-`import()`s the native module behind the same guard).
+3. **Regression-test the boot path**: mock the native module to throw on evaluation, `require("@/navigation/AppTabs")`, assert it does not throw (`client/navigation/__tests__/AppTabs.test.tsx`).
+
 ### Push Token Must Be Deregistered on Logout (before clearing the session)
 
 Logout must call `deregisterPushToken()` **before** clearing the auth session, while `fetchWithAuth` can still attach the access token. Otherwise a signed-out (possibly shared) device stays attached to the old account on the backend and keeps receiving its notifications — in Blis-Q those can reveal sensitive membership/activity. Registration and deregistration must use the **same** token: the **Expo push token** (`getExpoPushTokenAsync`), not the native device token (`getDevicePushTokenAsync`). The registered token is persisted in SecureStore (`client/notifications/usePushNotifications.ts`) so logout deactivates exactly that token.

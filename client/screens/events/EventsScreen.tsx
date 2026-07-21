@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { CompositeScreenProps } from "@react-navigation/native";
 import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
@@ -11,6 +11,7 @@ import { SegmentedControl } from "@/components/SegmentedControl";
 import { EventsList } from "@/screens/events/EventsList";
 import { SafePlacesList } from "@/screens/events/SafePlacesList";
 import { CommunitiesSection } from "@/screens/communities/CommunitiesSection";
+import { isExpoGo } from "@/lib/expoGo";
 import { strings } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
 import type {
@@ -43,6 +44,20 @@ export function EventsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [segment, setSegment] = useState(SEGMENT_EVENTS);
+
+  // The map uses the MapLibre native module, absent in Expo Go — navigating
+  // would crash (getComponent would require it). In Expo Go, tell the user it
+  // needs the full app build instead; in a dev/EAS build, open the map.
+  const openMap = () => {
+    if (isExpoGo()) {
+      Alert.alert(
+        strings.safePlaces.map.devBuildTitle,
+        strings.safePlaces.map.devBuildBody,
+      );
+      return;
+    }
+    navigation.navigate("SafePlacesMap");
+  };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing.lg }]}>
@@ -87,7 +102,7 @@ export function EventsScreen({ navigation }: Props) {
         {segment === SEGMENT_SAFE_PLACES && (
           <SafePlacesList
             onOpenPlace={(id) => navigation.navigate("SafePlaceDetail", { id })}
-            onOpenMap={() => navigation.navigate("SafePlacesMap")}
+            onOpenMap={openMap}
           />
         )}
         {segment === SEGMENT_COMMUNITIES && (

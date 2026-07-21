@@ -14,7 +14,9 @@ import { HomeScreen } from "@/screens/HomeScreen";
 import { EventsScreen } from "@/screens/events/EventsScreen";
 import { EventDetailScreen } from "@/screens/events/EventDetailScreen";
 import { SafePlaceDetailScreen } from "@/screens/events/SafePlaceDetailScreen";
-import { SafePlacesMapScreen } from "@/screens/events/SafePlacesMapScreen";
+// SafePlacesMapScreen is loaded lazily via getComponent below (it pulls in the
+// MapLibre native module, which crashes on import in Expo Go) — do NOT add a
+// static import here.
 import { SavedScreen } from "@/screens/events/SavedScreen";
 import { CreateEventScreen } from "@/screens/events/CreateEventScreen";
 import { CommunityDetailScreen } from "@/screens/communities/CommunityDetailScreen";
@@ -143,7 +145,16 @@ function EventsStack() {
       />
       <EventsStackNav.Screen
         name="SafePlacesMap"
-        component={SafePlacesMapScreen}
+        // LAZY on purpose: SafePlacesMapScreen imports @maplibre/maplibre-react-
+        // native, whose Camera TurboModule is checked at import-eval and is NOT
+        // in Expo Go — a static import here crashed the WHOLE app at boot in Expo
+        // Go. getComponent defers the require until the user navigates to the map
+        // (and the EventsScreen entry blocks that in Expo Go). Mirrors the lazy
+        // native-module handling in lib/googleAuth.ts.
+        getComponent={() =>
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          require("../screens/events/SafePlacesMapScreen").SafePlacesMapScreen
+        }
         // Full-screen map (SP-4b) — owns its floating back button.
         options={{ headerShown: false }}
       />

@@ -6,6 +6,8 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from "react-native";
+import type { CompositeScreenProps } from "@react-navigation/native";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,7 +20,10 @@ import { CommunityFeed } from "@/screens/communities/CommunityFeed";
 import { useCommunityDetail } from "@/hooks/useCommunityDetail";
 import { strings, format } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
-import type { EventsStackParamList } from "@/navigation/AppTabs";
+import type {
+  EventsStackParamList,
+  AppTabsParamList,
+} from "@/navigation/AppTabs";
 
 // Community detail — header (name/members) + an About|Feed segmented control.
 // Design ref: assets/event-communities-details-screen.png (we ship About + Feed;
@@ -26,7 +31,12 @@ import type { EventsStackParamList } from "@/navigation/AppTabs";
 // tabs are fixed; each segment owns its own scroller (About = ScrollView, Feed =
 // CommunityFeed's FlatList) so no VirtualizedList is nested in a ScrollView.
 
-type Props = NativeStackScreenProps<EventsStackParamList, "CommunityDetail">;
+// Composite props so the Back button can address the Home tab when opened from
+// Home (fromHome) — same pattern as NewsArticleScreen.
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<EventsStackParamList, "CommunityDetail">,
+  BottomTabScreenProps<AppTabsParamList>
+>;
 
 const ABOUT = 0;
 
@@ -47,9 +57,15 @@ export function CommunityDetailScreen({ route, navigation }: Props) {
   } = useCommunityDetail(id);
   const [segment, setSegment] = useState(ABOUT);
 
-  // Full-bleed: a back-only header (the community name is shown in-content
-  // below). Rendered in every state so the user can always leave.
-  const header = <ScreenHeader onBack={navigation.goBack} />;
+  // Opened from Home → Back returns to Home (not the Events list beneath in the
+  // stack). Opened from the Events tab (fromHome unset) → normal goBack to the
+  // list. Full-bleed back-only header (the community name is shown in-content
+  // below); rendered in every state so the user can always leave.
+  const onBack = () => {
+    if (route.params.fromHome) navigation.navigate("Home");
+    else navigation.goBack();
+  };
+  const header = <ScreenHeader onBack={onBack} />;
 
   if (status === "loading") {
     return (

@@ -113,4 +113,15 @@ describe("useHomeEvents", () => {
     expect(result.current.status).toBe("ready");
     expect(result.current.events).toEqual([ev("e1")]);
   });
+
+  it("retry re-loads after a failure → ready", async () => {
+    listMock.mockResolvedValueOnce({ ok: false, error: { kind: "server" } });
+    const { result } = renderHook(() => useHomeEvents());
+    await waitFor(() => expect(result.current.status).toBe("error"));
+
+    listMock.mockResolvedValueOnce({ ok: true, data: [ev("e1")] });
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(result.current.events).toEqual([ev("e1")]);
+  });
 });

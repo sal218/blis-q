@@ -19,6 +19,7 @@ export type HomeEventsStatus = "loading" | "ready" | "error";
 export type UseHomeEvents = {
   events: EventDTO[];
   status: HomeEventsStatus;
+  retry: () => void;
 };
 
 export function useHomeEvents(): UseHomeEvents {
@@ -48,5 +49,9 @@ export function useHomeEvents(): UseHomeEvents {
     }, [load]),
   );
 
-  return { events, status };
+  const retry = useCallback(() => {
+    void load(false);
+  }, [load]);
+
+  return { events, status, retry };
 }

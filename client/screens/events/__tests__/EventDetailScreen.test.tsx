@@ -53,12 +53,15 @@ function state(over: Partial<ReturnType<typeof useEvent>> = {}) {
   };
 }
 
-function renderDetail() {
+function renderDetail(
+  params: { id: string; fromHome?: boolean } = { id: "e1" },
+) {
   const goBack = jest.fn();
-  const route = { params: { id: "e1" } } as never;
-  const navigation = { goBack } as unknown as never;
+  const navigate = jest.fn();
+  const route = { params } as never;
+  const navigation = { goBack, navigate } as unknown as never;
   render(<EventDetailScreen route={route} navigation={navigation} />);
-  return { goBack };
+  return { goBack, navigate };
 }
 
 beforeEach(() => eventMock.mockReset());
@@ -130,6 +133,14 @@ describe("EventDetailScreen", () => {
     const { goBack } = renderDetail();
     fireEvent.press(screen.getByLabelText(strings.common.back));
     expect(goBack).toHaveBeenCalled();
+  });
+
+  it("Back returns to Home when opened from Home (fromHome)", () => {
+    eventMock.mockReturnValue(state());
+    const { goBack, navigate } = renderDetail({ id: "e1", fromHome: true });
+    fireEvent.press(screen.getByLabelText(strings.common.back));
+    expect(navigate).toHaveBeenCalledWith("Home");
+    expect(goBack).not.toHaveBeenCalled();
   });
 
   it("⋯ → action sheet → report modal → submits the reason", async () => {

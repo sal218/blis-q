@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { listCommunities } from "@/lib/api/communities";
 import type { CommunityDTO } from "@shared/types";
 
@@ -7,6 +8,13 @@ import type { CommunityDTO } from "@shared/types";
 // the browse list and filter to membership !== null (acceptable for the rail; a
 // user with >20 joined communities may miss some on page 1 — tracked). The screen
 // owns no fetching (ENGINEERING_STANDARDS §1/§4).
+//
+// Loads on first focus, then SILENTLY refetches on every later focus (so joining
+// a community and returning to Home updates the rail without a spinner). The
+// INITIAL/explicit failure surfaces as "error" (the screen shows a retry) — a
+// silent refetch keeps the current list. `retry` re-runs a non-silent load.
+// Stale-response guard (mirrors useHomeEvents/useHomeNews): a response is applied
+// only if its sequence id is still the latest.
 
 export type HomeCommunitiesStatus = "loading" | "ready" | "error";
 
@@ -15,32 +23,43 @@ const PAGE_SIZE = 20;
 export type UseHomeCommunities = {
   communities: CommunityDTO[];
   status: HomeCommunitiesStatus;
+  retry: () => void;
 };
 
 export function useHomeCommunities(): UseHomeCommunities {
   const [communities, setCommunities] = useState<CommunityDTO[]>([]);
   const [status, setStatus] = useState<HomeCommunitiesStatus>("loading");
+  const loadedOnce = useRef(false);
+  const requestSeq = useRef(0);
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      const result = await listCommunities({
-        page: 1,
-        pageSize: PAGE_SIZE,
-        search: "",
-      });
-      if (!active) return;
-      if (result.ok) {
-        setCommunities(result.data.data.filter((c) => c.membership !== null));
-        setStatus("ready");
-      } else {
-        setStatus("error");
-      }
-    })();
-    return () => {
-      active = false;
-    };
+  const load = useCallback(async (silent: boolean) => {
+    const seq = ++requestSeq.current;
+    if (!silent) setStatus("loading");
+    const result = await listCommunities({
+      page: 1,
+      pageSize: PAGE_SIZE,
+      search: "",
+    });
+    if (seq !== requestSeq.current) return; // superseded by a newer load → drop
+    if (result.ok) {
+      setCommunities(result.data.data.filter((c) => c.membership !== null));
+      setStatus("ready");
+    } else if (!silent) {
+      // Initial/explicit failure surfaces; a silent refetch keeps the list.
+      setStatus("error");
+    }
   }, []);
 
-  return { communities, status };
+  useFocusEffect(
+    useCallback(() => {
+      void load(loadedOnce.current);
+      loadedOnce.current = true;
+    }, [load]),
+  );
+
+  const retry = useCallback(() => {
+    void load(false);
+  }, [load]);
+
+  return { communities, status, retry };
 }

@@ -15,6 +15,7 @@ export type HomeNewsStatus = "loading" | "ready" | "error";
 export type UseHomeNews = {
   news: NewsDTO[];
   status: HomeNewsStatus;
+  retry: () => void;
 };
 
 export function useHomeNews(): UseHomeNews {
@@ -44,5 +45,9 @@ export function useHomeNews(): UseHomeNews {
     }, [load]),
   );
 
-  return { news, status };
+  const retry = useCallback(() => {
+    void load(false);
+  }, [load]);
+
+  return { news, status, retry };
 }

@@ -49,7 +49,9 @@ const community = (membership: Membership) => ({
   membership,
 });
 
-function renderDetail() {
+function renderDetail(
+  params: { id: string; fromHome?: boolean } = { id: "c1" },
+) {
   const navigation = {
     setOptions: jest.fn(),
     replace: jest.fn(),
@@ -59,9 +61,7 @@ function renderDetail() {
   render(
     <CommunityDetailScreen
       navigation={navigation as never}
-      route={
-        { key: "d", name: "CommunityDetail", params: { id: "c1" } } as never
-      }
+      route={{ key: "d", name: "CommunityDetail", params } as never}
     />,
   );
   return { navigation };
@@ -250,5 +250,33 @@ describe("CommunityDetailScreen", () => {
     expect(
       screen.queryByRole("button", { name: strings.posts.delete }),
     ).toBeNull();
+  });
+
+  describe("Back navigation (fromHome)", () => {
+    it("Back returns to Home when opened from Home", async () => {
+      getMock.mockResolvedValue({
+        ok: true,
+        data: community({ role: "member" }),
+      });
+      const { navigation } = renderDetail({ id: "c1", fromHome: true });
+      fireEvent.press(
+        await screen.findByRole("button", { name: strings.common.back }),
+      );
+      expect(navigation.navigate).toHaveBeenCalledWith("Home");
+      expect(navigation.goBack).not.toHaveBeenCalled();
+    });
+
+    it("Back returns to the list when NOT opened from Home", async () => {
+      getMock.mockResolvedValue({
+        ok: true,
+        data: community({ role: "member" }),
+      });
+      const { navigation } = renderDetail({ id: "c1" });
+      fireEvent.press(
+        await screen.findByRole("button", { name: strings.common.back }),
+      );
+      expect(navigation.goBack).toHaveBeenCalled();
+      expect(navigation.navigate).not.toHaveBeenCalledWith("Home");
+    });
   });
 });

@@ -1,4 +1,6 @@
-jest.mock("@/lib/api/communities", () => ({ listCommunities: jest.fn() }));
+jest.mock("@/hooks/useHomeCommunities", () => ({
+  useHomeCommunities: jest.fn(),
+}));
 jest.mock("@/hooks/useHomeEvents", () => ({ useHomeEvents: jest.fn() }));
 jest.mock("@/hooks/useHomeNews", () => ({ useHomeNews: jest.fn() }));
 jest.mock("@/contexts/AuthContext", () => ({
@@ -7,13 +9,13 @@ jest.mock("@/contexts/AuthContext", () => ({
 
 import { render, screen, fireEvent } from "@testing-library/react-native";
 import { HomeScreen } from "@/screens/HomeScreen";
-import { listCommunities } from "@/lib/api/communities";
+import { useHomeCommunities } from "@/hooks/useHomeCommunities";
 import { useHomeEvents } from "@/hooks/useHomeEvents";
 import { useHomeNews } from "@/hooks/useHomeNews";
 import { strings, format } from "@/i18n";
 import type { CommunityDTO, EventDTO, NewsDTO } from "@shared/types";
 
-const listMock = listCommunities as unknown as jest.Mock;
+const commMock = useHomeCommunities as unknown as jest.Mock;
 const eventsMock = useHomeEvents as unknown as jest.Mock;
 const newsMock = useHomeNews as unknown as jest.Mock;
 
@@ -45,19 +47,6 @@ function community(over: Partial<CommunityDTO>): CommunityDTO {
   };
 }
 
-function page(items: CommunityDTO[]) {
-  return {
-    ok: true as const,
-    data: {
-      data: items,
-      page: 1,
-      pageSize: 20,
-      total: items.length,
-      totalPages: 1,
-    },
-  };
-}
-
 function event(id: string, title: string): EventDTO {
   return {
     id,
@@ -69,7 +58,7 @@ function event(id: string, title: string): EventDTO {
     endsAt: null,
     imageUrl: null,
     createdAt: "2026-06-01T00:00:00.000Z",
-    goingCount: 3,
+    goingCount: 1,
     rsvp: { status: "going" },
     deleted: false,
     status: "active",
@@ -79,6 +68,33 @@ function event(id: string, title: string): EventDTO {
     saved: false,
     category: null,
   };
+}
+
+// Convenience: the three hook returns default to "ready" + empty; a test
+// overrides just the rail it cares about.
+function setCommunities(over: Partial<ReturnType<typeof useHomeCommunities>>) {
+  commMock.mockReturnValue({
+    communities: [],
+    status: "ready" as const,
+    retry: jest.fn(),
+    ...over,
+  });
+}
+function setEvents(over: Partial<ReturnType<typeof useHomeEvents>>) {
+  eventsMock.mockReturnValue({
+    events: [],
+    status: "ready" as const,
+    retry: jest.fn(),
+    ...over,
+  });
+}
+function setNews(over: Partial<ReturnType<typeof useHomeNews>>) {
+  newsMock.mockReturnValue({
+    news: [],
+    status: "ready" as const,
+    retry: jest.fn(),
+    ...over,
+  });
 }
 
 function renderHome() {
@@ -93,142 +109,109 @@ function renderHome() {
 }
 
 beforeEach(() => {
-  listMock.mockReset();
+  commMock.mockReset();
   eventsMock.mockReset();
-  eventsMock.mockReturnValue({ events: [], status: "ready" });
   newsMock.mockReset();
-  newsMock.mockReturnValue({ news: [], status: "ready" });
+  setCommunities({});
+  setEvents({});
+  setNews({});
 });
 
 describe("HomeScreen", () => {
   it("shows the rail + event skeletons while the sections are loading", () => {
-    listMock.mockReturnValue(new Promise(() => {})); // communities rail stays loading
-    eventsMock.mockReturnValue({ events: [], status: "loading" });
+    setCommunities({ status: "loading" });
+    setEvents({ status: "loading" });
     renderHome();
     expect(screen.getByTestId("rail-skeleton")).toBeTruthy();
     expect(screen.getByTestId("card-list-skeleton")).toBeTruthy();
   });
 
-  it("greets the user and shows the section titles", async () => {
-    listMock.mockResolvedValue(page([]));
+  it("greets the user and shows the section titles", () => {
     renderHome();
-
     expect(
-      await screen.findByText(format(strings.home.greeting, { name: "Sal" })),
+      screen.getByText(format(strings.home.greeting, { name: "Sal" })),
     ).toBeTruthy();
     expect(screen.getByText(strings.home.upcomingEvents)).toBeTruthy();
     expect(screen.getByText(strings.home.news)).toBeTruthy();
     expect(screen.getByText(strings.home.nearbyPlaces)).toBeTruthy();
   });
 
-  it("shows only JOINED communities in the rail", async () => {
-    listMock.mockResolvedValue(
-      page([
-        community({ id: "c1", name: "Queer Creatives" }),
-        community({ id: "c2", name: "Not Joined", membership: null }),
-      ]),
-    );
+  it("renders the joined communities from the hook", () => {
+    setCommunities({
+      communities: [community({ id: "c1", name: "Queer Creatives" })],
+    });
     renderHome();
-
-    expect(await screen.findByText("Queer Creatives")).toBeTruthy();
-    expect(screen.queryByText("Not Joined")).toBeNull();
+    expect(screen.getByText("Queer Creatives")).toBeTruthy();
   });
 
-  it("tapping a community deep-links into the Events stack", async () => {
-    listMock.mockResolvedValue(
-      page([community({ id: "c1", name: "Queer Creatives" })]),
-    );
+  it("tapping a community deep-links into the Events stack with fromHome", () => {
+    setCommunities({
+      communities: [community({ id: "c1", name: "Queer Creatives" })],
+    });
     const { navigation } = renderHome();
 
-    fireEvent.press(
-      await screen.findByRole("button", { name: "Queer Creatives" }),
-    );
+    fireEvent.press(screen.getByRole("button", { name: "Queer Creatives" }));
     expect(navigation.navigate).toHaveBeenCalledWith("Events", {
       screen: "CommunityDetail",
-      params: { id: "c1" },
-      initial: false, // keep EventsHome beneath so Back lands on the list
+      // fromHome so Back returns to Home (not the Events list beneath).
+      params: { id: "c1", fromHome: true },
+      initial: false,
     });
   });
 
-  it("communities 'See all' navigates to the Events tab", async () => {
-    listMock.mockResolvedValue(page([]));
+  it("communities 'See all' navigates to the Events tab", () => {
     const { navigation } = renderHome();
-
-    // Both the communities and events headers render "See all"; the first is
-    // the communities one.
-    const seeAll = await screen.findAllByRole("button", {
-      name: strings.home.seeAll,
-    });
+    const seeAll = screen.getAllByRole("button", { name: strings.home.seeAll });
     fireEvent.press(seeAll[0]);
     expect(navigation.navigate).toHaveBeenCalledWith("Events", {
       screen: "EventsHome",
     });
   });
 
-  it("the crisis-help button cross-navigates to the Resources/Crisis screen", async () => {
-    listMock.mockResolvedValue(page([]));
+  it("the crisis-help button cross-navigates to the Resources/Crisis screen", () => {
     const { navigation } = renderHome();
-
-    fireEvent.press(
-      await screen.findByRole("button", { name: strings.crisis.open }),
-    );
+    fireEvent.press(screen.getByRole("button", { name: strings.crisis.open }));
     expect(navigation.navigate).toHaveBeenCalledWith("Resources", {
       screen: "Crisis",
-      initial: false, // keep Wsparcie beneath so Back lands on the Wsparcie list
+      initial: false,
     });
   });
 
   describe("upcoming events section", () => {
-    it("renders the caller's events and opens one on tap", async () => {
-      listMock.mockResolvedValue(page([]));
-      eventsMock.mockReturnValue({
-        events: [event("e1", "Pride Meetup")],
-        status: "ready",
-      });
+    it("renders the caller's events and opens one on tap (fromHome)", () => {
+      setEvents({ events: [event("e1", "Pride Meetup")] });
       const { navigation } = renderHome();
 
-      fireEvent.press(
-        await screen.findByRole("button", { name: "Pride Meetup" }),
-      );
+      fireEvent.press(screen.getByRole("button", { name: "Pride Meetup" }));
       expect(navigation.navigate).toHaveBeenCalledWith("Events", {
         screen: "EventDetail",
-        params: { id: "e1" },
-        initial: false, // keep EventsHome beneath so Back lands on the list
+        params: { id: "e1", fromHome: true },
+        initial: false,
       });
     });
 
     it("shows the empty message when the caller has no upcoming events", () => {
-      listMock.mockResolvedValue(page([]));
-      eventsMock.mockReturnValue({ events: [], status: "ready" });
       renderHome();
       expect(screen.getByText(strings.home.noUpcomingEvents)).toBeTruthy();
     });
   });
 
   describe("news section", () => {
-    it("renders the latest news and cross-navigates into an article on tap", async () => {
-      listMock.mockResolvedValue(page([]));
-      newsMock.mockReturnValue({
-        news: [newsArticle("n1", "Parlament UE")],
-        status: "ready",
-      });
+    it("renders the latest news and cross-navigates into an article on tap", () => {
+      setNews({ news: [newsArticle("n1", "Parlament UE")] });
       const { navigation } = renderHome();
 
-      fireEvent.press(await screen.findByText("Parlament UE"));
+      fireEvent.press(screen.getByText("Parlament UE"));
       expect(navigation.navigate).toHaveBeenCalledWith("Resources", {
         screen: "NewsArticle",
-        // fromHome so the article's Back returns to Home, not the Wsparcie root.
         params: { id: "n1", fromHome: true },
         initial: false,
       });
     });
 
-    it("'See all' cross-navigates to the News feed", async () => {
-      listMock.mockResolvedValue(page([]));
+    it("'See all' cross-navigates to the News feed", () => {
       const { navigation } = renderHome();
-
-      // Three "See all" headers render: communities, events, news (in order).
-      const seeAll = await screen.findAllByRole("button", {
+      const seeAll = screen.getAllByRole("button", {
         name: strings.home.seeAll,
       });
       fireEvent.press(seeAll[seeAll.length - 1]);
@@ -239,10 +222,43 @@ describe("HomeScreen", () => {
     });
 
     it("shows the empty message when there is no news", () => {
-      listMock.mockResolvedValue(page([]));
-      newsMock.mockReturnValue({ news: [], status: "ready" });
       renderHome();
       expect(screen.getByText(strings.home.noNews)).toBeTruthy();
+    });
+  });
+
+  // A FAILED load must be distinct from empty: each rail shows an error card +
+  // a retry that calls the hook's retry (not the empty placeholder).
+  describe("rail error + retry", () => {
+    it("communities rail: shows the error card and retries", () => {
+      const retry = jest.fn();
+      setCommunities({ status: "error", retry });
+      renderHome();
+      expect(screen.getByTestId("rail-error")).toBeTruthy();
+      // Empty-state copy must NOT show on error.
+      expect(screen.queryByText(strings.home.noCommunities)).toBeNull();
+      fireEvent.press(screen.getByText(strings.home.retry));
+      expect(retry).toHaveBeenCalled();
+    });
+
+    it("events rail: shows the error card and retries", () => {
+      const retry = jest.fn();
+      setEvents({ status: "error", retry });
+      renderHome();
+      expect(screen.getByTestId("rail-error")).toBeTruthy();
+      expect(screen.queryByText(strings.home.noUpcomingEvents)).toBeNull();
+      fireEvent.press(screen.getByText(strings.home.retry));
+      expect(retry).toHaveBeenCalled();
+    });
+
+    it("news rail: shows the error card and retries", () => {
+      const retry = jest.fn();
+      setNews({ status: "error", retry });
+      renderHome();
+      expect(screen.getByTestId("rail-error")).toBeTruthy();
+      expect(screen.queryByText(strings.home.noNews)).toBeNull();
+      fireEvent.press(screen.getByText(strings.home.retry));
+      expect(retry).toHaveBeenCalled();
     });
   });
 });

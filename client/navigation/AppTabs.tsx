@@ -83,12 +83,14 @@ export type ResourcesStackParamList = {
 
 export type EventsStackParamList = {
   EventsHome: undefined;
-  EventDetail: { id: string };
+  // `fromHome` (set when opened from the Home tab) makes the Back button return
+  // to Home rather than the Events list beneath.
+  EventDetail: { id: string; fromHome?: boolean };
   SafePlaceDetail: { id: string };
   SafePlacesMap: undefined; // full-screen Safe Places map (P-40 SP-4b)
   Saved: undefined;
   CreateEvent: { communityId: string };
-  CommunityDetail: { id: string };
+  CommunityDetail: { id: string; fromHome?: boolean }; // fromHome → Back to Home
   CreateCommunity: undefined;
   ChatThread: ChatThreadParams;
 };

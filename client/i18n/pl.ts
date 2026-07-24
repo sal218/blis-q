@@ -49,6 +49,9 @@ export const pl = {
     latestActivity: "Najnowsze ze społeczności", // "Latest from your communities"
     news: "Aktualności", // "News" — the Home news section title
     noNews: "Aktualności pojawią się wkrótce.", // "News will appear soon."
+    // A rail whose fetch FAILED (vs genuinely empty) — shows this + a retry.
+    loadError: "Nie udało się załadować.", // "Couldn't load."
+    retry: "Spróbuj ponownie", // "Try again"
     // Polished empty states for the sections whose data doesn't exist yet.
     eventsEmpty: "Wydarzenia pojawią się wkrótce.", // "Events will appear soon."
     placesEmpty: "Bezpieczne miejsca pojawią się wkrótce.", // "Safe places will appear soon."

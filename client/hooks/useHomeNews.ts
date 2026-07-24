@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { listNews } from "@/lib/api/news";
+import { isTransientRailError, railRetryDelay } from "@/hooks/homeRailRetry";
 import type { NewsDTO } from "@shared/types";
 
 // Data for the Home "Aktualności" rail: the latest news (first page,
@@ -15,6 +16,7 @@ export type HomeNewsStatus = "loading" | "ready" | "error";
 export type UseHomeNews = {
   news: NewsDTO[];
   status: HomeNewsStatus;
+  retry: () => void;
 };
 
 export function useHomeNews(): UseHomeNews {
@@ -26,8 +28,20 @@ export function useHomeNews(): UseHomeNews {
   const load = useCallback(async (silent: boolean) => {
     const seq = ++requestSeq.current;
     if (!silent) setStatus("loading");
-    const result = await listNews({});
+    let result = await listNews({});
     if (seq !== requestSeq.current) return; // superseded by a newer load → drop
+
+    // Cold-start resilience: a transient failure on the INITIAL/explicit load is
+    // usually a race with app launch — auto-retry ONCE after a short delay before
+    // showing the error (mirrors a manual navigate-away-and-back). See
+    // hooks/homeRailRetry.ts. Silent refetches keep the list, so they don't retry.
+    if (!silent && !result.ok && isTransientRailError(result.error)) {
+      await railRetryDelay();
+      if (seq !== requestSeq.current) return; // superseded during the wait → drop
+      result = await listNews({});
+      if (seq !== requestSeq.current) return;
+    }
+
     if (result.ok) {
       setNews(result.data.data);
       setStatus("ready");
@@ -44,5 +58,9 @@ export function useHomeNews(): UseHomeNews {
     }, [load]),
   );
 
-  return { news, status };
+  const retry = useCallback(() => {
+    void load(false);
+  }, [load]);
+
+  return { news, status, retry };
 }

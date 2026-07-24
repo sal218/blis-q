@@ -12,6 +12,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Stop, Rect } from "react-native-svg";
+import type { CompositeScreenProps } from "@react-navigation/native";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "@/contexts/ThemeContext";
 import { PrimaryButton } from "@/components/forms/PrimaryButton";
@@ -33,7 +35,10 @@ import {
 } from "@/lib/relativeTime";
 import { strings, goingLabel } from "@/i18n";
 import { spacing, radius, type ThemeColors } from "@/constants/theme";
-import type { EventsStackParamList } from "@/navigation/AppTabs";
+import type {
+  EventsStackParamList,
+  AppTabsParamList,
+} from "@/navigation/AppTabs";
 
 // Event detail (design ref: assets/Event-Details*.png — light + dark). An
 // edge-to-edge banner (the event image, or a brand gradient placeholder) with
@@ -44,7 +49,12 @@ import type { EventsStackParamList } from "@/navigation/AppTabs";
 // past events show a notice + a closed RSVP bar, and the creator can cancel from
 // the ⋯ sheet (slice B2). Banner UPLOAD (R2) and tags are deferred.
 
-type Props = NativeStackScreenProps<EventsStackParamList, "EventDetail">;
+// Composite props so the Back button can address the Home tab when opened from
+// Home (fromHome) — same pattern as NewsArticleScreen.
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<EventsStackParamList, "EventDetail">,
+  BottomTabScreenProps<AppTabsParamList>
+>;
 
 const BANNER_HEIGHT = 240;
 const BANNER_RADIUS = 28;
@@ -108,6 +118,13 @@ export function EventDetailScreen({ route, navigation }: Props) {
     }).start(() => setMenuVisible(false));
   };
 
+  // Opened from Home → Back returns to Home (not the Events list beneath in the
+  // stack). Opened from the Events tab (fromHome unset) → normal goBack.
+  const onBack = () => {
+    if (route.params.fromHome) navigation.navigate("Home");
+    else navigation.goBack();
+  };
+
   // The native header is hidden (full-bleed banner), so the screen owns its back
   // button — a floating circle that reads over the banner or a plain screen.
   const backButton = (
@@ -115,7 +132,7 @@ export function EventDetailScreen({ route, navigation }: Props) {
       accessibilityRole="button"
       accessibilityLabel={strings.common.back}
       hitSlop={8}
-      onPress={() => navigation.goBack()}
+      onPress={onBack}
       style={[styles.backBtn, { top: insets.top + spacing.sm }]}
     >
       <CaretLeft size={22} color="#fff" />

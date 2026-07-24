@@ -19,6 +19,7 @@ import {
 import { EventCard } from "@/components/EventCard";
 import { NewsCard } from "@/components/NewsCard";
 import { CrisisHeaderButton } from "@/components/CrisisHeaderButton";
+import { RailError } from "@/components/RailError";
 import { RailSkeleton } from "@/components/skeleton/RailSkeleton";
 import { CardListSkeleton } from "@/components/skeleton/CardListSkeleton";
 import { strings, format } from "@/i18n";
@@ -39,23 +40,24 @@ export function HomeScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
-  const { communities, status } = useHomeCommunities();
-  const { events, status: eventsStatus } = useHomeEvents();
-  const { news, status: newsStatus } = useHomeNews();
+  const { communities, status, retry: retryCommunities } = useHomeCommunities();
+  const { events, status: eventsStatus, retry: retryEvents } = useHomeEvents();
+  const { news, status: newsStatus, retry: retryNews } = useHomeNews();
 
   const name = user?.displayName?.trim();
   const greeting = name
     ? format(strings.home.greeting, { name })
     : strings.home.greetingNoName;
 
-  // `initial: false` puts the Events-stack root (EventsHome) BENEATH the pushed
-  // screen, so Back from a Home-opened event/community lands on the events list
-  // (not straight back to Home) and the Events tab is never left holding a lone
-  // detail screen with no list under it.
+  // `fromHome` tells the detail screen that Home is the origin, so its Back
+  // button returns to Home (not the Events list beneath). `initial: false` still
+  // keeps EventsHome beneath as a coherent fallback so the Events tab isn't
+  // stranded on a lone detail. Communities/events opened from the Events tab
+  // itself omit `fromHome`, so Back there still returns to the list.
   const openCommunity = (id: string) =>
     navigation.navigate("Events", {
       screen: "CommunityDetail",
-      params: { id },
+      params: { id, fromHome: true },
       initial: false,
     });
   const goToCommunities = () =>
@@ -63,7 +65,7 @@ export function HomeScreen({ navigation }: Props) {
   const openEvent = (id: string) =>
     navigation.navigate("Events", {
       screen: "EventDetail",
-      params: { id },
+      params: { id, fromHome: true },
       initial: false,
     });
   const goToEvents = () =>
@@ -111,6 +113,8 @@ export function HomeScreen({ navigation }: Props) {
           />
           {status === "loading" ? (
             <RailSkeleton />
+          ) : status === "error" && communities.length === 0 ? (
+            <RailError onRetry={retryCommunities} />
           ) : (
             <ScrollView
               horizontal
@@ -153,6 +157,8 @@ export function HomeScreen({ navigation }: Props) {
           />
           {eventsStatus === "loading" ? (
             <CardListSkeleton variant="event" count={2} padded={false} />
+          ) : eventsStatus === "error" && events.length === 0 ? (
+            <RailError onRetry={retryEvents} />
           ) : events.length === 0 ? (
             <View style={styles.placeholderCard}>
               <Ionicons
@@ -177,6 +183,8 @@ export function HomeScreen({ navigation }: Props) {
           <SectionHeader title={strings.home.news} onSeeAll={goToNews} />
           {newsStatus === "loading" ? (
             <CardListSkeleton count={2} padded={false} />
+          ) : newsStatus === "error" && news.length === 0 ? (
+            <RailError onRetry={retryNews} />
           ) : news.length === 0 ? (
             <View style={styles.placeholderCard}>
               <Ionicons

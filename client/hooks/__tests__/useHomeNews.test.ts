@@ -1,4 +1,4 @@
-jest.mock("@/lib/api/events", () => ({ listMyEvents: jest.fn() }));
+jest.mock("@/lib/api/news", () => ({ listNews: jest.fn() }));
 
 // Stub only the retry DELAY so the auto-retry runs synchronously in tests; the
 // transient-vs-not decision (isTransientRailError) stays REAL so we exercise it.
@@ -21,111 +21,79 @@ jest.mock("@react-navigation/native", () => {
 });
 
 import { renderHook, act, waitFor } from "@testing-library/react-native";
-import { useHomeEvents } from "@/hooks/useHomeEvents";
-import { listMyEvents } from "@/lib/api/events";
+import { useHomeNews } from "@/hooks/useHomeNews";
+import { listNews } from "@/lib/api/news";
 import { railRetryDelay } from "@/hooks/homeRailRetry";
-import type { EventDTO } from "@shared/types";
+import type { NewsDTO } from "@shared/types";
 
-const listMock = listMyEvents as unknown as jest.Mock;
+const listMock = listNews as unknown as jest.Mock;
 const delayMock = railRetryDelay as unknown as jest.Mock;
 
-const ev = (id: string): EventDTO => ({
+const article = (id: string): NewsDTO => ({
   id,
-  communityId: "c1",
   title: id,
-  description: null,
-  location: null,
-  startsAt: "2026-07-01T16:00:00.000Z",
-  endsAt: null,
+  summary: "…",
+  body: null,
+  category: "world",
+  source: "Blis-Q Redakcja",
+  sourceUrl: null,
   imageUrl: null,
+  featured: false,
   createdAt: "2026-06-01T00:00:00.000Z",
-  goingCount: 1,
-  rsvp: { status: "going" },
-  deleted: false,
-  status: "active",
-  cancelledAt: null,
-  past: false,
-  canCancel: false,
-  saved: false,
-  category: null,
 });
+const page = (data: NewsDTO[]) => ({
+  ok: true as const,
+  data: { data, page: 1, pageSize: 25, total: data.length, totalPages: 1 },
+});
+const ids = (ns: NewsDTO[]) => ns.map((n) => n.id);
 
 beforeEach(() => {
   listMock.mockReset();
   mockFocusCb = undefined;
 });
 
-describe("useHomeEvents", () => {
-  it("loads on focus → ready with the events", async () => {
-    listMock.mockResolvedValue({ ok: true, data: [ev("e1")] });
-    const { result } = renderHook(() => useHomeEvents());
+describe("useHomeNews", () => {
+  it("loads on focus → ready with the news", async () => {
+    listMock.mockResolvedValue(page([article("n1")]));
+    const { result } = renderHook(() => useHomeNews());
     await waitFor(() => expect(result.current.status).toBe("ready"));
-    expect(result.current.events).toEqual([ev("e1")]);
+    expect(ids(result.current.news)).toEqual(["n1"]);
     expect(listMock).toHaveBeenCalledTimes(1);
   });
 
   it("auto-retries a transient failure once, then recovers → ready", async () => {
     listMock
       .mockResolvedValueOnce({ ok: false, error: { kind: "server" } })
-      .mockResolvedValueOnce({ ok: true, data: [ev("e1")] });
-    const { result } = renderHook(() => useHomeEvents());
+      .mockResolvedValueOnce(page([article("n1")]));
+    const { result } = renderHook(() => useHomeNews());
     await waitFor(() => expect(result.current.status).toBe("ready"));
-    expect(result.current.events).toEqual([ev("e1")]);
+    expect(ids(result.current.news)).toEqual(["n1"]);
     expect(listMock).toHaveBeenCalledTimes(2); // initial + one auto-retry
   });
 
   it("surfaces an error after the auto-retry also fails", async () => {
     listMock.mockResolvedValue({ ok: false, error: { kind: "server" } });
-    const { result } = renderHook(() => useHomeEvents());
+    const { result } = renderHook(() => useHomeNews());
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(listMock).toHaveBeenCalledTimes(2); // retried exactly once
   });
 
   it("does NOT auto-retry a non-transient failure (surfaces immediately)", async () => {
     listMock.mockResolvedValue({ ok: false, error: { kind: "validation" } });
-    const { result } = renderHook(() => useHomeEvents());
+    const { result } = renderHook(() => useHomeNews());
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(listMock).toHaveBeenCalledTimes(1); // no retry
   });
 
-  it("a later focus refetches and updates the list", async () => {
-    listMock.mockResolvedValue({ ok: true, data: [ev("e1")] });
-    const { result } = renderHook(() => useHomeEvents());
+  it("retry re-loads after a failure → ready", async () => {
+    listMock.mockResolvedValue({ ok: false, error: { kind: "server" } });
+    const { result } = renderHook(() => useHomeNews());
+    await waitFor(() => expect(result.current.status).toBe("error"));
+
+    listMock.mockResolvedValue(page([article("n1")]));
+    act(() => result.current.retry());
     await waitFor(() => expect(result.current.status).toBe("ready"));
-
-    listMock.mockResolvedValueOnce({ ok: true, data: [ev("e2")] });
-    await act(async () => {
-      mockFocusCb?.();
-    });
-    await waitFor(() => expect(result.current.events).toEqual([ev("e2")]));
-  });
-
-  it("drops a stale refetch that resolves after a newer focus", async () => {
-    listMock.mockResolvedValueOnce({ ok: true, data: [ev("e1")] });
-    const { result } = renderHook(() => useHomeEvents());
-    await waitFor(() => expect(result.current.status).toBe("ready"));
-
-    // Refetch A is in flight (deferred) when a newer refetch B resolves first.
-    let resolveA!: (v: unknown) => void;
-    listMock.mockReturnValueOnce(
-      new Promise((r) => {
-        resolveA = r;
-      }),
-    );
-    act(() => {
-      mockFocusCb?.(); // A in flight
-    });
-    listMock.mockResolvedValueOnce({ ok: true, data: [ev("e2")] });
-    await act(async () => {
-      mockFocusCb?.(); // B resolves → e2 wins
-    });
-    await waitFor(() => expect(result.current.events).toEqual([ev("e2")]));
-
-    // A resolves late — it must NOT overwrite the fresher e2.
-    await act(async () => {
-      resolveA({ ok: true, data: [ev("e1")] });
-    });
-    expect(result.current.events).toEqual([ev("e2")]);
+    expect(ids(result.current.news)).toEqual(["n1"]);
   });
 
   it("a newer load during the retry delay supersedes the stale auto-retry", async () => {
@@ -137,16 +105,16 @@ describe("useHomeEvents", () => {
       }),
     );
     listMock.mockResolvedValueOnce({ ok: false, error: { kind: "server" } });
-    const { result } = renderHook(() => useHomeEvents());
+    const { result } = renderHook(() => useHomeNews());
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(1));
     expect(result.current.status).toBe("loading"); // waiting on the retry delay
 
     // A newer focus resolves with fresh data while the delay is still pending.
-    listMock.mockResolvedValueOnce({ ok: true, data: [ev("fresh")] });
+    listMock.mockResolvedValueOnce(page([article("fresh")]));
     await act(async () => {
       mockFocusCb?.();
     });
-    await waitFor(() => expect(result.current.events).toEqual([ev("fresh")]));
+    await waitFor(() => expect(ids(result.current.news)).toEqual(["fresh"]));
     const callsBeforeDelay = listMock.mock.calls.length; // initial + newer = 2
 
     // The stale delay resolves LATE — its seq is superseded, so it must NOT issue
@@ -155,13 +123,13 @@ describe("useHomeEvents", () => {
       resolveDelay();
     });
     expect(listMock).toHaveBeenCalledTimes(callsBeforeDelay); // no retry fetch
-    expect(result.current.events).toEqual([ev("fresh")]);
+    expect(ids(result.current.news)).toEqual(["fresh"]);
     expect(result.current.status).toBe("ready");
   });
 
   it("a silent re-focus failure keeps the existing list (no retry, stays ready)", async () => {
-    listMock.mockResolvedValue({ ok: true, data: [ev("e1")] });
-    const { result } = renderHook(() => useHomeEvents());
+    listMock.mockResolvedValue(page([article("n1")]));
+    const { result } = renderHook(() => useHomeNews());
     await waitFor(() => expect(result.current.status).toBe("ready"));
     const callsAfterLoad = listMock.mock.calls.length;
 
@@ -170,19 +138,8 @@ describe("useHomeEvents", () => {
       mockFocusCb?.();
     });
     expect(result.current.status).toBe("ready");
-    expect(result.current.events).toEqual([ev("e1")]);
+    expect(ids(result.current.news)).toEqual(["n1"]);
     // silent failure → exactly one more call, NOT retried
     expect(listMock).toHaveBeenCalledTimes(callsAfterLoad + 1);
-  });
-
-  it("retry re-loads after a failure → ready", async () => {
-    listMock.mockResolvedValue({ ok: false, error: { kind: "server" } });
-    const { result } = renderHook(() => useHomeEvents());
-    await waitFor(() => expect(result.current.status).toBe("error"));
-
-    listMock.mockResolvedValue({ ok: true, data: [ev("e1")] });
-    act(() => result.current.retry());
-    await waitFor(() => expect(result.current.status).toBe("ready"));
-    expect(result.current.events).toEqual([ev("e1")]);
   });
 });

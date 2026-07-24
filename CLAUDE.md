@@ -512,6 +512,14 @@ A native module absent from Expo Go (MapLibre, Google Sign-In, …) that runs an
 2. **Guard the entry** with `isExpoGo()` (`client/lib/expoGo.ts`, `Constants.executionEnvironment === StoreClient`) — in Expo Go, show a "needs a dev build" message instead of navigating (navigating would trigger the lazy require → crash). Mirrors `client/lib/googleAuth.ts` (which lazy-`import()`s the native module behind the same guard).
 3. **Regression-test the boot path**: mock the native module to throw on evaluation, `require("@/navigation/AppTabs")`, assert it does not throw (`client/navigation/__tests__/AppTabs.test.tsx`).
 
+### A Failed Load Must Be Distinct From Empty (error + retry, never silent-empty)
+
+A list/rail whose fetch FAILED must render a visible error + a retry, NOT the empty-state copy — otherwise a failed load looks like "there's nothing here," which on a flaky mobile connection makes a working app read as broken (the maintainer hit this on the Home rails: a cold-start fetch failed and the rails showed "no communities / no news" until a full reload). Rules for any data-backed screen/rail: expose a `retry` from the hook; on `status === "error" && list.length === 0` render an error card with a retry (the shared `client/components/RailError.tsx` for Home rails); and use the `useFocusEffect` + `requestSeq` stale-guard pattern (see `useHomeEvents.ts`) so a return-to-screen silently refetches. `fix/home-first-load-nav`.
+
+### Back From a Home-Opened Detail Returns to Home (the `fromHome` pattern)
+
+Home is a bare tab with no stack, so tapping a Home card cross-navigates into another tab's stack with `initial:false`, leaving that tab's root beneath — so a naive Back pops to the wrong tab's list, not Home. Anything opened from the Home tab passes **`fromHome: true`** in its route params, and the detail screen's Back does `route.params.fromHome ? navigation.navigate("Home") : navigation.goBack()` (the screen's Props widen to `CompositeScreenProps<stack, BottomTabScreenProps<AppTabsParamList>>` so it can address the Home tab). Applied to `NewsArticle` (#99), `CommunityDetail`, `EventDetail` (`fix/home-first-load-nav`). Details opened from their OWN tab omit `fromHome`, so Back there still returns to that tab's list.
+
 ### Push Token Must Be Deregistered on Logout (before clearing the session)
 
 Logout must call `deregisterPushToken()` **before** clearing the auth session, while `fetchWithAuth` can still attach the access token. Otherwise a signed-out (possibly shared) device stays attached to the old account on the backend and keeps receiving its notifications — in Blis-Q those can reveal sensitive membership/activity. Registration and deregistration must use the **same** token: the **Expo push token** (`getExpoPushTokenAsync`), not the native device token (`getDevicePushTokenAsync`). The registered token is persisted in SecureStore (`client/notifications/usePushNotifications.ts`) so logout deactivates exactly that token.

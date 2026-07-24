@@ -1,5 +1,12 @@
 jest.mock("@/lib/api/communities", () => ({ listCommunities: jest.fn() }));
 
+// Stub only the retry DELAY so the auto-retry runs synchronously in tests; the
+// transient-vs-not decision (isTransientRailError) stays REAL so we exercise it.
+jest.mock("@/hooks/homeRailRetry", () => {
+  const actual = jest.requireActual("@/hooks/homeRailRetry");
+  return { ...actual, railRetryDelay: jest.fn(() => Promise.resolve()) };
+});
+
 // Capture the focus callback so a test can simulate returning to the Home tab.
 let mockFocusCb: (() => void) | undefined;
 jest.mock("@react-navigation/native", () => {
@@ -50,18 +57,36 @@ describe("useHomeCommunities", () => {
     expect(ids(result.current.communities)).toEqual(["joined"]);
   });
 
-  it("surfaces an error state on initial failure", async () => {
+  it("auto-retries a transient failure once, then recovers → ready", async () => {
+    listMock
+      .mockResolvedValueOnce({ ok: false, error: { kind: "server" } })
+      .mockResolvedValueOnce(page([comm("joined", true)]));
+    const { result } = renderHook(() => useHomeCommunities());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(ids(result.current.communities)).toEqual(["joined"]);
+    expect(listMock).toHaveBeenCalledTimes(2); // initial + one auto-retry
+  });
+
+  it("surfaces an error after the auto-retry also fails", async () => {
     listMock.mockResolvedValue({ ok: false, error: { kind: "server" } });
     const { result } = renderHook(() => useHomeCommunities());
     await waitFor(() => expect(result.current.status).toBe("error"));
+    expect(listMock).toHaveBeenCalledTimes(2); // retried exactly once
+  });
+
+  it("does NOT auto-retry a non-transient failure (surfaces immediately)", async () => {
+    listMock.mockResolvedValue({ ok: false, error: { kind: "validation" } });
+    const { result } = renderHook(() => useHomeCommunities());
+    await waitFor(() => expect(result.current.status).toBe("error"));
+    expect(listMock).toHaveBeenCalledTimes(1); // no retry
   });
 
   it("retry re-loads after a failure → ready", async () => {
-    listMock.mockResolvedValueOnce({ ok: false, error: { kind: "server" } });
+    listMock.mockResolvedValue({ ok: false, error: { kind: "server" } });
     const { result } = renderHook(() => useHomeCommunities());
     await waitFor(() => expect(result.current.status).toBe("error"));
 
-    listMock.mockResolvedValueOnce(page([comm("joined", true)]));
+    listMock.mockResolvedValue(page([comm("joined", true)]));
     act(() => result.current.retry());
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(ids(result.current.communities)).toEqual(["joined"]);
@@ -95,10 +120,11 @@ describe("useHomeCommunities", () => {
     expect(ids(result.current.communities)).toEqual(["b"]);
   });
 
-  it("a silent re-focus failure keeps the existing list (status stays ready)", async () => {
+  it("a silent re-focus failure keeps the existing list (no retry, stays ready)", async () => {
     listMock.mockResolvedValue(page([comm("a", true)]));
     const { result } = renderHook(() => useHomeCommunities());
     await waitFor(() => expect(result.current.status).toBe("ready"));
+    const callsAfterLoad = listMock.mock.calls.length;
 
     listMock.mockResolvedValueOnce({ ok: false, error: { kind: "server" } });
     await act(async () => {
@@ -106,5 +132,7 @@ describe("useHomeCommunities", () => {
     });
     expect(result.current.status).toBe("ready");
     expect(ids(result.current.communities)).toEqual(["a"]);
+    // silent failure → exactly one more call, NOT retried
+    expect(listMock).toHaveBeenCalledTimes(callsAfterLoad + 1);
   });
 });

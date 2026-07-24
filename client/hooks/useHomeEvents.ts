@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { listMyEvents } from "@/lib/api/events";
+import { isTransientRailError, railRetryDelay } from "@/hooks/homeRailRetry";
 import type { EventDTO } from "@shared/types";
 
 // Data for the Home "Upcoming events" rail: the caller's OWN upcoming events
@@ -31,8 +32,20 @@ export function useHomeEvents(): UseHomeEvents {
   const load = useCallback(async (silent: boolean) => {
     const seq = ++requestSeq.current;
     if (!silent) setStatus("loading");
-    const result = await listMyEvents();
+    let result = await listMyEvents();
     if (seq !== requestSeq.current) return; // superseded by a newer load → drop
+
+    // Cold-start resilience: a transient failure on the INITIAL/explicit load is
+    // usually a race with app launch — auto-retry ONCE after a short delay before
+    // showing the error (mirrors a manual navigate-away-and-back). See
+    // hooks/homeRailRetry.ts. Silent refetches keep the list, so they don't retry.
+    if (!silent && !result.ok && isTransientRailError(result.error)) {
+      await railRetryDelay();
+      if (seq !== requestSeq.current) return; // superseded during the wait → drop
+      result = await listMyEvents();
+      if (seq !== requestSeq.current) return;
+    }
+
     if (result.ok) {
       setEvents(result.data);
       setStatus("ready");

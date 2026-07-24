@@ -446,6 +446,57 @@ export const news = pgTable("news", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
+// ── news_suggestions ──────────────────────────────────────────────────────────
+// User "Zaproponuj temat" (suggest-a-story) topic tips → an admin review queue
+// (P-31). Users SUGGEST; they never publish — an editor turns an approved
+// suggestion into a real `news` article (authored/curated by them) or declines it
+// with a coarse reason. NEVER shown to other users. 🔒 the free-text title/
+// description is user PII: on erasure `submitterId` is nulled (the tip is
+// retained, de-linked); `declineReason` is a frozen coarse category
+// (behaviour/content-based, NEVER protected-class) stored on the row, never in
+// audit_log. `reviewedById` is the acting admin (nulled on THAT admin's erasure).
+// Status is a terminal transition (pending → approved | declined) — no soft-delete.
+export const newsSuggestions = pgTable(
+  "news_suggestions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submitterId: uuid("submitter_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    title: text("title").notNull(),
+    description: text("description"),
+    sourceUrl: text("source_url"),
+    // Frozen NEWS_CATEGORIES (Article-9-safe editorial topic) or null. Plain text
+    // column; Zod enforces the tuple (mirrors news.category).
+    category: text("category"),
+    status: text("status").notNull().default("pending"),
+    reviewedById: uuid("reviewed_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // Coarse decline reason (frozen NEWS_SUGGESTION_DECLINE_REASONS); null while
+    // pending/approved. Behaviour/content-based — never identity.
+    declineReason: text("decline_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  },
+  (t) => ({
+    // Caller-scoped "Moje propozycje" list: newest-first by submitter.
+    bySubmitter: index("idx_news_suggestions_submitter").on(
+      t.submitterId,
+      t.createdAt,
+      t.id,
+    ),
+    // Admin queue: status filter + newest-first paging.
+    byStatus: index("idx_news_suggestions_status").on(
+      t.status,
+      t.createdAt,
+      t.id,
+    ),
+  }),
+);
+
 // ── reports ───────────────────────────────────────────────────────────────────
 // Moderation queue. Reports are RETAINED for moderation audit; on erasure the
 // reporter is anonymised (reporterId SET NULL — §5.2). resourceType + resourceId
@@ -674,6 +725,8 @@ export type CrisisContact = typeof crisisContacts.$inferSelect;
 export type NewCrisisContact = typeof crisisContacts.$inferInsert;
 export type News = typeof news.$inferSelect;
 export type NewNews = typeof news.$inferInsert;
+export type NewsSuggestion = typeof newsSuggestions.$inferSelect;
+export type NewNewsSuggestion = typeof newsSuggestions.$inferInsert;
 export type SafePlaceSave = typeof safePlaceSaves.$inferSelect;
 export type Report = typeof reports.$inferSelect;
 export type Block = typeof blocks.$inferSelect;

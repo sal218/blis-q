@@ -32,6 +32,7 @@ ALTER TABLE safe_place_saves          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE resources                 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE crisis_contacts           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE news                      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE news_suggestions          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reports                   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE blocks                    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ad_campaigns              ENABLE ROW LEVEL SECURITY;

@@ -61,6 +61,7 @@ const limiters = {
   // Content & community — keyed by user ID
   contentCreateUser: makeLimiter(60, "1 m"), // community posts + chat messages
   reportUser: makeLimiter(10, "1 h"),
+  newsSuggestionUser: makeLimiter(10, "1 h"), // "Zaproponuj temat" submissions (low-freq)
   rsvpUser: makeLimiter(30, "1 m"), // event RSVP toggle (high-freq; own bucket)
   eventCancelUser: makeLimiter(20, "1 h"), // creator cancelling their events
   blockUser: makeLimiter(30, "1 h"), // block/unblock mutations
@@ -245,6 +246,12 @@ export async function checkReportRateLimit(
   userId: string,
 ): Promise<RateLimitResult> {
   return check(limiters.reportUser, `report:user:${userId}`);
+}
+
+export async function checkNewsSuggestionRateLimit(
+  userId: string,
+): Promise<RateLimitResult> {
+  return check(limiters.newsSuggestionUser, `news-suggestion:user:${userId}`);
 }
 
 export async function checkRsvpRateLimit(

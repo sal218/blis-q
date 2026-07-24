@@ -11,6 +11,7 @@ import type {
   ResourceRow,
   CrisisContactRow,
   NewsRow,
+  NewsSuggestionRow,
 } from "../storage";
 import { supabaseClient, supabaseAdmin } from "../supabase";
 import {
@@ -35,6 +36,8 @@ import {
   newsListQuerySchema,
   createNewsSchema,
   updateNewsSchema,
+  adminNewsSuggestionsQuerySchema,
+  declineNewsSuggestionSchema,
   crisisContactsListQuerySchema,
   createCrisisContactSchema,
   updateCrisisContactSchema,
@@ -62,6 +65,9 @@ import type {
   ResourceCategory,
   NewsDTO,
   NewsCategory,
+  AdminNewsSuggestionDTO,
+  NewsSuggestionStatus,
+  NewsSuggestionDeclineReason,
   CrisisContactDTO,
   CrisisContactCategory,
   OffsetPage,
@@ -156,6 +162,20 @@ export function registerAdminRoutes(app: Express): void {
   app.post("/api/admin/news/upload-url", ...admin, handleNewsUploadUrl);
   app.get("/api/admin/news", ...admin, handleListNews);
   app.post("/api/admin/news", ...admin, handleCreateNews);
+  // News suggestions queue ("Zaproponuj temat", P-31). Registered BEFORE the
+  // "/news/:id" routes so "suggestions" is never matched as an :id. Approve is a
+  // status transition only — the editor then authors the article via POST /news.
+  app.get("/api/admin/news/suggestions", ...admin, handleListNewsSuggestions);
+  app.post(
+    "/api/admin/news/suggestions/:id/approve",
+    ...admin,
+    handleApproveNewsSuggestion,
+  );
+  app.post(
+    "/api/admin/news/suggestions/:id/decline",
+    ...admin,
+    handleDeclineNewsSuggestion,
+  );
   app.patch("/api/admin/news/:id", ...admin, handleUpdateNews);
   app.delete("/api/admin/news/:id", ...admin, handleDeleteNews);
 
@@ -224,6 +244,26 @@ function toAdminReportDTO(row: ModeratedReportRow): AdminReportDTO {
     reviewedById: row.reviewedById,
     reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
     resolution: row.resolution,
+  };
+}
+
+// Admin news-suggestion view — content + the acting moderator id (accountability).
+// Still NO submitterId (minimisation — the admin reviews content, not the person).
+// category/status/declineReason are DB text narrowed to their DTO unions.
+function toAdminNewsSuggestionDTO(
+  row: NewsSuggestionRow,
+): AdminNewsSuggestionDTO {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    sourceUrl: row.sourceUrl,
+    category: row.category as NewsCategory | null,
+    status: row.status as NewsSuggestionStatus,
+    declineReason: row.declineReason as NewsSuggestionDeclineReason | null,
+    createdAt: row.createdAt.toISOString(),
+    reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
+    reviewedById: row.reviewedById,
   };
 }
 
@@ -487,6 +527,122 @@ async function handleResolveReport(
     return res.status(200).json(toAdminReportDTO(result.report));
   } catch (err) {
     console.error("[PATCH /api/admin/reports/:id]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+// ── News suggestions queue ("Zaproponuj temat", P-31) ────────────────────────
+// GET the queue (optional status filter), POST approve/decline. Approve/decline
+// are guarded one-way transitions in storage (409 if already actioned), audited
+// IDs-only. Approve does NOT create an article — the editor authors it via POST
+// /api/admin/news; this only marks the suggestion actioned.
+async function handleListNewsSuggestions(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const parsed = adminNewsSuggestionsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+    const q = parsed.data;
+    const { rows, total } = await storage.listNewsSuggestions({
+      offset: (q.page - 1) * q.pageSize,
+      limit: q.pageSize,
+      status: q.status,
+    });
+    const body: OffsetPage<AdminNewsSuggestionDTO> = {
+      data: rows.map(toAdminNewsSuggestionDTO),
+      page: q.page,
+      pageSize: q.pageSize,
+      total,
+      totalPages: Math.ceil(total / q.pageSize),
+    };
+    return res.status(200).json(body);
+  } catch (err) {
+    console.error("[GET /api/admin/news/suggestions]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleApproveNewsSuggestion(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+
+    const result = await storage.approveNewsSuggestion({
+      id,
+      adminId: userId,
+      ipAddress: req.ip ?? null,
+    });
+    if (result.status === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    if (result.status === "conflict") {
+      return res.status(409).json({ error: "Suggestion already actioned" });
+    }
+    return res.status(200).json(toAdminNewsSuggestionDTO(result.suggestion));
+  } catch (err) {
+    console.error("[POST /api/admin/news/suggestions/:id/approve]", {
+      code: safeErrorCode(err),
+    });
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+async function handleDeclineNewsSuggestion(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const userId = req.user!.id;
+    const rate = await checkAdminMutationRateLimit(userId);
+    if (!rate.allowed) {
+      return res
+        .status(429)
+        .json({ error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    }
+    const id = parseId(req);
+    if (!id) return res.status(400).json({ error: "Invalid input" });
+
+    const parsed = declineNewsSuggestionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Invalid input", details: parsed.error.issues });
+    }
+
+    const result = await storage.declineNewsSuggestion({
+      id,
+      adminId: userId,
+      reason: parsed.data.reason,
+      ipAddress: req.ip ?? null,
+    });
+    if (result.status === "not_found") {
+      return res.status(404).json({ error: "Not found" });
+    }
+    if (result.status === "conflict") {
+      return res.status(409).json({ error: "Suggestion already actioned" });
+    }
+    return res.status(200).json(toAdminNewsSuggestionDTO(result.suggestion));
+  } catch (err) {
+    console.error("[POST /api/admin/news/suggestions/:id/decline]", {
       code: safeErrorCode(err),
     });
     return res.status(500).json({ error: "Internal Server Error" });

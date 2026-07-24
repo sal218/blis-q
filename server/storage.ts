@@ -35,6 +35,7 @@ import {
   resources,
   crisisContacts,
   news,
+  newsSuggestions,
   adCampaigns,
   blocks,
   reports,
@@ -158,6 +159,18 @@ export type AccountExportData = {
     reason: string;
     status: string;
     createdAt: Date;
+  }[];
+  // The user's own "Zaproponuj temat" suggestions (P-31), portable under Art. 20.
+  newsSuggestions: {
+    id: string;
+    title: string;
+    description: string | null;
+    sourceUrl: string | null;
+    category: string | null;
+    status: string;
+    declineReason: string | null;
+    createdAt: Date;
+    reviewedAt: Date | null;
   }[];
   subscription: {
     status: string;
@@ -294,6 +307,23 @@ export type NewsRow = {
   imageKey: string | null;
   featured: boolean;
   createdAt: Date;
+};
+
+// A news-suggestion row as returned by newsSuggestionColumns() (P-31). NEVER
+// selects `submitterId` (server-internal — used only for mine-scoping + erasure).
+// `reviewedById` is included for the admin DTO; the user DTO omits it. `category`/
+// `status`/`declineReason` are DB text; the routes narrow them to their DTO unions.
+export type NewsSuggestionRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  sourceUrl: string | null;
+  category: string | null;
+  status: string;
+  declineReason: string | null;
+  reviewedById: string | null;
+  createdAt: Date;
+  reviewedAt: Date | null;
 };
 
 // A crisis-contact row as returned by crisisContactColumns() (P-37). `category`
@@ -738,6 +768,25 @@ export class DatabaseStorage {
       .from(reports)
       .where(eq(reports.reporterId, userId));
 
+    const newsSuggestionRows = await db
+      .select({
+        id: newsSuggestions.id,
+        title: newsSuggestions.title,
+        description: newsSuggestions.description,
+        sourceUrl: newsSuggestions.sourceUrl,
+        category: newsSuggestions.category,
+        status: newsSuggestions.status,
+        declineReason: newsSuggestions.declineReason,
+        createdAt: newsSuggestions.createdAt,
+        reviewedAt: newsSuggestions.reviewedAt,
+      })
+      .from(newsSuggestions)
+      .where(eq(newsSuggestions.submitterId, userId))
+      .orderBy(
+        sql`${newsSuggestions.createdAt} desc`,
+        sql`${newsSuggestions.id} asc`,
+      );
+
     const [subscription] = await db
       .select({
         status: subscriptions.status,
@@ -772,6 +821,7 @@ export class DatabaseStorage {
       savedSafePlaces: savedSafePlaceRows,
       blocks: blockRows,
       reports: reportRows,
+      newsSuggestions: newsSuggestionRows,
       subscription: subscription ?? null,
     };
   }
@@ -924,6 +974,17 @@ export class DatabaseStorage {
         .update(reports)
         .set({ reviewedById: null })
         .where(eq(reports.reviewedById, userId));
+      // News suggestions: null BOTH user FKs (rows survive, de-linked). submitter
+      // nulled → the tip is retained but drops out of the user's "mine" list;
+      // reviewer nulled → an erased moderator's id is removed from rows they actioned.
+      await tx
+        .update(newsSuggestions)
+        .set({ submitterId: null })
+        .where(eq(newsSuggestions.submitterId, userId));
+      await tx
+        .update(newsSuggestions)
+        .set({ reviewedById: null })
+        .where(eq(newsSuggestions.reviewedById, userId));
 
       // Relational / consent / token rows → delete.
       await tx
@@ -3626,6 +3687,208 @@ export class DatabaseStorage {
         ipAddress: ipAddress ?? null,
       });
       return "deleted";
+    });
+  }
+
+  // ── News suggestions ("Zaproponuj temat" — user suggest-a-story, P-31) ───────
+  // Users submit topic tips → an admin queue. NEVER selects submitterId onto a
+  // row (server-internal — mine-scoping + erasure only). Audit rows carry the
+  // suggestion id ONLY — never the free-text title/description or the decline
+  // reason. Guarded status transitions mirror resolveReport.
+  private newsSuggestionColumns() {
+    return {
+      id: newsSuggestions.id,
+      title: newsSuggestions.title,
+      description: newsSuggestions.description,
+      sourceUrl: newsSuggestions.sourceUrl,
+      category: newsSuggestions.category,
+      status: newsSuggestions.status,
+      declineReason: newsSuggestions.declineReason,
+      reviewedById: newsSuggestions.reviewedById,
+      createdAt: newsSuggestions.createdAt,
+      reviewedAt: newsSuggestions.reviewedAt,
+    };
+  }
+
+  // A user submits a topic tip. Insert + audit commit together (§7). The audit
+  // entry references the suggestion id only — never the free-text title/description.
+  async createNewsSuggestion(
+    submitterId: string,
+    input: {
+      title: string;
+      description?: string;
+      sourceUrl?: string;
+      category?: string;
+    },
+    ipAddress?: string | null,
+  ): Promise<void> {
+    await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(newsSuggestions)
+        .values({
+          submitterId,
+          title: input.title,
+          description: input.description ?? null,
+          sourceUrl: input.sourceUrl ?? null,
+          category: input.category ?? null,
+        })
+        .returning({ id: newsSuggestions.id });
+      await tx.insert(auditLog).values({
+        actorId: submitterId,
+        action: "news_suggestion.submitted",
+        resourceType: "news_suggestion",
+        resourceId: row.id,
+        ipAddress: ipAddress ?? null,
+      });
+    });
+  }
+
+  // The caller's OWN suggestions (newest-first) + total. Scoped to submitterId —
+  // after erasure the row's submitterId is null so it drops out here.
+  async listMyNewsSuggestions(
+    submitterId: string,
+    input: { offset: number; limit: number },
+  ): Promise<{ rows: NewsSuggestionRow[]; total: number }> {
+    const where = eq(newsSuggestions.submitterId, submitterId);
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(newsSuggestions)
+      .where(where);
+    const rows = await db
+      .select(this.newsSuggestionColumns())
+      .from(newsSuggestions)
+      .where(where)
+      .orderBy(
+        sql`${newsSuggestions.createdAt} desc`,
+        sql`${newsSuggestions.id} asc`,
+      )
+      .limit(input.limit)
+      .offset(input.offset);
+    return { rows, total: Number(total) };
+  }
+
+  // Admin queue: all suggestions (optional status filter), newest-first + total.
+  async listNewsSuggestions(input: {
+    offset: number;
+    limit: number;
+    status?: string;
+  }): Promise<{ rows: NewsSuggestionRow[]; total: number }> {
+    const where = input.status
+      ? eq(newsSuggestions.status, input.status)
+      : undefined;
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(newsSuggestions)
+      .where(where);
+    const rows = await db
+      .select(this.newsSuggestionColumns())
+      .from(newsSuggestions)
+      .where(where)
+      .orderBy(
+        sql`${newsSuggestions.createdAt} desc`,
+        sql`${newsSuggestions.id} asc`,
+      )
+      .limit(input.limit)
+      .offset(input.offset);
+    return { rows, total: Number(total) };
+  }
+
+  // Approve a pending suggestion (ATOMIC, one-way: only pending → approved; a
+  // guarded UPDATE ... WHERE status='pending' so concurrent transitions can't both
+  // win). Already-actioned → "conflict". Status + audit commit together (§7); the
+  // audit references the suggestion id only.
+  async approveNewsSuggestion(input: {
+    id: string;
+    adminId: string;
+    ipAddress?: string | null;
+  }): Promise<
+    | { status: "ok"; suggestion: NewsSuggestionRow }
+    | { status: "not_found" }
+    | { status: "conflict" }
+  > {
+    return db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ status: newsSuggestions.status })
+        .from(newsSuggestions)
+        .where(eq(newsSuggestions.id, input.id))
+        .limit(1);
+      if (!current) return { status: "not_found" as const };
+      if (current.status !== "pending") return { status: "conflict" as const };
+
+      const [updated] = await tx
+        .update(newsSuggestions)
+        .set({
+          status: "approved",
+          reviewedById: input.adminId,
+          reviewedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(newsSuggestions.id, input.id),
+            eq(newsSuggestions.status, "pending"),
+          ),
+        )
+        .returning(this.newsSuggestionColumns());
+      if (!updated) return { status: "conflict" as const };
+
+      await tx.insert(auditLog).values({
+        actorId: input.adminId,
+        action: "news_suggestion.approved",
+        resourceType: "news_suggestion",
+        resourceId: input.id,
+        ipAddress: input.ipAddress ?? null,
+      });
+      return { status: "ok" as const, suggestion: updated };
+    });
+  }
+
+  // Decline a pending suggestion with a coarse reason (same guarded transition).
+  // The reason is stored on the ROW — deliberately NOT in audit metadata (audit
+  // stays IDs-only, mirrors resolveReport).
+  async declineNewsSuggestion(input: {
+    id: string;
+    adminId: string;
+    reason: string;
+    ipAddress?: string | null;
+  }): Promise<
+    | { status: "ok"; suggestion: NewsSuggestionRow }
+    | { status: "not_found" }
+    | { status: "conflict" }
+  > {
+    return db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ status: newsSuggestions.status })
+        .from(newsSuggestions)
+        .where(eq(newsSuggestions.id, input.id))
+        .limit(1);
+      if (!current) return { status: "not_found" as const };
+      if (current.status !== "pending") return { status: "conflict" as const };
+
+      const [updated] = await tx
+        .update(newsSuggestions)
+        .set({
+          status: "declined",
+          declineReason: input.reason,
+          reviewedById: input.adminId,
+          reviewedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(newsSuggestions.id, input.id),
+            eq(newsSuggestions.status, "pending"),
+          ),
+        )
+        .returning(this.newsSuggestionColumns());
+      if (!updated) return { status: "conflict" as const };
+
+      await tx.insert(auditLog).values({
+        actorId: input.adminId,
+        action: "news_suggestion.declined",
+        resourceType: "news_suggestion",
+        resourceId: input.id,
+        ipAddress: input.ipAddress ?? null,
+      });
+      return { status: "ok" as const, suggestion: updated };
     });
   }
 

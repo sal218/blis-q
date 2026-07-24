@@ -358,6 +358,51 @@ export type NewsDTO = {
   createdAt: string;
 };
 
+// ── News suggestions ("Zaproponuj temat" — user suggest-a-story, P-31) ─────────
+// Users SUGGEST a news topic; an editor reviews the queue and either authors a
+// real `news` article from it or declines it. Suggestions are NEVER shown to
+// other users. Both frozen tuples are the single source of truth (Zod enums over
+// them). Keys are FROZEN once rows carry them — append, never rename/remove.
+export const NEWS_SUGGESTION_STATUSES = [
+  "pending",
+  "approved",
+  "declined",
+] as const;
+export type NewsSuggestionStatus = (typeof NEWS_SUGGESTION_STATUSES)[number];
+
+// Coarse, behaviour/content-based decline reasons shown to the submitter as a
+// gentle Polish label. 🔒 Deliberately NEVER a protected-class/identity judgement
+// — a decline reason must not be able to infer Article 9 data.
+export const NEWS_SUGGESTION_DECLINE_REASONS = [
+  "off_topic",
+  "duplicate",
+  "unverifiable",
+  "inappropriate",
+  "other",
+] as const;
+export type NewsSuggestionDeclineReason =
+  (typeof NEWS_SUGGESTION_DECLINE_REASONS)[number];
+
+// A user's own suggestion (the "Moje propozycje" list). Carries its status +
+// (when declined) the coarse reason. NEVER exposes submitterId/reviewedById.
+export type NewsSuggestionDTO = {
+  id: string;
+  title: string;
+  description: string | null;
+  sourceUrl: string | null;
+  category: NewsCategory | null;
+  status: NewsSuggestionStatus;
+  declineReason: NewsSuggestionDeclineReason | null;
+  createdAt: string;
+  reviewedAt: string | null;
+};
+
+// Admin queue view — the same content plus the acting moderator id (accountability).
+// Still NO submitterId: the admin reviews the content, not the person (minimisation).
+export type AdminNewsSuggestionDTO = NewsSuggestionDTO & {
+  reviewedById: string | null;
+};
+
 export type NotificationPreferencesDTO = {
   communityPosts: boolean;
   events: boolean;
@@ -471,5 +516,8 @@ export type AccountExport = {
   notificationPreferences: NotificationPreferencesDTO;
   blocks: { blockedUserId: string; createdAt: string }[];
   reports: ReportDTO[];
+  // The user's own "Zaproponuj temat" suggestions (P-31) — free-text they authored,
+  // portable under Art. 20. Anonymised (submitter nulled) on erasure so they drop out.
+  newsSuggestions: NewsSuggestionDTO[];
   subscription: SubscriptionDTO | null;
 };

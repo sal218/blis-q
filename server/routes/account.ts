@@ -16,6 +16,9 @@ import type {
   ConsentRecordDTO,
   RsvpStatus,
   ReportResourceType,
+  NewsCategory,
+  NewsSuggestionStatus,
+  NewsSuggestionDeclineReason,
   SubscriptionStatus,
 } from "@shared/types";
 
@@ -385,6 +388,17 @@ async function handleExportAccount(
         reason: r.reason,
         status: r.status as AccountExport["reports"][number]["status"],
         createdAt: r.createdAt.toISOString(),
+      })),
+      newsSuggestions: data.newsSuggestions.map((s) => ({
+        id: s.id,
+        title: s.title,
+        description: s.description,
+        sourceUrl: s.sourceUrl,
+        category: s.category as NewsCategory | null,
+        status: s.status as NewsSuggestionStatus,
+        declineReason: s.declineReason as NewsSuggestionDeclineReason | null,
+        createdAt: s.createdAt.toISOString(),
+        reviewedAt: s.reviewedAt ? s.reviewedAt.toISOString() : null,
       })),
       subscription: data.subscription
         ? {

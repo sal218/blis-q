@@ -6,6 +6,8 @@ import {
   RESOURCE_CATEGORIES,
   CRISIS_CONTACT_CATEGORIES,
   NEWS_CATEGORIES,
+  NEWS_SUGGESTION_STATUSES,
+  NEWS_SUGGESTION_DECLINE_REASONS,
 } from "@shared/types";
 import { ALLOWED_IMAGE_CONTENT_TYPES } from "./objectStorage";
 
@@ -384,6 +386,36 @@ export const updateNewsSchema = z
   .refine((d) => Object.values(d).some((v) => v !== undefined), {
     message: "At least one field is required",
   });
+
+// ── News suggestions ("Zaproponuj temat" — user suggest-a-story, P-31) ─────────
+// A user submits a topic tip → admin review queue. title required; description /
+// sourceUrl / category optional (lower friction). Reuses MAX_URL_LENGTH + the
+// frozen NEWS_CATEGORIES enum. Users never publish — this only enqueues.
+const MAX_NEWS_SUGGESTION_TITLE_LENGTH = 200;
+const MAX_NEWS_SUGGESTION_DESCRIPTION_LENGTH = 2000;
+
+export const newsSuggestionDeclineReasonSchema = z.enum(
+  NEWS_SUGGESTION_DECLINE_REASONS,
+);
+
+export const createNewsSuggestionSchema = z
+  .object({
+    title: z.string().trim().min(1).max(MAX_NEWS_SUGGESTION_TITLE_LENGTH),
+    description: z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_NEWS_SUGGESTION_DESCRIPTION_LENGTH)
+      .optional(),
+    sourceUrl: z.string().trim().url().max(MAX_URL_LENGTH).optional(),
+    category: newsCategorySchema.optional(),
+  })
+  .strict();
+
+// Admin decline requires a coarse reason (frozen tuple) — no free-text.
+export const declineNewsSuggestionSchema = z
+  .object({ reason: newsSuggestionDeclineReasonSchema })
+  .strict();
 
 // ── Crisis contacts (admin-curated "Pomoc w kryzysie" helplines, P-37) ─────────
 // Admin-published crisis/help contacts (112, hotlines, LGBT org lines) with a
@@ -807,6 +839,18 @@ export const adminReportsQuerySchema = z.object({
     .max(MAX_OFFSET_PAGE_SIZE)
     .default(DEFAULT_OFFSET_PAGE_SIZE),
   status: z.enum(["pending", "reviewing", "resolved", "dismissed"]).optional(),
+});
+
+// Admin news-suggestions queue: offset/page + optional status filter (P-31).
+export const adminNewsSuggestionsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_OFFSET_PAGE_SIZE)
+    .default(DEFAULT_OFFSET_PAGE_SIZE),
+  status: z.enum(NEWS_SUGGESTION_STATUSES).optional(),
 });
 
 // Admin user directory: offset/page + optional search + status filter.

@@ -23,9 +23,11 @@ jest.mock("@react-navigation/native", () => {
 import { renderHook, act, waitFor } from "@testing-library/react-native";
 import { useHomeNews } from "@/hooks/useHomeNews";
 import { listNews } from "@/lib/api/news";
+import { railRetryDelay } from "@/hooks/homeRailRetry";
 import type { NewsDTO } from "@shared/types";
 
 const listMock = listNews as unknown as jest.Mock;
+const delayMock = railRetryDelay as unknown as jest.Mock;
 
 const article = (id: string): NewsDTO => ({
   id,
@@ -92,6 +94,37 @@ describe("useHomeNews", () => {
     act(() => result.current.retry());
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(ids(result.current.news)).toEqual(["n1"]);
+  });
+
+  it("a newer load during the retry delay supersedes the stale auto-retry", async () => {
+    // Initial load fails transiently → schedules a retry behind a DEFERRED delay.
+    let resolveDelay!: () => void;
+    delayMock.mockReturnValueOnce(
+      new Promise<void>((r) => {
+        resolveDelay = () => r();
+      }),
+    );
+    listMock.mockResolvedValueOnce({ ok: false, error: { kind: "server" } });
+    const { result } = renderHook(() => useHomeNews());
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(1));
+    expect(result.current.status).toBe("loading"); // waiting on the retry delay
+
+    // A newer focus resolves with fresh data while the delay is still pending.
+    listMock.mockResolvedValueOnce(page([article("fresh")]));
+    await act(async () => {
+      mockFocusCb?.();
+    });
+    await waitFor(() => expect(ids(result.current.news)).toEqual(["fresh"]));
+    const callsBeforeDelay = listMock.mock.calls.length; // initial + newer = 2
+
+    // The stale delay resolves LATE — its seq is superseded, so it must NOT issue
+    // a retry fetch or overwrite the fresher result.
+    await act(async () => {
+      resolveDelay();
+    });
+    expect(listMock).toHaveBeenCalledTimes(callsBeforeDelay); // no retry fetch
+    expect(ids(result.current.news)).toEqual(["fresh"]);
+    expect(result.current.status).toBe("ready");
   });
 
   it("a silent re-focus failure keeps the existing list (no retry, stays ready)", async () => {

@@ -23,9 +23,11 @@ jest.mock("@react-navigation/native", () => {
 import { renderHook, act, waitFor } from "@testing-library/react-native";
 import { useHomeCommunities } from "@/hooks/useHomeCommunities";
 import { listCommunities } from "@/lib/api/communities";
+import { railRetryDelay } from "@/hooks/homeRailRetry";
 import type { CommunityDTO } from "@shared/types";
 
 const listMock = listCommunities as unknown as jest.Mock;
+const delayMock = railRetryDelay as unknown as jest.Mock;
 
 const comm = (id: string, joined: boolean): CommunityDTO => ({
   id,
@@ -118,6 +120,39 @@ describe("useHomeCommunities", () => {
       resolveA(page([comm("a", true)]));
     });
     expect(ids(result.current.communities)).toEqual(["b"]);
+  });
+
+  it("a newer load during the retry delay supersedes the stale auto-retry", async () => {
+    // Initial load fails transiently → schedules a retry behind a DEFERRED delay.
+    let resolveDelay!: () => void;
+    delayMock.mockReturnValueOnce(
+      new Promise<void>((r) => {
+        resolveDelay = () => r();
+      }),
+    );
+    listMock.mockResolvedValueOnce({ ok: false, error: { kind: "server" } });
+    const { result } = renderHook(() => useHomeCommunities());
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(1));
+    expect(result.current.status).toBe("loading"); // waiting on the retry delay
+
+    // A newer focus resolves with fresh data while the delay is still pending.
+    listMock.mockResolvedValueOnce(page([comm("fresh", true)]));
+    await act(async () => {
+      mockFocusCb?.();
+    });
+    await waitFor(() =>
+      expect(ids(result.current.communities)).toEqual(["fresh"]),
+    );
+    const callsBeforeDelay = listMock.mock.calls.length; // initial + newer = 2
+
+    // The stale delay resolves LATE — its seq is superseded, so it must NOT issue
+    // a retry fetch or overwrite the fresher result.
+    await act(async () => {
+      resolveDelay();
+    });
+    expect(listMock).toHaveBeenCalledTimes(callsBeforeDelay); // no retry fetch
+    expect(ids(result.current.communities)).toEqual(["fresh"]);
+    expect(result.current.status).toBe("ready");
   });
 
   it("a silent re-focus failure keeps the existing list (no retry, stays ready)", async () => {
